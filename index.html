@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <meta name="description" content="PuzzleHub — Rahatlatıcı puzzle oyunları" />
   <meta name="theme-color" content="#a855f7" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="PuzzleHub" />
@@ -15,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=17183001" />
 </head>
 <body>
   <div id="app">
@@ -308,17 +311,27 @@
     <div id="toast" class="toast"></div>
   </div>
 
-  <script src="app.js?v=20260613"></script>
-  <script src="games.js?v=20260613"></script>
-  <script src="reels.js?v=20260613"></script>
   <script>
-    // Eski service worker'ları temizle
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(r => r.unregister());
-      });
-      caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-    }
+    // === CACHE KILLER v2 ===
+    // 1. SW temizle
+    (async function(){
+      if('serviceWorker' in navigator){
+        const regs=await navigator.serviceWorker.getRegistrations();
+        for(const r of regs) await r.unregister();
+      }
+      if('caches' in window){
+        const keys=await caches.keys();
+        for(const k of keys) await caches.delete(k);
+      }
+    })();
+
+    // 2. Dinamik cache-busting ile scriptleri yükle
+    const _v = Date.now();
+    ['app.js','games.js','reels.js'].forEach(f=>{
+      const s=document.createElement('script');
+      s.src=f+'?v='+_v;
+      document.body.appendChild(s);
+    });
   </script>
 </body>
 </html>
