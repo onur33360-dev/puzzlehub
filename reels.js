@@ -13,6 +13,10 @@ const REEL_GAMES = [
   { id:'wordSearch', name:'Kelime Avı', emoji:'📝', category:'puzzle', desc:'Gizli kelimeleri bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
   { id:'sudoku', name:'Sudoku', emoji:'#️⃣', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
   { id:'mazeGame', name:'Labirent', emoji:'🌀', category:'puzzle', desc:'Çıkışı bul, zamana karşı yarış!', difficulty:'Orta', gradient:['#059669','#065f46'], playable:true },
+  { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#8b5cf6','#4c1d95'], playable:false },
+  { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🏹', category:'puzzle', desc:'Okları doğru sırayla çıkar!', difficulty:'Kolay', gradient:['#0ea5e9','#0c4a6e'], playable:false },
+  { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Zor', gradient:['#e11d48','#881337'], playable:false },
+  { id:'jigsawCard', name:'Yapboz Kart', emoji:'🧩', category:'puzzle', desc:'Kartları sürükle, resmi tamamla!', difficulty:'Kolay', gradient:['#d97706','#78350f'], playable:false },
 ];
 
 const GAME_NAME_MAP = {
@@ -22,7 +26,11 @@ const GAME_NAME_MAP = {
   'memoryGame': 'Hafıza Oyunu',
   'wordSearch': 'Kelime Avı',
   'sudoku': 'Sudoku',
-  'mazeGame': 'Labirent'
+  'mazeGame': 'Labirent',
+  'waterSort': 'İksir Sıralama',
+  'arrowPuzzle': 'Ok Bulmaca',
+  'flowConnect': 'Akış Bağlantı',
+  'jigsawCard': 'Yapboz Kart'
 };
 
 
@@ -648,6 +656,156 @@ MiniDemos.demo_screw = function(gradient) {
 };
 
 
+// ———————— 8. İksir Sıralama Demo ————————
+MiniDemos.demo_waterSort = function(gradient) {
+  const el = document.createElement('div');
+  el.className = 'reel-demo-inner';
+  const state = { paused:false, raf:0 };
+  const COLORS = ['#a855f7','#22d3ee','#ef4444','#22c55e','#fbbf24','#ec4899'];
+  const TC = 6, LY = 4;
+  const tubes = [];
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-end;justify-content:center;width:90%;max-width:280px;height:60%;';
+  for(let t=0;t<TC;t++) {
+    const tube = document.createElement('div');
+    tube.style.cssText = 'flex:1;max-width:38px;height:100%;border-radius:0 0 14px 14px;border:2px solid rgba(255,255,255,0.15);border-top:none;display:flex;flex-direction:column-reverse;gap:2px;padding:3px;overflow:hidden;background:rgba(0,0,0,0.2);';
+    const layers = [];
+    for(let l=0;l<LY;l++) {
+      const ly = document.createElement('div');
+      const c = COLORS[Math.floor(Math.random()*COLORS.length)];
+      ly.style.cssText = 'flex:1;border-radius:4px;background:'+c+';transition:all 0.5s cubic-bezier(.34,1.56,.64,1);opacity:0.9;box-shadow:inset 0 -2px 4px rgba(0,0,0,0.2),inset 0 2px 4px rgba(255,255,255,0.15);';
+      ly.dataset.color = c;
+      tube.appendChild(ly);
+      layers.push(ly);
+    }
+    wrap.appendChild(tube);
+    tubes.push({el:tube, layers});
+  }
+  el.appendChild(wrap);
+  const title = document.createElement('div');
+  title.style.cssText = 'position:absolute;top:12%;font-size:14px;font-weight:800;color:rgba(255,255,255,0.3);letter-spacing:2px;';
+  title.textContent = '✨ İKSİR SIRALAMA ✨';
+  el.appendChild(title);
+  let step = 0;
+  function drawFn() {
+    step++;
+    if(step%90===0) {
+      const f=Math.floor(Math.random()*TC), src=tubes[f].layers[tubes[f].layers.length-1];
+      if(src){src.style.transform='scaleY(0)';src.style.opacity='0';
+        setTimeout(()=>{const nc=COLORS[Math.floor(Math.random()*COLORS.length)];src.style.background=nc;src.dataset.color=nc;src.style.transform='scaleY(1)';src.style.opacity='0.9';},800);
+      }
+    }
+    if(step%45===0){const t=Math.floor(Math.random()*TC);tubes[t].el.style.borderColor='rgba(168,85,247,0.5)';tubes[t].el.style.boxShadow='0 0 15px rgba(168,85,247,0.3)';setTimeout(()=>{tubes[t].el.style.borderColor='rgba(255,255,255,0.15)';tubes[t].el.style.boxShadow='none';},600);}
+  }
+  _demoLoop(state, drawFn);
+  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+};
+
+// ———————— 9. Ok Bulmaca Demo ————————
+MiniDemos.demo_arrowPuzzle = function(gradient) {
+  const el = document.createElement('div');
+  el.className = 'reel-demo-inner';
+  const state = { paused:false, raf:0 };
+  const G = 6, ARROWS = ['⬆','⬇','⬅','➡'];
+  const gridEl = document.createElement('div');
+  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:4px;width:80%;max-width:240px;aspect-ratio:1;';
+  const arrows = [];
+  for(let y=0;y<G;y++) for(let x=0;x<G;x++) {
+    const c = document.createElement('div');
+    c.style.cssText = 'border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:22px;transition:all 0.4s cubic-bezier(.34,1.56,.64,1);user-select:none;';
+    if(Math.random()<0.45) {
+      const dir=Math.floor(Math.random()*4);
+      c.textContent=ARROWS[dir]; c.dataset.dir=dir;
+      c.style.background='rgba(14,165,233,0.15)'; c.style.border='1px solid rgba(14,165,233,0.25)';
+      arrows.push({dir,el:c});
+    }
+    gridEl.appendChild(c);
+  }
+  el.appendChild(gridEl);
+  let step=0;
+  function drawFn() {
+    step++;
+    if(step%75===0&&arrows.length>0) {
+      const a=arrows[Math.floor(Math.random()*arrows.length)];
+      const dm={0:'translateY(-200px)',1:'translateY(200px)',2:'translateX(-200px)',3:'translateX(200px)'};
+      a.el.style.transform=dm[a.dir]; a.el.style.opacity='0';
+      setTimeout(()=>{a.el.textContent='';a.el.style.transform='scale(1)';a.el.style.opacity='1';a.el.style.background='rgba(255,255,255,0.06)';a.el.style.border='none';
+        setTimeout(()=>{const d=Math.floor(Math.random()*4);a.dir=d;a.el.textContent=ARROWS[d];a.el.dataset.dir=d;a.el.style.background='rgba(14,165,233,0.15)';a.el.style.border='1px solid rgba(14,165,233,0.25)';a.el.style.transform='scale(0)';setTimeout(()=>{a.el.style.transform='scale(1)'},50)},400);
+      },500);
+    }
+  }
+  _demoLoop(state, drawFn);
+  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+};
+
+// ———————— 10. Akış Bağlantı Demo ————————
+MiniDemos.demo_flowConnect = function(gradient) {
+  const el = document.createElement('div');
+  el.className = 'reel-demo-inner';
+  const state = { paused:false, raf:0 };
+  const G=6, CLR=['#ef4444','#3b82f6','#22c55e','#eab308','#a855f7'];
+  const gridEl = document.createElement('div');
+  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:3px;width:82%;max-width:250px;aspect-ratio:1;';
+  const cells=[], dots=[];
+  const used=new Set();
+  for(let i=0;i<CLR.length;i++){
+    let p1,p2;
+    do{p1=Math.floor(Math.random()*G*G)}while(used.has(p1));used.add(p1);
+    do{p2=Math.floor(Math.random()*G*G)}while(used.has(p2)||p2===p1);used.add(p2);
+    dots.push({c:CLR[i],p1,p2});
+  }
+  for(let i=0;i<G*G;i++){
+    const c=document.createElement('div');
+    c.style.cssText='border-radius:6px;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;transition:all 0.4s;aspect-ratio:1;';
+    const dot=dots.find(d=>d.p1===i||d.p2===i);
+    if(dot){c.style.background=dot.c;c.style.borderRadius='50%';c.style.boxShadow='0 0 8px '+dot.c+'60';c.dataset.dot='1';}
+    gridEl.appendChild(c);cells.push(c);
+  }
+  el.appendChild(gridEl);
+  let step=0, pathIdx=0;
+  function drawFn(){
+    step++;
+    if(step%30===0&&pathIdx<dots.length){
+      const d=dots[pathIdx];
+      const x1=d.p1%G,y1=Math.floor(d.p1/G),x2=d.p2%G,y2=Math.floor(d.p2/G);
+      for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++){const cl=cells[y1*G+x];if(!cl.dataset.dot){cl.style.background=d.c+'40';cl.style.border='1px solid '+d.c+'60';}}
+      for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++){const cl=cells[y*G+x2];if(!cl.dataset.dot){cl.style.background=d.c+'40';cl.style.border='1px solid '+d.c+'60';}}
+      pathIdx++;
+    }
+    if(pathIdx>=dots.length&&step%180===0){cells.forEach(c=>{if(!c.dataset.dot){c.style.background='rgba(255,255,255,0.04)';c.style.border='none';}});pathIdx=0;}
+  }
+  _demoLoop(state, drawFn);
+  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+};
+
+// ———————— 11. Yapboz Kart Demo ————————
+MiniDemos.demo_jigsawCard = function(gradient) {
+  const el = document.createElement('div');
+  el.className = 'reel-demo-inner';
+  const state = { paused:false, raf:0 };
+  const G=4, EMJ=['🌄','🏔️','🌅','🌊','🌺','🦋','🌈','🍀','🎨','🌸','🦜','🏝️','🌻','🦚','🍁','🌙'];
+  const gridEl = document.createElement('div');
+  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:4px;width:78%;max-width:230px;aspect-ratio:1;';
+  const cards=[], shuffled=[...EMJ].slice(0,G*G).sort(()=>Math.random()-0.5);
+  for(let i=0;i<G*G;i++){
+    const c=document.createElement('div');
+    const hid=Math.random()<0.3;
+    c.style.cssText='border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;transition:all 0.5s cubic-bezier(.34,1.56,.64,1);user-select:none;aspect-ratio:1;';
+    if(hid){c.style.background='linear-gradient(135deg,#d97706,#92400e)';c.textContent='❓';c.dataset.hidden='1';c.dataset.emoji=shuffled[i];}
+    else{c.style.background='rgba(255,255,255,0.08)';c.textContent=shuffled[i];c.dataset.hidden='0';}
+    gridEl.appendChild(c);cards.push(c);
+  }
+  el.appendChild(gridEl);
+  let step=0;
+  function drawFn(){
+    step++;
+    if(step%75===0){const hdn=cards.filter(c=>c.dataset.hidden==='1');if(hdn.length>0){const c=hdn[Math.floor(Math.random()*hdn.length)];c.style.transform='rotateY(90deg)';setTimeout(()=>{c.textContent=c.dataset.emoji;c.style.background='rgba(255,255,255,0.08)';c.dataset.hidden='0';c.style.transform='rotateY(0)';},250);}}
+    if(step%105===0){const a=Math.floor(Math.random()*cards.length);let b=Math.floor(Math.random()*cards.length);if(b===a)b=(b+1)%cards.length;const ca=cards[a],cb=cards[b];ca.style.transform='scale(0.5) rotate(10deg)';cb.style.transform='scale(0.5) rotate(-10deg)';setTimeout(()=>{const t=ca.textContent;ca.textContent=cb.textContent;cb.textContent=t;ca.style.transform='scale(1)';cb.style.transform='scale(1)';ca.style.background='rgba(34,197,94,0.15)';setTimeout(()=>{ca.style.background='rgba(255,255,255,0.08)'},500)},300);}
+  }
+  _demoLoop(state, drawFn);
+  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+};
+
 // ===== DEMO EŞLEME =====
 
 function getDemoFactory(game) {
@@ -659,6 +817,10 @@ function getDemoFactory(game) {
     case 'wordSearch':  return MiniDemos.demo_wordSearch;
     case 'sudoku':      return MiniDemos.demo_sudoku;
     case 'mazeGame':    return MiniDemos.demo_maze;
+    case 'waterSort':   return MiniDemos.demo_waterSort;
+    case 'arrowPuzzle': return MiniDemos.demo_arrowPuzzle;
+    case 'flowConnect': return MiniDemos.demo_flowConnect;
+    case 'jigsawCard':  return MiniDemos.demo_jigsawCard;
     default:            return MiniDemos.demo_blockPuzzle; // fallback
   }
 }
