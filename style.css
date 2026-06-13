@@ -548,3 +548,189 @@ a { color:inherit; text-decoration:none; }
 .anim-d2 { animation-delay:.1s; }
 .anim-d3 { animation-delay:.15s; }
 .anim-d4 { animation-delay:.2s; }
+
+/* ========== DIAMOND DISPLAY ========== */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.diamond-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.05));
+  border: 1px solid rgba(168,85,247,0.2);
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.diamond-display:active { transform: scale(0.95); }
+.diamond-display.diamond-pop { animation: diamondPop 0.4s ease; }
+.diamond-icon { font-size: 16px; }
+.diamond-count { font-size: 14px; font-weight: 800; color: #c084fc; }
+
+@keyframes diamondPop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+/* ========== ECONOMY CARD ========== */
+.economy-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(59,130,246,0.06));
+  border: 1px solid rgba(168,85,247,0.12);
+  border-radius: 16px;
+  padding: 16px;
+  margin: 0 0 16px;
+}
+.eco-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+}
+.eco-item.eco-ad-btn {
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+.eco-item.eco-ad-btn:active { background: rgba(168,85,247,0.15); }
+.eco-icon { font-size: 24px; }
+.eco-info { display: flex; flex-direction: column; }
+.eco-value { font-size: 18px; font-weight: 800; color: #fff; }
+.eco-label { font-size: 9px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px; }
+.eco-divider { width: 1px; height: 36px; background: rgba(255,255,255,0.06); }
+
+/* ========== DAILY REWARDS UPGRADE ========== */
+.reward-day.claimable {
+  border: 2px solid #a855f7;
+  animation: rewardGlow 1.5s ease-in-out infinite;
+  cursor: pointer;
+}
+.reward-day.claimable:active { transform: scale(0.9); }
+.reward-amount {
+  font-size: 8px;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-top: 2px;
+}
+.reward-icon.glow {
+  animation: rewardIconGlow 1s ease-in-out infinite;
+}
+
+@keyframes rewardGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,0); }
+  50% { box-shadow: 0 0 16px 4px rgba(168,85,247,0.3); }
+}
+@keyframes rewardIconGlow {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+/* ========== AD OVERLAY ========== */
+.ad-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+.ad-modal {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 28px 24px;
+  width: 85%;
+  max-width: 340px;
+  text-align: center;
+}
+.ad-header {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+.ad-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ad-reward-preview {
+  font-size: 24px;
+  font-weight: 800;
+  color: #a855f7;
+  padding: 16px;
+  background: rgba(168,85,247,0.1);
+  border-radius: 12px;
+}
+.ad-timer { display: flex; flex-direction: column; gap: 6px; }
+.ad-timer-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ad-timer-fill {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #a855f7, #22d3ee);
+  border-radius: 3px;
+}
+.ad-timer-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ad-skip {
+  margin-top: 16px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ad-skip:active { transform: scale(0.95); }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ========== GAME OVER UPGRADES ========== */
+.go-continue-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+.go-btn-ad {
+  background: linear-gradient(135deg, #a855f7, #7c3aed) !important;
+  color: #fff !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.go-btn-diamond {
+  background: linear-gradient(135deg, #0891b2, #155e75) !important;
+  color: #fff !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}

@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <meta name="description" content="GameHup — Oyun platformu" />
+  <meta name="description" content="PuzzleHub — Rahatlatıcı puzzle oyunları" />
   <meta name="theme-color" content="#a855f7" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="GameHup" />
+  <meta name="apple-mobile-web-app-title" content="PuzzleHub" />
   <title>PuzzleHub 🧩</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
@@ -37,31 +37,40 @@
             <span class="brand-text">PUZZLE<span class="brand-accent">HUB</span></span>
             <span class="brand-sub">HOŞGELDİN! 👋</span>
           </div>
-          <div class="avatar-circle">
-            <span>😎</span>
+          <div class="header-right">
+            <div class="diamond-display" onclick="showToast('💎 Elmas: ' + DiamondSystem.get())">
+              <span class="diamond-icon">💎</span>
+              <span class="diamond-count">100</span>
+            </div>
+            <div class="avatar-circle">
+              <span>😎</span>
+            </div>
           </div>
         </header>
 
-        <!-- Lig Kartı -->
-        <div class="lig-card">
-          <div class="lig-left">
-            <span class="lig-trophy">🏆</span>
-            <div class="lig-info">
-              <span class="lig-label">LİG SEVİYESİ</span>
-              <span class="lig-name">Altın Kahraman</span>
+        <!-- Elmas & Streak Kartı -->
+        <div class="economy-card">
+          <div class="eco-item">
+            <span class="eco-icon">💎</span>
+            <div class="eco-info">
+              <span class="eco-value diamond-count">100</span>
+              <span class="eco-label">ELMAS</span>
             </div>
           </div>
-          <div class="lig-right">
-            <span class="lig-points">1,240</span>
-            <span class="lig-points-label">PUAN</span>
-          </div>
-          <div class="lig-bar-container">
-            <div class="lig-bar">
-              <div class="lig-bar-fill" style="width:62%"></div>
+          <div class="eco-divider"></div>
+          <div class="eco-item">
+            <span class="eco-icon">🔥</span>
+            <div class="eco-info">
+              <span class="eco-value" id="eco-streak">0</span>
+              <span class="eco-label">GÜN STREAK</span>
             </div>
-            <div class="lig-bar-info">
-              <span class="lig-bar-current">★ 1,240 / 2,000</span>
-              <span class="lig-bar-next">Elmasa 760 puan</span>
+          </div>
+          <div class="eco-divider"></div>
+          <div class="eco-item eco-ad-btn" onclick="RewardedAd.showForDiamonds(10)">
+            <span class="eco-icon">📺</span>
+            <div class="eco-info">
+              <span class="eco-value" style="color:#a855f7">+10💎</span>
+              <span class="eco-label">REKLAM İZLE</span>
             </div>
           </div>
         </div>
@@ -144,6 +153,22 @@
             <span class="game-over-emoji" id="go-emoji">🎉</span>
             <h2 class="game-over-title" id="go-title">Tebrikler!</h2>
             <p class="game-over-msg" id="go-msg">Skor: 0</p>
+            
+            <!-- Devam Et (sadece kaybettiğinde) -->
+            <div id="go-continue" class="go-continue-section" style="display:none">
+              <button class="go-btn go-btn-ad" onclick="continueWithAd()">
+                <span>📺</span> Reklam İzle → Devam Et
+              </button>
+              <button class="go-btn go-btn-diamond" onclick="continueWithDiamonds()">
+                <span>💎</span> 30 Elmas → Devam Et
+              </button>
+            </div>
+            
+            <!-- Skor 2x (sadece kazandığında) -->
+            <button id="go-double" class="go-btn go-btn-ad" onclick="doubleScoreWithAd()" style="display:none">
+              <span>📺</span> Reklam İzle → Skor 2x!
+            </button>
+            
             <button class="go-btn go-btn-primary" onclick="restartCurrentGame()">🔄 Tekrar Oyna</button>
             <button class="go-btn go-btn-secondary" onclick="exitGame()">← Menüye Dön</button>
           </div>
@@ -181,7 +206,7 @@
   <script src="reels.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
     }
   </script>
 </body>

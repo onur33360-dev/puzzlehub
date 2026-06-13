@@ -51,6 +51,191 @@ const SETTINGS = [
 const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
 const DAY_ICONS = ['✅','✅','✅','🎁','🏃','💎','🏆'];
 
+// ==================== ELMAS SİSTEMİ ====================
+
+const DiamondSystem = {
+  _key: 'ph_diamonds',
+  
+  get() {
+    return parseInt(localStorage.getItem(this._key) || '100', 10); // Start with 100
+  },
+  
+  set(val) {
+    localStorage.setItem(this._key, Math.max(0, val).toString());
+    this.updateUI();
+  },
+  
+  add(amount, reason) {
+    const current = this.get();
+    this.set(current + amount);
+    if (reason) showToast(`+${amount}💎 ${reason}`);
+    this._animateAdd();
+  },
+  
+  spend(amount) {
+    const current = this.get();
+    if (current < amount) {
+      showToast('💎 Yeterli elmas yok!');
+      return false;
+    }
+    this.set(current - amount);
+    return true;
+  },
+  
+  canAfford(amount) {
+    return this.get() >= amount;
+  },
+  
+  updateUI() {
+    const els = document.querySelectorAll('.diamond-count');
+    els.forEach(el => el.textContent = this.get().toLocaleString());
+  },
+  
+  _animateAdd() {
+    const el = document.querySelector('.diamond-display');
+    if (el) {
+      el.classList.add('diamond-pop');
+      setTimeout(() => el.classList.remove('diamond-pop'), 400);
+    }
+  }
+};
+
+// ==================== STREAK SİSTEMİ ====================
+
+const StreakSystem = {
+  _key: 'ph_streak',
+  
+  getData() {
+    try {
+      return JSON.parse(localStorage.getItem(this._key) || '{}');
+    } catch(e) { return {}; }
+  },
+  
+  saveData(data) {
+    localStorage.setItem(this._key, JSON.stringify(data));
+  },
+  
+  checkIn() {
+    const data = this.getData();
+    const today = new Date().toDateString();
+    
+    if (data.lastDate === today) return false; // Already checked in
+    
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (data.lastDate === yesterday.toDateString()) {
+      // Streak continues
+      data.count = (data.count || 0) + 1;
+    } else if (data.lastDate) {
+      // Streak broken — go back 1 day instead of reset
+      data.count = Math.max(1, (data.count || 1) - 1);
+    } else {
+      data.count = 1;
+    }
+    
+    data.lastDate = today;
+    data.totalDays = (data.totalDays || 0) + 1;
+    this.saveData(data);
+    return true;
+  },
+  
+  getCount() {
+    return this.getData().count || 0;
+  },
+  
+  getDayInWeek() {
+    // Which day of the 7-day reward cycle are we on (0-6)
+    return ((this.getData().totalDays || 1) - 1) % 7;
+  }
+};
+
+// ==================== GÜNLÜK ÖDÜL TAKVİMİ ====================
+
+const DAILY_REWARD_TABLE = [
+  { day: 'Pzt', amount: 5,   icon: '💎', label: '5 Elmas' },
+  { day: 'Sal', amount: 10,  icon: '💎', label: '10 Elmas' },
+  { day: 'Çar', amount: 15,  icon: '🎁', label: '15 Elmas' },
+  { day: 'Per', amount: 20,  icon: '💎', label: '20 Elmas' },
+  { day: 'Cum', amount: 30,  icon: '🎉', label: '30 Elmas' },
+  { day: 'Cmt', amount: 40,  icon: '✨', label: '40 Elmas' },
+  { day: 'Paz', amount: 100, icon: '👑', label: '100 Elmas!' },
+];
+
+function claimDailyReward() {
+  const isNew = StreakSystem.checkIn();
+  if (!isNew) {
+    showToast('✅ Bugünkü ödülü zaten aldın!');
+    return;
+  }
+  const dayIdx = StreakSystem.getDayInWeek();
+  const reward = DAILY_REWARD_TABLE[dayIdx];
+  DiamondSystem.add(reward.amount, 'Günlük ödül!');
+  
+  // Streak milestones
+  const streak = StreakSystem.getCount();
+  if (streak === 7) DiamondSystem.add(50, '7 gün streak bonusu! 🔥');
+  if (streak === 14) DiamondSystem.add(100, '14 gün streak! 🎉');
+  if (streak === 30) DiamondSystem.add(200, '30 gün streak! 👑');
+  
+  renderDailyRewards();
+}
+
+// ==================== ÖDÜLLÜ REKLAM ====================
+
+const RewardedAd = {
+  // Simulated rewarded ad — will be replaced with real SDK later
+  show(reward, onComplete) {
+    // Create ad modal
+    const overlay = document.createElement('div');
+    overlay.className = 'ad-overlay';
+    overlay.innerHTML = `
+      <div class="ad-modal">
+        <div class="ad-header">📺 Ödüllü Video</div>
+        <div class="ad-body">
+          <div class="ad-reward-preview">${reward.icon} ${reward.text}</div>
+          <div class="ad-timer">
+            <div class="ad-timer-bar"><div class="ad-timer-fill"></div></div>
+            <span class="ad-timer-text">Reklam simülasyonu: 3 saniye</span>
+          </div>
+        </div>
+        <button class="ad-skip" style="display:none">Kapat ✕</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    
+    // Simulate 3 second ad
+    const fill = overlay.querySelector('.ad-timer-fill');
+    fill.style.transition = 'width 3s linear';
+    requestAnimationFrame(() => fill.style.width = '100%');
+    
+    setTimeout(() => {
+      const skipBtn = overlay.querySelector('.ad-skip');
+      skipBtn.style.display = 'block';
+      skipBtn.addEventListener('click', () => {
+        overlay.remove();
+        if (onComplete) onComplete();
+      });
+    }, 3000);
+  },
+  
+  // Quick reward ad — earn diamonds
+  showForDiamonds(amount) {
+    this.show(
+      { icon: '💎', text: `${amount} Elmas Kazan!` },
+      () => DiamondSystem.add(amount, 'Reklam ödülü!')
+    );
+  },
+  
+  // Continue game ad
+  showForContinue(onContinue) {
+    this.show(
+      { icon: '🔄', text: 'Devam Et!' },
+      onContinue
+    );
+  }
+};
+
 // ==================== DURUM ====================
 let currentScreen = 'home';
 let currentTab = 'home';
@@ -113,24 +298,33 @@ function renderHome() {
 
 function renderDailyRewards() {
   const container = document.getElementById('daily-rewards');
-  const today = new Date().getDay();
-  const todayIdx = today === 0 ? 6 : today - 1;
-
-  container.innerHTML = DAYS.map((day, i) => {
+  const streakData = StreakSystem.getData();
+  const today = new Date().toDateString();
+  const alreadyClaimed = streakData.lastDate === today;
+  const currentDayIdx = StreakSystem.getDayInWeek();
+  
+  container.innerHTML = DAILY_REWARD_TABLE.map((reward, i) => {
     let cls = 'reward-day';
     let content = '';
-    if (i < todayIdx) {
+    
+    if (alreadyClaimed && i <= currentDayIdx) {
+      // Already claimed days
       cls += ' claimed';
       content = `<span class="reward-check">✓</span>`;
-    } else if (i === todayIdx) {
-      cls += ' today';
-      content = `<span class="reward-icon">${DAY_ICONS[i]}</span>`;
+    } else if (!alreadyClaimed && i === currentDayIdx) {
+      // Today — claimable
+      cls += ' today claimable';
+      content = `<span class="reward-icon glow">${reward.icon}</span>`;
+    } else if (i < currentDayIdx) {
+      cls += ' claimed';
+      content = `<span class="reward-check">✓</span>`;
     } else {
-      content = `<span class="reward-icon" style="opacity:.5">${DAY_ICONS[i]}</span>`;
+      content = `<span class="reward-icon" style="opacity:.4">${reward.icon}</span>`;
     }
-    return `<div class="${cls}">
+    return `<div class="${cls}" ${(!alreadyClaimed && i === currentDayIdx) ? 'onclick="claimDailyReward()"' : ''}>
       ${content}
-      <span class="reward-label">${day}</span>
+      <span class="reward-label">${reward.day}</span>
+      <span class="reward-amount">${reward.amount}💎</span>
     </div>`;
   }).join('');
 }
@@ -304,7 +498,44 @@ function showGameOver(win, title, message) {
   document.getElementById('go-emoji').textContent = win ? '🎉' : '😔';
   document.getElementById('go-title').textContent = title;
   document.getElementById('go-msg').textContent = message;
+  
+  // Show/hide continue button (only on loss)
+  const continueBtn = document.getElementById('go-continue');
+  const doubleBtn = document.getElementById('go-double');
+  if (continueBtn) continueBtn.style.display = win ? 'none' : 'flex';
+  if (doubleBtn) doubleBtn.style.display = win ? 'flex' : 'none';
+  
+  // Level complete reward
+  if (win) DiamondSystem.add(3, 'Level tamamlandı!');
+  
   document.getElementById('game-over').style.display = 'flex';
+}
+
+function continueWithAd() {
+  RewardedAd.showForContinue(() => {
+    document.getElementById('game-over').style.display = 'none';
+    showToast('🔄 Devam ediyorsun!');
+    // Game continues from where it left off
+  });
+}
+
+function continueWithDiamonds() {
+  if (DiamondSystem.spend(30)) {
+    document.getElementById('game-over').style.display = 'none';
+    showToast('💎 30 elmas harcandı — devam!');
+  }
+}
+
+function doubleScoreWithAd() {
+  RewardedAd.show(
+    { icon: '2️⃣', text: 'Skor 2x!' },
+    () => {
+      const scoreEl = document.getElementById('game-score');
+      const current = parseInt(scoreEl.textContent.replace(/,/g, '')) || 0;
+      scoreEl.textContent = (current * 2).toLocaleString();
+      showToast('🎉 Skor 2 katına çıktı!');
+    }
+  );
 }
 
 function restartCurrentGame() {
@@ -357,8 +588,18 @@ function showToast(msg) {
 // ==================== BAŞLANGIÇ ====================
 
 document.addEventListener('DOMContentLoaded', () => {
+  DiamondSystem.updateUI();
   renderHome();
   renderLeaderboard();
   renderSettings();
+  
+  // Update streak badge
+  const streakCount = StreakSystem.getCount();
+  const streakNum = document.querySelector('.streak-num');
+  if (streakNum) streakNum.textContent = streakCount || '0';
+  
+  // Update eco-streak
+  const ecoStreak = document.getElementById('eco-streak');
+  if (ecoStreak) ecoStreak.textContent = streakCount || '0';
 });
 
