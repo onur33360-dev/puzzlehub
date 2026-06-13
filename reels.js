@@ -571,13 +571,60 @@ function _gameRating(id) {
   return (4.0 + (Math.abs(h)%10)*0.1).toFixed(1);
 }
 
-// ===== REELS ENGINE =====
+// ===== REELS ENGINE (Sonsuz Döngü) =====
 
 window.ReelsEngine = (function() {
   let _observer = null;
-  let _demos = {};       // id → demo instance
   let _container = null;
+  let _scrollEl = null;
   let _cards = [];
+  let _globalIdx = 0;        // toplam oluşturulan kart sayısı
+  let _recentIds = [];        // son N oyun id'si (tekrar engelleme)
+  let _isLoading = false;     // batch yükleniyor mu
+  const BATCH_SIZE = 6;       // her seferde eklenecek kart
+  const NO_REPEAT_WINDOW = 4; // aynı oyun en az bu kadar sonra tekrar gelir
+  const MAX_DOM_CARDS = 24;   // DOM'da maksimum kart (performans)
+
+  // ===== Kullanıcı Davranış Altyapısı =====
+  // İleride: oynanma verisine göre ağırlıklı seçim
+  const _userWeights = {};
+  function _recordInteraction(gameId, type) {
+    // type: 'play', 'favorite', 'view'
+    if (!_userWeights[gameId]) _userWeights[gameId] = { play:0, fav:0, view:0 };
+    _userWeights[gameId][type] = (_userWeights[gameId][type]||0) + 1;
+    try { localStorage.setItem('gh_weights', JSON.stringify(_userWeights)); } catch(e){}
+  }
+  function _loadWeights() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gh_weights')||'{}');
+      Object.assign(_userWeights, saved);
+    } catch(e){}
+  }
+
+  // ===== Akıllı Kuyruk =====
+  function _pickNextGame() {
+    // Aynı oyun son NO_REPEAT_WINDOW içinde tekrar gelmesin
+    const available = REEL_GAMES.filter(g => {
+      const lastIdx = _recentIds.lastIndexOf(g.id);
+      return lastIdx < 0 || (_recentIds.length - lastIdx) >= NO_REPEAT_WINDOW;
+    });
+    // Eğer tüm oyunlar recently gösterildiyse, en az tekrar edeni seç
+    const pool = available.length > 0 ? available : REEL_GAMES;
+    // Rastgele seç
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    _recentIds.push(picked.id);
+    // Hafızayı sınırla
+    if (_recentIds.length > 50) _recentIds = _recentIds.slice(-30);
+    return picked;
+  }
+
+  function _generateBatch(count) {
+    const batch = [];
+    for (let i = 0; i < count; i++) {
+      batch.push(_pickNextGame());
+    }
+    return batch;
+  }
 
   function _injectCSS() {
     injectStyle('css-reels', `
@@ -634,19 +681,13 @@ window.ReelsEngine = (function() {
     `);
   }
 
-  function _shuffle(arr) {
-    const a=[...arr];
-    for(let i=a.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-    return a;
-  }
-
   function _diffClass(d) {
     if(d==='Kolay') return 'easy';
     if(d==='Orta') return 'medium';
     return 'hard';
   }
 
-  function _buildCard(game, idx, total) {
+  function _buildCard(game, idx) {
     const card = document.createElement('div');
     card.className = 'reel-card';
     card.dataset.gameId = game.id;
@@ -661,16 +702,15 @@ window.ReelsEngine = (function() {
     // Demo area
     const demoArea = document.createElement('div');
     demoArea.className = 'reel-demo-area';
-    // Overlay for readability
     const overlay = document.createElement('div');
     overlay.className = 'reel-demo-overlay';
     demoArea.appendChild(overlay);
     card.appendChild(demoArea);
 
-    // Counter
+    // Counter — sonsuz feed'de sadece sıra numarası
     const counter = document.createElement('div');
     counter.className = 'reel-card-counter';
-    counter.textContent = (idx+1)+' / '+total;
+    counter.textContent = '#' + (idx + 1);
     card.appendChild(counter);
 
     // Info panel
@@ -689,7 +729,6 @@ window.ReelsEngine = (function() {
     // Stats
     const stats = document.createElement('div');
     stats.className = 'reel-stats';
-
     const rating = _gameRating(game.id);
     stats.innerHTML =
       '<div class="reel-stat">⭐ <span class="reel-stat-val">'+rating+'</span></div>'+
@@ -711,20 +750,19 @@ window.ReelsEngine = (function() {
     btn.className = 'reel-play-btn';
     btn.style.background = 'linear-gradient(135deg,'+game.gradient[0]+','+game.gradient[1]+')';
     btn.textContent = game.playable ? '▶  OYNA' : '🔒  YAKINDA';
-
     btn.addEventListener('click', function() {
       if(game.playable) {
         incPlayCount(game.id);
+        _recordInteraction(game.id, 'play');
         if(typeof playGame==='function') playGame(GAME_NAME_MAP[game.id]);
       } else {
         if(typeof showToast==='function') showToast('Yakında!');
       }
     });
     info.appendChild(btn);
-
     card.appendChild(info);
 
-    // Right-side actions (TikTok style)
+    // Right-side actions
     const actions = document.createElement('div');
     actions.className = 'reel-actions';
 
@@ -734,6 +772,7 @@ window.ReelsEngine = (function() {
     favBtn.innerHTML = '<div class="act-icon">'+(isFavorite(game.id)?'❤️':'🤍')+'</div><span class="act-label">Favori</span>';
     favBtn.addEventListener('click', function() {
       const isNow = toggleFavorite(game.id);
+      _recordInteraction(game.id, 'fav');
       favBtn.className = 'reel-action-btn'+(isNow?' fav-active':'');
       favBtn.querySelector('.act-icon').textContent = isNow?'❤️':'🤍';
       if(typeof showToast==='function') showToast(isNow?'❤️ Favorilere eklendi':'💔 Favorilerden çıkarıldı');
@@ -745,11 +784,10 @@ window.ReelsEngine = (function() {
     catBtn.className = 'reel-action-btn';
     catBtn.innerHTML = '<div class="act-icon">🧩</div><span class="act-label">Bulmaca</span>';
     actions.appendChild(catBtn);
-
     card.appendChild(actions);
 
-    // Swipe hint on first card
-    if(idx===0) {
+    // Swipe hint on first card only
+    if(idx === 0) {
       const hint = document.createElement('div');
       hint.className = 'reel-swipe-hint';
       hint.innerHTML = '<span class="hint-arrow">⬆</span><span class="hint-text">KAYDIR</span>';
@@ -759,48 +797,105 @@ window.ReelsEngine = (function() {
     return { card, demoArea, gameId: game.id, game };
   }
 
+  // ===== Sonsuz Yükleme =====
+  function _appendBatch() {
+    if (_isLoading || !_scrollEl) return;
+    _isLoading = true;
+
+    const batch = _generateBatch(BATCH_SIZE);
+    batch.forEach(game => {
+      const idx = _globalIdx++;
+      const { card, demoArea, gameId } = _buildCard(game, idx);
+      const item = { card, demoArea, gameId, game, demoInstance: null, active: false };
+      _cards.push(item);
+      _scrollEl.appendChild(card);
+      if (_observer) _observer.observe(card);
+      // Görüntülenme kaydı
+      _recordInteraction(gameId, 'view');
+    });
+
+    // DOM temizliği — çok yukarıdaki kartları kaldır (performans)
+    _cleanupOldCards();
+
+    _isLoading = false;
+  }
+
+  function _cleanupOldCards() {
+    // Aktif kartın index'ini bul
+    const activeIdx = _cards.findIndex(c => c.active);
+    if (activeIdx < 0) return;
+
+    // Aktiften MAX_DOM_CARDS/2'den fazla uzaktaki eski kartları temizle
+    const cleanThreshold = Math.floor(MAX_DOM_CARDS / 2);
+    let cleaned = 0;
+
+    while (_cards.length > MAX_DOM_CARDS && cleaned < 3) {
+      const firstItem = _cards[0];
+      const currentActiveIdx = _cards.findIndex(c => c.active);
+      if (currentActiveIdx <= cleanThreshold) break; // aktife çok yakın, temizleme
+
+      // Demo'yu yok et
+      if (firstItem.demoInstance) {
+        firstItem.demoInstance.destroy();
+        firstItem.demoInstance = null;
+      }
+      // Observer'dan çıkar
+      if (_observer) _observer.unobserve(firstItem.card);
+      // DOM'dan kaldır
+      if (firstItem.card.parentNode) firstItem.card.parentNode.removeChild(firstItem.card);
+      // Diziden çıkar
+      _cards.shift();
+      cleaned++;
+    }
+  }
+
+  // ===== Scroll Dinleyici =====
+  function _onScroll() {
+    if (!_scrollEl) return;
+    const scrollTop = _scrollEl.scrollTop;
+    const scrollHeight = _scrollEl.scrollHeight;
+    const clientHeight = _scrollEl.clientHeight;
+
+    // Sona 2 kart mesafe kaldığında yeni batch yükle
+    if (scrollHeight - scrollTop - clientHeight < clientHeight * 2.5) {
+      _appendBatch();
+    }
+  }
+
+  // ===== Ana Fonksiyonlar =====
   function init(container) {
     _container = container;
+    _globalIdx = 0;
+    _recentIds = [];
+    _isLoading = false;
+    _cards = [];
+    _loadWeights();
     _injectCSS();
 
-    // Clear
     container.innerHTML = '';
-
-    // Shuffle games
-    const shuffled = _shuffle(REEL_GAMES);
-    const total = shuffled.length;
 
     // Scroll container
     const scroll = document.createElement('div');
     scroll.className = 'reels-container';
-
-    _cards = [];
-    shuffled.forEach((game, idx) => {
-      const { card, demoArea, gameId } = _buildCard(game, idx, total);
-      _cards.push({ card, demoArea, gameId, game, demoInstance:null, active:false });
-      scroll.appendChild(card);
-    });
+    _scrollEl = scroll;
 
     container.appendChild(scroll);
 
-    // IntersectionObserver — activate/deactivate demos
+    // IntersectionObserver
     _observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         const card = entry.target;
-        const idx = _cards.findIndex(c=>c.card===card);
-        if(idx<0) return;
-        const item = _cards[idx];
+        const item = _cards.find(c => c.card === card);
+        if (!item) return;
 
-        if(entry.isIntersecting && entry.intersectionRatio >= 0.55) {
-          // Activate
-          if(!item.active) {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
+          if (!item.active) {
             item.active = true;
             card.style.willChange = 'transform';
             _startDemo(item);
           }
         } else {
-          // Deactivate
-          if(item.active) {
+          if (item.active) {
             item.active = false;
             card.style.willChange = 'auto';
             _stopDemo(item);
@@ -809,35 +904,42 @@ window.ReelsEngine = (function() {
       });
     }, { threshold: [0, 0.55, 1], root: scroll });
 
-    _cards.forEach(item => _observer.observe(item.card));
+    // Scroll event — sonsuz yükleme tetikleyici
+    scroll.addEventListener('scroll', _onScroll, { passive: true });
+
+    // İlk batch'i yükle
+    _appendBatch();
   }
 
   function _startDemo(item) {
-    if(item.demoInstance) { item.demoInstance.resume(); return; }
+    if (item.demoInstance) { item.demoInstance.resume(); return; }
     const factory = getDemoFactory(item.game);
-    if(!factory) return;
+    if (!factory) return;
     const demo = factory(item.game.gradient);
     item.demoInstance = demo;
-    // Insert into demo area (before overlay)
     const overlay = item.demoArea.querySelector('.reel-demo-overlay');
-    if(overlay) item.demoArea.insertBefore(demo.el, overlay);
+    if (overlay) item.demoArea.insertBefore(demo.el, overlay);
     else item.demoArea.appendChild(demo.el);
   }
 
   function _stopDemo(item) {
-    if(item.demoInstance) item.demoInstance.pause();
+    if (item.demoInstance) item.demoInstance.pause();
   }
 
   function cleanup() {
-    if(_observer) { _observer.disconnect(); _observer=null; }
+    if (_observer) { _observer.disconnect(); _observer = null; }
+    if (_scrollEl) _scrollEl.removeEventListener('scroll', _onScroll);
     _cards.forEach(item => {
-      if(item.demoInstance) {
+      if (item.demoInstance) {
         item.demoInstance.destroy();
         item.demoInstance = null;
       }
     });
     _cards = [];
-    if(_container) _container.innerHTML = '';
+    _scrollEl = null;
+    _globalIdx = 0;
+    _recentIds = [];
+    if (_container) _container.innerHTML = '';
   }
 
   return { init, cleanup };
