@@ -449,7 +449,7 @@ function goBack() {
 
 function renderHome() {
   renderDailyRewards();
-  renderPuzzleList();
+  renderFavorites();
   renderMissions();
 }
 
@@ -486,26 +486,38 @@ function renderDailyRewards() {
   }).join('');
 }
 
-function renderPuzzleList() {
-  const grid = document.getElementById('puzzle-grid');
-  grid.innerHTML = PUZZLE_GAMES.map((g, i) => {
-    const btnColor = g.bg.match(/#[a-f0-9]+/i)?.[0] || '#7c3aed';
-    return `
-    <div class="game-card anim-in" style="animation-delay:${i * 50}ms">
-      <div class="game-card-visual" style="background:${g.bg}">
-        <span class="game-emoji">${g.emoji}</span>
-        ${g.rating ? `<span class="game-rating">⭐ ${g.rating}</span>` : ''}
-        ${g.badge ? `<span class="game-badge ${g.badge}">${g.badge === 'yeni' ? 'YENİ' : 'HOT'}</span>` : ''}
-      </div>
-      <div class="game-card-info">
-        <span class="game-card-name">${g.name}</span>
-        <span class="game-card-desc">${g.desc}</span>
-        <button class="game-play-btn" style="background:${btnColor}" onclick="playGame('${g.name}')">
-          ▶ Oyna
-        </button>
-      </div>
-    </div>`;
-  }).join('');
+function renderFavorites() {
+  const container = document.getElementById('fav-games');
+  if (!container) return;
+  const favIds = typeof getFavorites === 'function' ? getFavorites() : [];
+  
+  // Map fav IDs to PUZZLE_GAMES
+  const favGames = PUZZLE_GAMES.filter(g => {
+    // Check if game name or ID matches a favorite
+    return favIds.some(fid => {
+      const gmap = Object.entries(typeof GAME_MAP !== 'undefined' ? GAME_MAP : {});
+      return gmap.some(([name, id]) => id === fid && name === g.name) || fid === g.name;
+    });
+  });
+  
+  if (favGames.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:20px 16px;color:#9a9ab0;font-size:14px;">
+        <div style="font-size:32px;margin-bottom:8px;">💫</div>
+        <div>Henüz favori oyunun yok!</div>
+        <div style="margin-top:6px;color:#c084fc;font-size:13px;cursor:pointer" onclick="switchTab('discover')">
+          Keşfet'e git ve ❤️ ile favorile →
+        </div>
+      </div>`;
+    return;
+  }
+  
+  container.innerHTML = favGames.map((g, i) => `
+    <div class="fav-card anim-in" style="animation-delay:${i*60}ms;background:${g.bg}" onclick="playGame('${g.name}')">
+      <span class="fav-emoji">${g.emoji}</span>
+      <span class="fav-name">${g.name}</span>
+    </div>
+  `).join('');
 }
 
 // ==================== RENDER: GÖREVLER ====================
