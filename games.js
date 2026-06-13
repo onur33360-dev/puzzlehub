@@ -1264,7 +1264,7 @@ PuzzleGames.screwPuzzle = (() => {
       .sp2-screw .scr-cross::before{width:55%;height:11%}
       .sp2-screw .scr-cross::after{width:11%;height:55%}
       .sp2-screw .scr-rim{position:absolute;inset:3px;border-radius:50%;border:1.5px solid rgba(255,255,255,.15)}
-      .sp2-screw.covered{filter:brightness(.3) saturate(.3);pointer-events:none}
+      .sp2-screw.covered{opacity:.25;filter:brightness(.4) saturate(.1) blur(0.5px);pointer-events:none;transform:scale(.85)}
       .sp2-screw.removing{animation:spUnscrew .5s cubic-bezier(.4,0,.2,1) forwards}
       .sp2-screw:not(.covered):not(.removing):active{transform:scale(.88)}
       .sp2-slots{display:flex;gap:8px;justify-content:center;padding:10px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);box-shadow:0 -2px 16px rgba(0,0,0,.1)}
