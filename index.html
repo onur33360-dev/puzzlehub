@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="description" content="GameHup — Oyun platformu" />
+  <meta name="theme-color" content="#a855f7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GameHup" />
+  <title>PuzzleHub 🧩</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Ana içerik alanı (tab'lar üstünde scroll) -->
+    <div id="main-content">
+
+      <!-- ====== ANA EKRAN ====== -->
+      <div id="screen-home" class="screen active">
+        <!-- Üst bar -->
+        <header class="home-header">
+          <div class="streak-badge" id="streak-badge">
+            <span class="streak-fire">🔥</span>
+            <div class="streak-info">
+              <span class="streak-num">7</span>
+              <span class="streak-label">GÜN</span>
+            </div>
+          </div>
+          <div class="brand">
+            <span class="brand-text">PUZZLE<span class="brand-accent">HUB</span></span>
+            <span class="brand-sub">HOŞGELDİN! 👋</span>
+          </div>
+          <div class="avatar-circle">
+            <span>😎</span>
+          </div>
+        </header>
+
+        <!-- Lig Kartı -->
+        <div class="lig-card">
+          <div class="lig-left">
+            <span class="lig-trophy">🏆</span>
+            <div class="lig-info">
+              <span class="lig-label">LİG SEVİYESİ</span>
+              <span class="lig-name">Altın Kahraman</span>
+            </div>
+          </div>
+          <div class="lig-right">
+            <span class="lig-points">1,240</span>
+            <span class="lig-points-label">PUAN</span>
+          </div>
+          <div class="lig-bar-container">
+            <div class="lig-bar">
+              <div class="lig-bar-fill" style="width:62%"></div>
+            </div>
+            <div class="lig-bar-info">
+              <span class="lig-bar-current">★ 1,240 / 2,000</span>
+              <span class="lig-bar-next">Elmasa 760 puan</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Günlük Ödüller -->
+        <div class="section">
+          <h3 class="section-title">🎁 GÜNLÜK ÖDÜLLER</h3>
+          <div class="daily-rewards" id="daily-rewards"></div>
+        </div>
+
+        <!-- Puzzle Oyunları -->
+        <div class="section">
+          <h3 class="section-title">🧩 PUZZLE OYUNLARI</h3>
+          <div class="games-grid" id="puzzle-grid"></div>
+          <button class="random-game-btn" id="btn-random" onclick="playRandomGame()">
+            <span class="random-icon">🎲</span>
+            <span class="random-text">Rastgele Puzzle!</span>
+          </button>
+        </div>
+        <!-- Görevler (Ana Sayfada) -->
+        <div class="section">
+          <h3 class="section-title">⚡ Günlük Görevler</h3>
+          <div id="daily-missions"></div>
+        </div>
+        <div class="section">
+          <h3 class="section-title">📅 Haftalık Görevler</h3>
+          <div id="weekly-missions"></div>
+        </div>
+      </div>
+
+      <!-- ====== KEŞFET (REELS) EKRANI ====== -->
+      <div id="screen-discover" class="screen screen-fullbleed"></div>
+
+      <!-- ====== LİDER EKRANI ====== -->
+      <div id="screen-lider" class="screen">
+        <header class="page-header">
+          <h2 class="page-title">🏆 Liderlik Tablosu</h2>
+        </header>
+        <div class="lider-podium" id="lider-podium"></div>
+        <div class="lider-list" id="lider-list"></div>
+      </div>
+
+      <!-- ====== PROFİL EKRANI ====== -->
+      <div id="screen-profil" class="screen">
+        <header class="page-header">
+          <h2 class="page-title">👤 Profil</h2>
+        </header>
+        <div class="profile-card-section">
+          <div class="profile-card">
+            <div class="profile-avatar-big"><span>😎</span></div>
+            <div class="profile-info">
+              <span class="profile-name">Oyuncu</span>
+              <span class="profile-tag">Altın Kahraman • 1,240 puan</span>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <h3 class="section-title">❤️ Favori Oyunlar</h3>
+          <div id="fav-games-list" class="games-grid"></div>
+        </div>
+        <div class="settings-section" id="settings-list"></div>
+      </div>
+
+
+
+      <!-- ====== OYUN EKRANI ====== -->
+      <div id="screen-game" class="screen">
+        <header class="game-header">
+          <button class="btn-back" onclick="exitGame()">← Geri</button>
+          <h2 class="game-title-text" id="game-title">Oyun</h2>
+          <div class="game-score-wrap">
+            <span class="game-score-lbl">SKOR</span>
+            <span class="game-score-val" id="game-score">0</span>
+          </div>
+        </header>
+        <div id="game-container"></div>
+        <!-- Game Over Overlay -->
+        <div id="game-over" class="game-over-overlay" style="display:none">
+          <div class="game-over-box">
+            <span class="game-over-emoji" id="go-emoji">🎉</span>
+            <h2 class="game-over-title" id="go-title">Tebrikler!</h2>
+            <p class="game-over-msg" id="go-msg">Skor: 0</p>
+            <button class="go-btn go-btn-primary" onclick="restartCurrentGame()">🔄 Tekrar Oyna</button>
+            <button class="go-btn go-btn-secondary" onclick="exitGame()">← Menüye Dön</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Alt Tab Bar -->
+    <nav class="bottom-tabs" id="bottom-tabs">
+      <button class="tab active" data-tab="home" onclick="switchTab('home')">
+        <span class="tab-icon">🏠</span>
+        <span class="tab-label">ANA</span>
+      </button>
+      <button class="tab" data-tab="discover" onclick="switchTab('discover')">
+        <span class="tab-icon">🎯</span>
+        <span class="tab-label">KEŞFET</span>
+      </button>
+      <button class="tab" data-tab="lider" onclick="switchTab('lider')">
+        <span class="tab-icon">🏆</span>
+        <span class="tab-label">SKORLAR</span>
+      </button>
+      <button class="tab" data-tab="profil" onclick="switchTab('profil')">
+        <span class="tab-icon">👤</span>
+        <span class="tab-label">PROFİL</span>
+      </button>
+    </nav>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script src="app.js"></script>
+  <script src="games.js"></script>
+  <script src="reels.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>
