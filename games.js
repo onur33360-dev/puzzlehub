@@ -1155,6 +1155,7 @@ PuzzleGames.screwPuzzle = (() => {
     {f:'#22c55e',l:'#4ade80',g:'rgba(34,197,94,.4)',name:'Yeşil'},
     {f:'#eab308',l:'#fbbf24',g:'rgba(234,179,8,.4)',name:'Sarı'},
     {f:'#a855f7',l:'#c084fc',g:'rgba(168,85,247,.4)',name:'Mor'},
+    {f:'#f97316',l:'#fb923c',g:'rgba(249,115,22,.4)',name:'Turuncu'},
   ];
   const WOOD = [
     {f:'#b8860b',l:'#d4a834',d:'#7a5a08'},
@@ -1164,73 +1165,77 @@ PuzzleGames.screwPuzzle = (() => {
     {f:'#9b7653',l:'#b89474',d:'#6b4e33'},
     {f:'#8b4513',l:'#b06030',d:'#5a2d0c'},
   ];
-  const MAX_SLOTS = 5;
+  const MAX_SLOTS = 7;
   const SCR_SZ = 46;
 
   // ───────── SEVİYELER ─────────
-  // Kolay başla → zorluk artsın, tahtalar daha net örtüşsün
+  // Kural: Her renk 3 veya 6 kez, aynı renk aynı tahtada kümelenmiş
+  // Tahtalar: bazıları yan yana (seçim hakkı), bazıları üst üste
   const LEVELS = [
-    // Lv1: 2 tahta, 4 vida, 2 renk — öğretici
+    // Lv1: 2 tahta üst üste, 6 vida, 2 renk (3+3) — öğretici
     {boards:[
-      {x:10,y:55,w:80,h:30,screws:[{rx:.25,ry:.5,c:0},{rx:.75,ry:.5,c:1}]},
-      {x:20,y:35,w:60,h:30,screws:[{rx:.25,ry:.5,c:0},{rx:.75,ry:.5,c:1}]}
+      {x:10,y:55,w:80,h:28,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]},
+      {x:20,y:30,w:60,h:32,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:0}]}
     ]},
-    // Lv2: 2 tahta, 6 vida, 2 renk
+    // Lv2: 2 tahta üst üste, 6 vida, 2 renk (3+3)
     {boards:[
-      {x:8,y:52,w:84,h:30,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:0}]},
-      {x:18,y:32,w:64,h:30,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]}
+      {x:8,y:55,w:84,h:28,screws:[{rx:.15,ry:.5,c:1},{rx:.5,ry:.5,c:0},{rx:.85,ry:.5,c:1}]},
+      {x:18,y:28,w:64,h:34,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]}
     ]},
-    // Lv3: 2 tahta, 6 vida, 3 renk
+    // Lv3: 2 tahta yan yana + 1 üstte, 9 vida, 3 renk (3+3+3)
     {boards:[
-      {x:8,y:52,w:84,h:30,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]},
-      {x:18,y:32,w:64,h:30,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]}
+      {x:3,y:55,w:45,h:30,screws:[{rx:.3,ry:.4,c:0},{rx:.7,ry:.4,c:0},{rx:.5,ry:.8,c:1}]},
+      {x:52,y:55,w:45,h:30,screws:[{rx:.3,ry:.4,c:1},{rx:.7,ry:.4,c:2},{rx:.5,ry:.8,c:2}]},
+      {x:15,y:25,w:70,h:36,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]}
     ]},
-    // Lv4: 3 tahta, 9 vida, 3 renk
+    // Lv4: 3 tahta üst üste, 9 vida, 3 renk — renkler kümelenmiş
     {boards:[
-      {x:5,y:60,w:90,h:25,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]},
-      {x:15,y:40,w:70,h:28,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:0}]},
-      {x:25,y:20,w:50,h:28,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]}
+      {x:5,y:60,w:90,h:24,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:0}]},
+      {x:12,y:38,w:76,h:28,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:1}]},
+      {x:22,y:14,w:56,h:30,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:2}]}
     ]},
-    // Lv5: 3 tahta, 9 vida, 3 renk karışık
+    // Lv5: 2 yan yana + 1 üstte, 9 vida, 3 renk
     {boards:[
-      {x:5,y:58,w:90,h:25,screws:[{rx:.15,ry:.5,c:2},{rx:.5,ry:.5,c:0},{rx:.85,ry:.5,c:1}]},
-      {x:12,y:38,w:76,h:28,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]},
-      {x:22,y:18,w:56,h:28,screws:[{rx:.25,ry:.5,c:1},{rx:.5,ry:.5,c:2},{rx:.75,ry:.5,c:0}]}
+      {x:3,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:1},{rx:.75,ry:.4,c:2},{rx:.5,ry:.8,c:0}]},
+      {x:53,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:0},{rx:.75,ry:.4,c:0},{rx:.5,ry:.8,c:2}]},
+      {x:10,y:24,w:80,h:40,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]}
     ]},
-    // Lv6: 3 tahta, 12 vida, 4 renk
+    // Lv6: 4 tahta, 12 vida, 4 renk (3+3+3+3) — kümelenmiş
     {boards:[
-      {x:3,y:60,w:94,h:24,screws:[{rx:.15,ry:.5,c:0},{rx:.38,ry:.5,c:1},{rx:.62,ry:.5,c:2},{rx:.85,ry:.5,c:3}]},
-      {x:12,y:40,w:76,h:26,screws:[{rx:.15,ry:.5,c:3},{rx:.38,ry:.5,c:0},{rx:.62,ry:.5,c:1},{rx:.85,ry:.5,c:2}]},
-      {x:22,y:18,w:56,h:28,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:3},{rx:.8,ry:.5,c:0},{rx:.5,ry:.3,c:1}]}
+      {x:3,y:68,w:94,h:20,screws:[{rx:.15,ry:.5,c:0},{rx:.38,ry:.5,c:0},{rx:.62,ry:.5,c:0},{rx:.85,ry:.5,c:1}]},
+      {x:10,y:48,w:80,h:26,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]},
+      {x:18,y:28,w:64,h:26,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:3}]},
+      {x:28,y:6,w:44,h:28,screws:[{rx:.25,ry:.5,c:3},{rx:.75,ry:.5,c:3}]}
     ]},
-    // Lv7: 4 tahta, 12 vida, 4 renk
+    // Lv7: 2 yan yana (alt) + 2 yan yana (üst), 12 vida, 4 renk
     {boards:[
-      {x:3,y:65,w:94,h:22,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]},
-      {x:10,y:48,w:80,h:24,screws:[{rx:.2,ry:.5,c:3},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]},
-      {x:18,y:30,w:64,h:24,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:3},{rx:.8,ry:.5,c:0}]},
-      {x:28,y:12,w:44,h:24,screws:[{rx:.25,ry:.5,c:1},{rx:.5,ry:.5,c:2},{rx:.75,ry:.5,c:3}]}
+      {x:3,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:0},{rx:.75,ry:.4,c:0},{rx:.5,ry:.8,c:0}]},
+      {x:53,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:1},{rx:.75,ry:.4,c:1},{rx:.5,ry:.8,c:1}]},
+      {x:3,y:18,w:44,h:46,screws:[{rx:.25,ry:.3,c:2},{rx:.75,ry:.3,c:2},{rx:.5,ry:.7,c:2}]},
+      {x:53,y:18,w:44,h:46,screws:[{rx:.25,ry:.3,c:3},{rx:.75,ry:.3,c:3},{rx:.5,ry:.7,c:3}]}
     ]},
-    // Lv8: 4 tahta, 16 vida, 4 renk
+    // Lv8: 5 tahta, 15 vida, 5 renk — karışık ama kazanılabilir
     {boards:[
-      {x:2,y:66,w:96,h:20,screws:[{rx:.12,ry:.5,c:1},{rx:.38,ry:.5,c:0},{rx:.62,ry:.5,c:3},{rx:.88,ry:.5,c:2}]},
-      {x:10,y:48,w:80,h:24,screws:[{rx:.15,ry:.5,c:2},{rx:.38,ry:.5,c:3},{rx:.62,ry:.5,c:0},{rx:.85,ry:.5,c:1}]},
-      {x:18,y:30,w:64,h:24,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]},
-      {x:28,y:10,w:44,h:26,screws:[{rx:.2,ry:.5,c:3},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:0},{rx:.5,ry:.3,c:1},{rx:.5,ry:.7,c:3}]}
+      {x:3,y:72,w:94,h:18,screws:[{rx:.15,ry:.5,c:0},{rx:.38,ry:.5,c:0},{rx:.62,ry:.5,c:1},{rx:.85,ry:.5,c:1}]},
+      {x:3,y:54,w:44,h:22,screws:[{rx:.3,ry:.5,c:2},{rx:.7,ry:.5,c:2}]},
+      {x:53,y:54,w:44,h:22,screws:[{rx:.3,ry:.5,c:3},{rx:.7,ry:.5,c:3}]},
+      {x:10,y:28,w:80,h:30,screws:[{rx:.15,ry:.5,c:0},{rx:.38,ry:.5,c:4},{rx:.62,ry:.5,c:4},{rx:.85,ry:.5,c:4}]},
+      {x:25,y:4,w:50,h:28,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:3}]}
     ]},
-    // Lv9: 4 tahta, 15 vida, 5 renk
+    // Lv9: 2 yan yana + 2 üstte, 12 vida, 4 renk (3+3+3+3)
     {boards:[
-      {x:2,y:68,w:96,h:20,screws:[{rx:.12,ry:.5,c:0},{rx:.35,ry:.5,c:4},{rx:.58,ry:.5,c:1},{rx:.82,ry:.5,c:3}]},
-      {x:8,y:50,w:84,h:24,screws:[{rx:.15,ry:.5,c:2},{rx:.4,ry:.5,c:0},{rx:.65,ry:.5,c:4},{rx:.88,ry:.5,c:1}]},
-      {x:16,y:30,w:68,h:26,screws:[{rx:.18,ry:.5,c:3},{rx:.5,ry:.5,c:2},{rx:.82,ry:.5,c:4}]},
-      {x:26,y:10,w:48,h:26,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:3},{rx:.8,ry:.5,c:0},{rx:.5,ry:.3,c:2}]}
+      {x:3,y:62,w:44,h:24,screws:[{rx:.3,ry:.5,c:0},{rx:.7,ry:.5,c:0},{rx:.5,ry:.3,c:0}]},
+      {x:53,y:62,w:44,h:24,screws:[{rx:.3,ry:.5,c:1},{rx:.7,ry:.5,c:1},{rx:.5,ry:.3,c:1}]},
+      {x:3,y:28,w:44,h:40,screws:[{rx:.3,ry:.5,c:2},{rx:.7,ry:.5,c:2},{rx:.5,ry:.3,c:2}]},
+      {x:53,y:28,w:44,h:40,screws:[{rx:.3,ry:.5,c:3},{rx:.7,ry:.5,c:3},{rx:.5,ry:.3,c:3}]}
     ]},
-    // Lv10: 5 tahta, 18 vida, 5 renk — BOSS
+    // Lv10: BOSS — 5 tahta, 18 vida, 6 renk
     {boards:[
-      {x:1,y:72,w:98,h:18,screws:[{rx:.1,ry:.5,c:4},{rx:.3,ry:.5,c:0},{rx:.5,ry:.5,c:2},{rx:.7,ry:.5,c:1},{rx:.9,ry:.5,c:3}]},
-      {x:8,y:56,w:84,h:22,screws:[{rx:.15,ry:.5,c:1},{rx:.5,ry:.5,c:3},{rx:.85,ry:.5,c:4}]},
-      {x:15,y:40,w:70,h:22,screws:[{rx:.15,ry:.5,c:0},{rx:.5,ry:.5,c:4},{rx:.85,ry:.5,c:2}]},
-      {x:22,y:24,w:56,h:22,screws:[{rx:.2,ry:.5,c:3},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:0}]},
-      {x:30,y:6,w:40,h:24,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:4}]}
+      {x:2,y:74,w:96,h:16,screws:[{rx:.1,ry:.5,c:0},{rx:.3,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.7,ry:.5,c:1},{rx:.9,ry:.5,c:1}]},
+      {x:2,y:56,w:44,h:22,screws:[{rx:.3,ry:.5,c:1},{rx:.7,ry:.5,c:2}]},
+      {x:54,y:56,w:44,h:22,screws:[{rx:.3,ry:.5,c:2},{rx:.7,ry:.5,c:2}]},
+      {x:8,y:30,w:84,h:30,screws:[{rx:.12,ry:.5,c:3},{rx:.35,ry:.5,c:3},{rx:.62,ry:.5,c:3},{rx:.85,ry:.5,c:4}]},
+      {x:18,y:4,w:64,h:30,screws:[{rx:.2,ry:.5,c:4},{rx:.5,ry:.5,c:4},{rx:.8,ry:.5,c:5},{rx:.5,ry:.3,c:5},{rx:.5,ry:.7,c:5}]}
     ]}
   ];
 
