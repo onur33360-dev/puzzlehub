@@ -5,6 +5,179 @@
 
 const PuzzleGames = {};
 
+// ═══════════════════════════════════════════
+//  GLOBAL SES & TİTREŞİM SİSTEMİ
+// ═══════════════════════════════════════════
+const GameAudio = (() => {
+  let ctx = null;
+  let musicGain = null;
+  let musicOscs = [];
+  let musicPlaying = false;
+  let muted = JSON.parse(localStorage.getItem('gh_muted') || 'false');
+  let musicMuted = JSON.parse(localStorage.getItem('gh_music_muted') || 'false');
+
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  // ───── HAFİF TİTREŞİM ─────
+  function haptic(ms) {
+    if (muted) return;
+    try { navigator.vibrate && navigator.vibrate(ms || 8); } catch(e) {}
+  }
+
+  // ───── SES EFEKTLERİ ─────
+  function play(type) {
+    if (muted) return;
+    try {
+      const c = getCtx(), t = c.currentTime;
+      const mk = (tp, freq, dur, vol, start) => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = tp; o.connect(g); g.connect(c.destination);
+        if (typeof freq === 'number') o.frequency.setValueAtTime(freq, t + start);
+        else { o.frequency.setValueAtTime(freq[0], t + start); o.frequency.exponentialRampToValueAtTime(freq[1], t + start + dur); }
+        g.gain.setValueAtTime(vol, t + start);
+        g.gain.exponentialRampToValueAtTime(0.001, t + start + dur);
+        o.start(t + start); o.stop(t + start + dur);
+      };
+      switch (type) {
+        case 'tap':
+          mk('sine', [300, 500], 0.06, 0.1, 0);
+          break;
+        case 'merge':
+          mk('sine', [400, 600], 0.1, 0.15, 0);
+          mk('triangle', [300, 500], 0.08, 0.08, 0.02);
+          break;
+        case 'match':
+          [523, 659, 784].forEach((f, i) => mk('sine', f, 0.2, 0.14, i * 0.04));
+          break;
+        case 'clear':
+          [523, 659, 784, 1047].forEach((f, i) => mk('sine', f, 0.25, 0.12, i * 0.04));
+          mk('triangle', [200, 800], 0.2, 0.06, 0.05);
+          break;
+        case 'place':
+          mk('sine', [350, 120], 0.1, 0.12, 0);
+          break;
+        case 'flip':
+          mk('sine', [200, 400], 0.06, 0.08, 0);
+          break;
+        case 'error':
+          mk('sawtooth', [300, 150], 0.15, 0.1, 0);
+          break;
+        case 'step':
+          mk('sine', 280, 0.03, 0.05, 0);
+          break;
+        case 'win':
+          [523, 659, 784, 1047, 1319].forEach((f, i) => mk('sine', f, 0.35, 0.13, i * 0.06));
+          mk('triangle', [300, 1200], 0.3, 0.06, 0.05);
+          break;
+        case 'lose':
+          mk('sawtooth', [350, 60], 0.55, 0.12, 0);
+          mk('sine', [250, 70], 0.4, 0.08, 0.1);
+          break;
+        case 'unscrew':
+          mk('sine', [600, 200], 0.12, 0.15, 0);
+          mk('triangle', [400, 150], 0.08, 0.1, 0.02);
+          break;
+        case 'board':
+          mk('sine', [200, 80], 0.25, 0.14, 0);
+          mk('triangle', 100, 0.12, 0.08, 0.08);
+          break;
+        case 'combo':
+          [523, 659, 784, 988, 1175].forEach((f, i) => mk('sine', f, 0.35, 0.1, i * 0.03));
+          break;
+      }
+    } catch (e) {}
+  }
+
+  // ───── ARKA PLAN MÜZİĞİ ─────
+  // Soft ambient loop — düşük volüm, rahatlatıcı
+  function startMusic() {
+    if (musicMuted || musicPlaying) return;
+    try {
+      const c = getCtx();
+      musicGain = c.createGain();
+      musicGain.gain.setValueAtTime(0, c.currentTime);
+      musicGain.gain.linearRampToValueAtTime(0.04, c.currentTime + 2);
+      musicGain.connect(c.destination);
+
+      // Soft pad akorları — C maj7 → Am7 → F maj7 → G döngüsü
+      const chords = [
+        [261.63, 329.63, 392.00, 493.88],  // Cmaj7
+        [220.00, 261.63, 329.63, 392.00],  // Am7
+        [174.61, 220.00, 261.63, 329.63],  // Fmaj7
+        [196.00, 246.94, 293.66, 392.00],  // G
+      ];
+
+      let chordIdx = 0;
+      const oscs = [];
+
+      // 4 osilator — her nota için bir tane
+      for (let i = 0; i < 4; i++) {
+        const o = c.createOscillator();
+        const g = c.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(chords[0][i], c.currentTime);
+        g.gain.setValueAtTime(0.25, c.currentTime);
+        o.connect(g);
+        g.connect(musicGain);
+        o.start();
+        oscs.push({ osc: o, gain: g });
+      }
+
+      // Akord değiştirme döngüsü
+      const changeChord = () => {
+        if (!musicPlaying) return;
+        chordIdx = (chordIdx + 1) % chords.length;
+        const t = c.currentTime;
+        oscs.forEach((o, i) => {
+          o.osc.frequency.linearRampToValueAtTime(chords[chordIdx][i], t + 1.5);
+        });
+        setTimeout(changeChord, 4000);
+      };
+      setTimeout(changeChord, 4000);
+
+      // LFO — hafif tremolo
+      const lfo = c.createOscillator();
+      const lfoGain = c.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(0.15, c.currentTime);
+      lfoGain.gain.setValueAtTime(0.008, c.currentTime);
+      lfo.connect(lfoGain);
+      lfoGain.connect(musicGain.gain);
+      lfo.start();
+
+      musicOscs = [...oscs.map(o => o.osc), lfo];
+      musicPlaying = true;
+    } catch (e) {}
+  }
+
+  function stopMusic() {
+    musicOscs.forEach(o => { try { o.stop(); } catch(e) {} });
+    musicOscs = [];
+    musicPlaying = false;
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    localStorage.setItem('gh_muted', JSON.stringify(muted));
+    if (muted) stopMusic();
+    return muted;
+  }
+
+  function toggleMusic() {
+    musicMuted = !musicMuted;
+    localStorage.setItem('gh_music_muted', JSON.stringify(musicMuted));
+    if (musicMuted) stopMusic();
+    else startMusic();
+    return musicMuted;
+  }
+
+  return { play, haptic, startMusic, stopMusic, toggleMute, toggleMusic, get muted() { return muted; }, get musicMuted() { return musicMuted; } };
+})();
+
 // ===== YARDIMCI =====
 let _listeners = [];
 function addEv(el, evt, fn, opts) { el.addEventListener(evt, fn, opts); _listeners.push([el, evt, fn, opts]); }
@@ -50,7 +223,7 @@ PuzzleGames.game2048 = (() => {
       if(rev)line.reverse();
       for(let j=0;j<SIZE;j++){const y=rotated?j:i,x=rotated?i:j;if(grid[y][x]!==line[j])moved=true;grid[y][x]=line[j]}
     }
-    if(moved){addSpawn();render();updateGameScore(score);if(checkWin())showGameOver(true,'Kazandın! 🎉','2048\'e ulaştın! Skor: '+score);else if(checkLose())showGameOver(false,'Oyun Bitti','Hamle kalmadı. Skor: '+score)}
+    if(moved){GameAudio.play('merge');GameAudio.haptic(8);addSpawn();render();updateGameScore(score);if(checkWin()){GameAudio.play('win');GameAudio.haptic(30);showGameOver(true,'Kazandın! 🎉','2048\'e ulaştın! Skor: '+score)}else if(checkLose()){GameAudio.play('lose');showGameOver(false,'Oyun Bitti','Hamle kalmadı. Skor: '+score)}}
   }
   function mergeLine(line){
     let a=line.filter(v=>v);
@@ -104,7 +277,7 @@ PuzzleGames.memoryGame = (() => {
   }
   function flipCard(i) {
     if (locked || cards[i].up || cards[i].done) return;
-    cards[i].up = true; flipped.push(i); moves++;
+    cards[i].up = true; flipped.push(i); moves++; GameAudio.play('flip');
     updateGameScore(Math.max(1000 - moves * 20, 100));
     render();
     if (flipped.length === 2) {
@@ -112,10 +285,11 @@ PuzzleGames.memoryGame = (() => {
       const [a, b] = flipped;
       if (cards[a].emoji === cards[b].emoji) {
         cards[a].done = cards[b].done = true; matched++; flipped = []; locked = false;
+        GameAudio.play('match'); GameAudio.haptic(12);
         render();
-        if (matched === EMOJIS.length) showGameOver(true, 'Harika! 🧠', `${moves} hamlede tamamladın!`);
+        if (matched === EMOJIS.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Harika! 🧠', `${moves} hamlede tamamladın!`); }
       } else {
-        setTimeout(() => { cards[a].up = cards[b].up = false; flipped = []; locked = false; render(); }, 800);
+        GameAudio.play('error'); setTimeout(() => { cards[a].up = cards[b].up = false; flipped = []; locked = false; render(); }, 800);
       }
     }
   }
@@ -199,8 +373,9 @@ PuzzleGames.wordSearch = (() => {
     if (match) {
       found.push(match.word);
       updateGameScore(found.length * 100);
+      GameAudio.play('match'); GameAudio.haptic(12);
       render();
-      if (found.length === placed.length) showGameOver(true, 'Tebrikler! 📝', 'Tüm kelimeleri buldun!');
+      if (found.length === placed.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Tebrikler! 📝', 'Tüm kelimeleri buldun!'); }
     } else { render(); }
   }
   function highlightSel(y1,x1,y2,x2) {
@@ -277,7 +452,7 @@ PuzzleGames.sudoku = (() => {
   }
   function placeNum(n) {
     if(selected<0||initial[selected]!==0) return;
-    board[selected]=n;render();
+    board[selected]=n; GameAudio.play('place'); render();
     // Kazanma kontrolü
     if(!board.includes(0)){
       const sol = SOLUTIONS[PUZZLES.indexOf(initial)];
@@ -285,8 +460,8 @@ PuzzleGames.sudoku = (() => {
       const secs = Math.floor((Date.now()-startTime)/1000);
       const sc = Math.max(5000-secs*10,500);
       updateGameScore(sc);
-      if(win) showGameOver(true,'Sudoku Çözüldü! 🧩',`${secs} saniyede tamamladın!`);
-      else showGameOver(false,'Hata Var','Bazı sayılar yanlış, tekrar dene.');
+      if(win) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true,'Sudoku Çözüldü! 🧩',`${secs} saniyede tamamladın!`); }
+      else { GameAudio.play('error'); showGameOver(false,'Hata Var','Bazı sayılar yanlış, tekrar dene.'); }
     }
   }
   function cleanup(){clearEvs()}
@@ -330,40 +505,10 @@ PuzzleGames.blockPuzzle = (() => {
   let aCtx = null;
 
   // ───────── HAPTİK ─────────
-  function haptic(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch(e){} }
+  function haptic(ms) { GameAudio.haptic(ms); }
 
   // ───────── SES ─────────
-  function snd(type) {
-    try {
-      if (!aCtx) aCtx = new (window.AudioContext||window.webkitAudioContext)();
-      if (aCtx.state === 'suspended') aCtx.resume();
-      const t = aCtx.currentTime;
-      const make = (tp,freq,dur,vol,ramp) => {
-        const o=aCtx.createOscillator(),g=aCtx.createGain();
-        o.type=tp;o.connect(g);g.connect(aCtx.destination);
-        if(typeof freq==='number'){o.frequency.setValueAtTime(freq,t+ramp[0])}
-        else{o.frequency.setValueAtTime(freq[0],t+ramp[0]);o.frequency.exponentialRampToValueAtTime(freq[1],t+ramp[1])}
-        g.gain.setValueAtTime(vol,t+ramp[0]);g.gain.exponentialRampToValueAtTime(.001,t+dur);
-        o.start(t+ramp[0]);o.stop(t+dur);
-      };
-      if (type === 'pickup') {
-        make('sine',[200,350],.08,.2,[0,.08]);
-      } else if (type === 'place') {
-        make('sine',[350,120],.12,.3,[0,.12]);
-        make('triangle',80,.08,.15,[.02,.08]);
-      } else if (type === 'clear') {
-        [523,659,784,1047].forEach((fr,i)=>make('sine',fr,.3,.18,[i*.04,.3+i*.04]));
-        make('triangle',[200,800],.25,.08,[.05,.25]);
-      } else if (type === 'combo') {
-        [523,659,784,988,1175].forEach((fr,i)=>make('sine',fr,.45,.14,[i*.03,.45+i*.03]));
-        make('triangle',[300,1200],.35,.1,[0,.35]);
-        make('square',1568,.3,.05,[.1,.3]);
-      } else if (type === 'over') {
-        make('sawtooth',[400,60],.7,.2,[0,.7]);
-        make('sine',[300,80],.5,.15,[.1,.5]);
-      }
-    } catch(e){}
-  }
+  function snd(type) { GameAudio.play(type); }
 
   // ───────── EKRAN SARSINTISI ─────────
   function screenShake(intensity, duration) {
@@ -974,11 +1119,13 @@ PuzzleGames.mazeGame = (() => {
     const nx=playerX+dx, ny=playerY+dy;
     if(nx<0||nx>=W||ny<0||ny>=H||maze[ny][nx]===1)return;
     maze[playerY][playerX] = 2; // trail
+    GameAudio.play('step');
     playerX=nx; playerY=ny; moveCount++;
     const secs = Math.floor((Date.now()-startTime)/1000);
     updateGameScore(Math.max(5000-secs*50-moveCount*5,500));
     render();
     if(playerX===endX&&playerY===endY){
+      GameAudio.play('win'); GameAudio.haptic(25);
       showGameOver(true,'Çıkışı Buldun! 🌀',`${secs} saniye, ${moveCount} adım`);
     }
   }
@@ -1050,29 +1197,10 @@ PuzzleGames.screwPuzzle = (() => {
   let aCtx = null;
 
   // ───────── HAPTİK ─────────
-  function haptic(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch(e){} }
+  function haptic(ms) { GameAudio.haptic(ms); }
 
   // ───────── SES ─────────
-  function snd(type) {
-    try {
-      if (!aCtx) aCtx = new (window.AudioContext||window.webkitAudioContext)();
-      if (aCtx.state==='suspended') aCtx.resume();
-      const t = aCtx.currentTime;
-      const mk = (tp,freq,dur,vol,start) => {
-        const o=aCtx.createOscillator(),g=aCtx.createGain();
-        o.type=tp;o.connect(g);g.connect(aCtx.destination);
-        if(typeof freq==='number'){o.frequency.setValueAtTime(freq,t+start)}
-        else{o.frequency.setValueAtTime(freq[0],t+start);o.frequency.exponentialRampToValueAtTime(freq[1],t+start+dur)}
-        g.gain.setValueAtTime(vol,t+start);g.gain.exponentialRampToValueAtTime(.001,t+start+dur);
-        o.start(t+start);o.stop(t+start+dur);
-      };
-      if(type==='unscrew'){mk('sine',[600,200],.15,.25,0);mk('triangle',[400,150],.1,.15,.02);}
-      else if(type==='match'){[523,659,784].forEach((f,i)=>mk('sine',f,.25,.18,i*.04));mk('triangle',[300,900],.2,.08,.05);}
-      else if(type==='board'){mk('sine',[200,80],.3,.2,0);mk('triangle',100,.15,.12,.1);}
-      else if(type==='win'){[523,659,784,1047].forEach((f,i)=>mk('sine',f,.35,.16,i*.05));mk('triangle',[300,1200],.3,.08,.05);}
-      else if(type==='lose'){mk('sawtooth',[350,60],.6,.18,0);mk('sine',[250,70],.4,.12,.1);}
-    } catch(e){}
-  }
+  function snd(type) { GameAudio.play(type); }
 
   // ───────── EKRAN SARSINTISI ─────────
   function screenShake(intensity, dur) {

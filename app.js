@@ -645,6 +645,12 @@ function playGame(name) {
   // Oyunu başlat
   const container = document.getElementById('game-container');
   container.innerHTML = '';
+  GameAudio.startMusic();
+  // Ses buton durumları
+  const btnS = document.getElementById('btn-sound');
+  const btnM = document.getElementById('btn-music');
+  if (btnS) btnS.textContent = GameAudio.muted ? '🔇' : '🔊';
+  if (btnM) btnM.textContent = GameAudio.musicMuted ? '🎵' : '🎶';
   PuzzleGames[gameId].init(container);
 }
 
@@ -710,6 +716,7 @@ function exitGame() {
   if (_currentGameId && PuzzleGames[_currentGameId]) {
     PuzzleGames[_currentGameId].cleanup();
   }
+  GameAudio.stopMusic();
   _currentGameId = null;
 
   document.getElementById('game-container').innerHTML = '';
@@ -724,6 +731,18 @@ function exitGame() {
   } else {
     switchTab(currentTab || 'home');
   }
+}
+
+function toggleGameSound() {
+  const muted = GameAudio.toggleMute();
+  const btn = document.getElementById('btn-sound');
+  if (btn) btn.textContent = muted ? '🔇' : '🔊';
+}
+
+function toggleGameMusic() {
+  const off = GameAudio.toggleMusic();
+  const btn = document.getElementById('btn-music');
+  if (btn) btn.textContent = off ? '🎵' : '🎶';
 }
 
 function playRandomGame() {
