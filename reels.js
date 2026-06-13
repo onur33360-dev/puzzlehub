@@ -552,10 +552,107 @@ MiniDemos.demo_maze = function(gradient) {
 };
 
 
+// ===== SCREW PUZZLE DEMO =====
+MiniDemos.demo_screw = function(gradient) {
+  const el = document.createElement('div');
+  el.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden';
+  
+  const COLORS = ['#ef4444','#3b82f6','#22c55e','#eab308','#a855f7'];
+  const WOOD = ['#8B6914','#A0522D','#6B4226'];
+  
+  // Create boards
+  const boards = [
+    { x:15, y:30, w:70, h:28, z:1 },
+    { x:25, y:18, w:55, h:26, z:2 },
+  ];
+  
+  // Create screws on boards
+  const screwData = [];
+  boards.forEach((b,bi) => {
+    [{rx:0.12,ry:0.2},{rx:0.88,ry:0.2},{rx:0.12,ry:0.8},{rx:0.88,ry:0.8}].forEach(s => {
+      screwData.push({ x:b.x+s.rx*b.w, y:b.y+s.ry*b.h, c:Math.floor(Math.random()*3), bi, removed:false });
+    });
+  });
+  
+  let html = '';
+  // Boards
+  boards.forEach((b,i) => {
+    const c = WOOD[i];
+    html += `<div style="position:absolute;left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%;background:linear-gradient(145deg,${c},rgba(0,0,0,0.3));border-radius:6px;z-index:${b.z};box-shadow:0 3px 8px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.15),inset 0 -1px 0 rgba(0,0,0,0.3)"></div>`;
+  });
+  // Screws
+  screwData.forEach((s,i) => {
+    const c = COLORS[s.c];
+    html += `<div id="dsc${i}" style="position:absolute;left:${s.x}%;top:${s.y}%;width:14px;height:14px;margin:-7px;border-radius:50%;background:radial-gradient(circle at 35% 35%,${c},rgba(0,0,0,0.4));box-shadow:0 2px 4px rgba(0,0,0,0.5);z-index:10;transition:all .5s ease"><div style="position:absolute;inset:3px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.2)"></div></div>`;
+  });
+  // Slots
+  html += '<div style="position:absolute;bottom:6%;left:15%;right:15%;display:flex;gap:4px;justify-content:center">';
+  for(let i=0;i<5;i++) html += `<div id="dsl${i}" style="width:16px;height:16px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1)"></div>`;
+  html += '</div>';
+  el.innerHTML = html;
+  
+  const state = { paused:false, raf:0 };
+  let step = 0, slotIdx = 0, removedCount = 0;
+  
+  function drawFn(frame) {
+    if (frame % 90 !== 0) return;
+    // Find next non-removed screw
+    let found = -1;
+    for (let i = 0; i < screwData.length; i++) {
+      const idx = (step + i) % screwData.length;
+      if (!screwData[idx].removed) { found = idx; break; }
+    }
+    if (found < 0) {
+      // Reset all
+      screwData.forEach((s,i) => {
+        s.removed = false;
+        const e = el.querySelector('#dsc'+i);
+        if(e) { e.style.transform='rotate(0) scale(1)'; e.style.opacity='1'; }
+      });
+      for(let i=0;i<5;i++) { const e=el.querySelector('#dsl'+i); if(e) e.style.background='rgba(255,255,255,0.05)'; }
+      slotIdx = 0; removedCount = 0; step = 0;
+      return;
+    }
+    
+    screwData[found].removed = true;
+    const e = el.querySelector('#dsc'+found);
+    if(e) { e.style.transform='rotate(540deg) scale(0)'; e.style.opacity='0'; }
+    
+    // Fill slot
+    if (slotIdx < 5) {
+      const slot = el.querySelector('#dsl'+slotIdx);
+      if(slot) slot.style.background = COLORS[screwData[found].c];
+      slotIdx++;
+    }
+    
+    removedCount++;
+    // Clear slots every 3
+    if (slotIdx >= 3) {
+      setTimeout(() => {
+        for(let i=0;i<5;i++) { const e=el.querySelector('#dsl'+i); if(e) { e.style.background='rgba(255,255,255,0.05)'; } }
+        slotIdx = 0;
+      }, 600);
+    }
+    
+    step = found + 1;
+  }
+  
+  _demoLoop(state, drawFn);
+  
+  return {
+    el,
+    pause() { state.paused=true; },
+    resume() { if(state.paused){ state.paused=false; _demoLoop(state,drawFn); } },
+    destroy() { state.paused=true; cancelAnimationFrame(state.raf); el.innerHTML=''; }
+  };
+};
+
+
 // ===== DEMO EŞLEME =====
 
 function getDemoFactory(game) {
   switch(game.id) {
+    case 'screwPuzzle': return MiniDemos.demo_screw;
     case 'blockPuzzle': return MiniDemos.demo_blockPuzzle;
     case 'game2048':    return MiniDemos.demo_2048;
     case 'memoryGame':  return MiniDemos.demo_memory;

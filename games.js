@@ -1004,7 +1004,7 @@ PuzzleGames.screwPuzzle = (() => {
   const BOARD_COLORS = ['#8B6914','#A0522D','#6B4226','#DEB887','#CD853F','#9B7653'];
   const MAX_SLOTS = 5;
   const AREA_W = 380;
-  const SCREW_SZ = 28;
+  const SCREW_SZ = 36;
 
   const LEVELS = [
     {boards:[{x:50,y:200,w:280,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:100,y:140,w:200,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
@@ -1035,40 +1035,52 @@ PuzzleGames.screwPuzzle = (() => {
 
   function injectCSS() {
     injectStyle('css-screw', `
-      .sp-wrap{position:relative;width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:8px}
-      .sp-top{display:flex;justify-content:space-between;align-items:center;width:100%;padding:0 8px}
-      .sp-top .sp-level{font-size:13px;font-weight:800;color:#c084fc;letter-spacing:1px}
-      .sp-top .sp-score{font-size:18px;font-weight:900;color:#fbbf24}
-      .sp-undo{background:rgba(168,85,247,0.25);border:1px solid rgba(168,85,247,0.4);color:#e9d5ff;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer;transition:all .2s;user-select:none}
-      .sp-undo:active{transform:scale(0.93);background:rgba(168,85,247,0.4)}
-      .sp-undo.off{opacity:0.35;pointer-events:none}
-      .sp-area{position:relative;width:100%;height:0;padding-bottom:131.5%;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);overflow:hidden}
-      .sp-board{position:absolute;border-radius:10px;transition:transform .5s ease-in,opacity .5s ease-in;pointer-events:none}
-      .sp-board.rm{transform:translateY(120%) rotate(5deg)!important;opacity:0!important}
-      .sp-grain{position:absolute;inset:0;border-radius:10px;opacity:.12;background-image:repeating-linear-gradient(90deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px),repeating-linear-gradient(0deg,transparent,transparent 8px,rgba(255,255,255,.04) 8px,rgba(255,255,255,.04) 10px);pointer-events:none}
-      .sp-edge{position:absolute;inset:0;border-radius:10px;box-shadow:inset 0 2px 0 rgba(255,255,255,.15),inset 0 -2px 0 rgba(0,0,0,.25),inset 2px 0 0 rgba(255,255,255,.08),inset -2px 0 0 rgba(0,0,0,.15);pointer-events:none}
-      .sp-screw{position:absolute;border-radius:50%;cursor:pointer;transition:transform .4s ease,opacity .4s ease;z-index:100;display:flex;align-items:center;justify-content:center;user-select:none;touch-action:none}
-      .sp-screw::before,.sp-screw::after{content:'';position:absolute;background:rgba(0,0,0,.35);border-radius:1px}
-      .sp-screw::before{width:50%;height:9%}
-      .sp-screw::after{width:9%;height:50%}
-      .sp-screw.cov{filter:brightness(.45);cursor:default;pointer-events:none}
-      .sp-screw.out{transform:rotate(720deg) scale(0)!important;opacity:0!important}
-      .sp-screw:not(.cov):not(.out):active{transform:scale(1.15)}
-      .sp-shine{position:absolute;width:30%;height:30%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.45),transparent);top:14%;left:18%;pointer-events:none}
-      .sp-slots{display:flex;gap:8px;justify-content:center;width:100%;padding:10px 8px}
-      .sp-slot{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;transition:all .3s}
-      .sp-slot.has{border-color:rgba(255,255,255,.15)}
-      .sp-ss{width:28px;height:28px;border-radius:50%;position:relative;animation:spBnc .35s cubic-bezier(.34,1.56,.64,1)}
-      .sp-ss::before,.sp-ss::after{content:'';position:absolute;background:rgba(0,0,0,.3);border-radius:1px;top:50%;left:50%;transform:translate(-50%,-50%)}
-      .sp-ss::before{width:12px;height:2px}
-      .sp-ss::after{width:2px;height:12px}
-      .sp-slot.clr{animation:spClr .5s ease forwards}
-      @keyframes spBnc{0%{transform:scale(0) translateY(-30px);opacity:0}60%{transform:scale(1.2) translateY(0)}100%{transform:scale(1);opacity:1}}
-      @keyframes spClr{0%{transform:scale(1);opacity:1;filter:brightness(1)}50%{transform:scale(1.3);filter:brightness(2)}100%{transform:scale(0);opacity:0;filter:brightness(3)}}
+      .sp-wrap{position:relative;width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto}
+      .sp-top{display:flex;justify-content:space-between;align-items:center;width:100%;padding:4px 8px}
+      .sp-top .sp-level{font-size:14px;font-weight:900;color:#c084fc;letter-spacing:1.5px;text-transform:uppercase}
+      .sp-top .sp-score{font-size:20px;font-weight:900;color:#fbbf24;text-shadow:0 0 12px rgba(251,191,36,0.4)}
+      .sp-undo{background:linear-gradient(135deg,rgba(168,85,247,0.3),rgba(124,58,237,0.2));border:1.5px solid rgba(168,85,247,0.5);color:#e9d5ff;font-size:13px;font-weight:800;padding:8px 18px;border-radius:24px;cursor:pointer;transition:all .2s;user-select:none;box-shadow:0 2px 8px rgba(168,85,247,0.2)}
+      .sp-undo:active{transform:scale(0.9);background:rgba(168,85,247,0.45)}
+      .sp-undo.off{opacity:0.3;pointer-events:none;box-shadow:none}
+      .sp-area{position:relative;width:100%;height:0;padding-bottom:135%;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,0.02) 0%,rgba(0,0,0,0.1) 100%);border:1.5px solid rgba(255,255,255,0.08);overflow:hidden;box-shadow:inset 0 2px 20px rgba(0,0,0,0.3)}
+      .sp-board{position:absolute;border-radius:14px;transition:transform .6s cubic-bezier(.4,0,.2,1),opacity .5s ease;pointer-events:none;overflow:hidden}
+      .sp-board.shake{animation:spShake .35s ease}
+      .sp-board.rm{transform:translateY(140%) rotate(8deg)!important;opacity:0!important}
+      .sp-grain{position:absolute;inset:0;border-radius:14px;opacity:.15;background-image:repeating-linear-gradient(90deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 5px),repeating-linear-gradient(0deg,transparent,transparent 10px,rgba(255,255,255,.03) 10px,rgba(255,255,255,.03) 12px);pointer-events:none}
+      .sp-edge{position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 3px 0 rgba(255,255,255,.2),inset 0 -3px 0 rgba(0,0,0,.35),inset 3px 0 0 rgba(255,255,255,.1),inset -3px 0 0 rgba(0,0,0,.2);pointer-events:none}
+      .sp-nails{position:absolute;inset:0;pointer-events:none}
+      .sp-screw{position:absolute;border-radius:50%;cursor:pointer;transition:transform .35s cubic-bezier(.4,0,.2,1),opacity .35s ease,filter .2s;z-index:100;display:flex;align-items:center;justify-content:center;user-select:none;touch-action:none;box-shadow:0 3px 10px rgba(0,0,0,0.5),0 1px 3px rgba(0,0,0,0.3),inset 0 -2px 4px rgba(0,0,0,0.2)}
+      .sp-screw::before,.sp-screw::after{content:'';position:absolute;background:rgba(0,0,0,.4);border-radius:1px}
+      .sp-screw::before{width:55%;height:11%;transform:rotate(45deg)}
+      .sp-screw::after{width:11%;height:55%;transform:rotate(45deg)}
+      .sp-screw.cov{filter:brightness(.35) saturate(.5);cursor:default;pointer-events:none}
+      .sp-screw.cov::after{content:'🔒';position:absolute;font-size:10px;width:auto;height:auto;background:none;transform:none;top:-2px;right:-4px}
+      .sp-screw.press{transform:scale(0.85)!important;transition:transform .1s!important}
+      .sp-screw.out{transform:rotate(540deg) scale(0)!important;opacity:0!important;transition:transform .5s cubic-bezier(.4,0,.2,1),opacity .4s ease!important}
+      .sp-screw:not(.cov):not(.out):hover{filter:brightness(1.15)}
+      .sp-screw:not(.cov):not(.out):active{transform:scale(0.88)}
+      .sp-shine{position:absolute;width:35%;height:35%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.55) 0%,rgba(255,255,255,.1) 60%,transparent 100%);top:12%;left:15%;pointer-events:none}
+      .sp-ring{position:absolute;inset:2px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);pointer-events:none}
+      .sp-slots{display:flex;gap:10px;justify-content:center;width:100%;padding:12px 8px;background:linear-gradient(180deg,rgba(0,0,0,0.15),rgba(0,0,0,0.3));border-radius:16px;border:1px solid rgba(255,255,255,0.05)}
+      .sp-slot{width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;transition:all .3s;box-shadow:inset 0 2px 6px rgba(0,0,0,0.3)}
+      .sp-slot.has{border-color:rgba(255,255,255,.2);box-shadow:inset 0 2px 6px rgba(0,0,0,0.3),0 0 8px rgba(168,85,247,0.15)}
+      .sp-ss{width:32px;height:32px;border-radius:50%;position:relative;animation:spBnc .4s cubic-bezier(.34,1.56,.64,1);box-shadow:0 2px 6px rgba(0,0,0,.4),inset 0 -1px 3px rgba(0,0,0,.2)}
+      .sp-ss::before,.sp-ss::after{content:'';position:absolute;background:rgba(0,0,0,.35);border-radius:1px;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg)}
+      .sp-ss::before{width:14px;height:2.5px}
+      .sp-ss::after{width:2.5px;height:14px}
+      .sp-slot.clr{animation:spClr .6s ease forwards}
+      @keyframes spBnc{0%{transform:scale(0) translateY(-40px);opacity:0}50%{transform:scale(1.25) translateY(0)}70%{transform:scale(0.9)}100%{transform:scale(1);opacity:1}}
+      @keyframes spClr{0%{transform:scale(1);opacity:1;filter:brightness(1) drop-shadow(0 0 0 transparent)}40%{transform:scale(1.4);filter:brightness(2) drop-shadow(0 0 12px #fbbf24)}100%{transform:scale(0);opacity:0;filter:brightness(3) drop-shadow(0 0 20px #fbbf24)}}
       @keyframes spSp{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--sx),var(--sy)) scale(0);opacity:0}}
-      .sp-spark{position:absolute;border-radius:50%;pointer-events:none;z-index:300;animation:spSp .6s ease-out forwards}
-      .sp-msg{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-size:24px;font-weight:900;color:#fff;text-shadow:0 0 20px rgba(168,85,247,.8);pointer-events:none;z-index:400;animation:spMsgIn .6s cubic-bezier(.34,1.56,.64,1) forwards;opacity:0;text-align:center;line-height:1.4}
-      @keyframes spMsgIn{0%{transform:translate(-50%,-50%) scale(0);opacity:0}60%{transform:translate(-50%,-50%) scale(1.15);opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+      @keyframes spShake{0%,100%{transform:translateX(0) rotate(0)}20%{transform:translateX(-4px) rotate(-1deg)}40%{transform:translateX(4px) rotate(1deg)}60%{transform:translateX(-3px) rotate(-0.5deg)}80%{transform:translateX(2px) rotate(0.5deg)}}
+      .sp-spark{position:absolute;border-radius:50%;pointer-events:none;z-index:300;animation:spSp .7s ease-out forwards}
+      .sp-popup{position:absolute;font-size:16px;font-weight:900;color:#fbbf24;text-shadow:0 0 10px rgba(251,191,36,0.6);pointer-events:none;z-index:400;animation:spPopup .9s ease-out forwards;opacity:0}
+      @keyframes spPopup{0%{transform:translateY(0) scale(0.5);opacity:0}20%{transform:translateY(-10px) scale(1.1);opacity:1}100%{transform:translateY(-50px) scale(0.8);opacity:0}}
+      .sp-msg{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 24px rgba(168,85,247,.8),0 2px 8px rgba(0,0,0,0.5);pointer-events:none;z-index:400;animation:spMsgIn .7s cubic-bezier(.34,1.56,.64,1) forwards;opacity:0;text-align:center;line-height:1.5;background:rgba(0,0,0,0.3);backdrop-filter:blur(8px);padding:20px 28px;border-radius:20px;border:1px solid rgba(255,255,255,0.1)}
+      @keyframes spMsgIn{0%{transform:translate(-50%,-50%) scale(0);opacity:0}60%{transform:translate(-50%,-50%) scale(1.1);opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+      .sp-lvl-overlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);animation:fadeIn .3s ease}
+      .sp-lvl-text{font-size:36px;font-weight:900;color:#fff;text-shadow:0 0 30px rgba(168,85,247,0.6);animation:spMsgIn .6s cubic-bezier(.34,1.56,.64,1) forwards}
+      @keyframes fadeIn{from{opacity:0}to{opacity:1}}
     `);
   }
 
@@ -1096,6 +1108,18 @@ PuzzleGames.screwPuzzle = (() => {
   function lt(hex, f) {
     const r = Math.min(255,parseInt(hex.slice(1,3),16)*f), g = Math.min(255,parseInt(hex.slice(3,5),16)*f), b = Math.min(255,parseInt(hex.slice(5,7),16)*f);
     return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+  }
+
+  function showPopup(text, x, y) {
+    if (!gameAreaEl) return;
+    const sc = getScale();
+    const el = document.createElement('div');
+    el.className = 'sp-popup';
+    el.textContent = text;
+    el.style.left = (x * sc) + 'px';
+    el.style.top = (y * sc) + 'px';
+    gameAreaEl.appendChild(el);
+    setTimeout(() => el.remove(), 1000);
   }
 
   function loadLevel(lv) {
@@ -1151,7 +1175,7 @@ PuzzleGames.screwPuzzle = (() => {
         const c = SCREW_COLORS[s.color];
         const sz = SCREW_SZ * sc;
         el.style.cssText = `left:${s.ax*sc - sz/2}px;top:${s.ay*sc - sz/2}px;width:${sz}px;height:${sz}px;background:radial-gradient(circle at 35% 35%,${lt(c,1.3)},${c},${dk(c,.7)});box-shadow:0 2px 6px rgba(0,0,0,.5),inset 0 1px 2px rgba(255,255,255,.3);z-index:${100+s.bi}`;
-        el.innerHTML = '<div class="sp-shine"></div>';
+        el.innerHTML = '<div class="sp-shine"></div><div class="sp-ring"></div>';
         el.dataset.sid = s.id;
         if (!cov) addEv(el, 'click', () => tapScrew(s.id));
         gameAreaEl.appendChild(el);
@@ -1169,7 +1193,8 @@ PuzzleGames.screwPuzzle = (() => {
       if (slots[i] !== undefined) {
         const sc = document.createElement('div'); sc.className = 'sp-ss';
         const c = SCREW_COLORS[slots[i]];
-        sc.style.background = `radial-gradient(circle at 35% 35%,${lt(c,1.3)},${c},${dk(c,.7)})`;
+        sc.style.background = `radial-gradient(circle at 35% 35%,${lt(c,1.4)},${c},${dk(c,.65)})`;
+        sc.innerHTML = '<div class="sp-shine" style="width:28%;height:28%;top:10%;left:12%"></div>';
         d.appendChild(sc);
       }
       slotsEl.appendChild(d);
@@ -1189,7 +1214,10 @@ PuzzleGames.screwPuzzle = (() => {
     score += 10; updateGameScore(score);
 
     const el = gameAreaEl.querySelector(`[data-sid="${sid}"]`);
-    if (el) el.classList.add('out');
+    if (el) {
+      el.classList.add('press');
+      setTimeout(() => el.classList.add('out'), 120);
+    }
 
     slots.push(s.color);
 
@@ -1198,10 +1226,12 @@ PuzzleGames.screwPuzzle = (() => {
     if (bd.sids.every(id => screws.find(x => x.id === id).removed) && !bd.removed) {
       bd.removed = true;
       score += 100; updateGameScore(score);
-      setTimeout(() => {
-        const be = gameAreaEl.querySelector(`[data-bi="${s.bi}"]`);
-        if (be) be.classList.add('rm');
-      }, 300);
+      showPopup('+100', bd.x + bd.w/2, bd.y);
+      const be = gameAreaEl.querySelector(`[data-bi="${s.bi}"]`);
+      if (be) {
+        be.classList.add('shake');
+        setTimeout(() => be.classList.add('rm'), 400);
+      }
     }
 
     setTimeout(() => {
@@ -1216,6 +1246,7 @@ PuzzleGames.screwPuzzle = (() => {
     for (const c in cc) { if (cc[c] >= 3) { mc = parseInt(c); break; } }
     if (mc >= 0) {
       score += 50; updateGameScore(score);
+      showPopup('+50 ✨', AREA_W/2, 200);
       let rm = 0;
       const ns = [];
       for (let i = 0; i < slots.length; i++) {
