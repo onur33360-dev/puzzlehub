@@ -1264,8 +1264,9 @@ PuzzleGames.screwPuzzle = (() => {
       .sp2-screw .scr-cross::before{width:55%;height:11%}
       .sp2-screw .scr-cross::after{width:11%;height:55%}
       .sp2-screw .scr-rim{position:absolute;inset:3px;border-radius:50%;border:1.5px solid rgba(255,255,255,.15)}
-      .sp2-screw.covered{opacity:.45;filter:saturate(.2) brightness(.6);pointer-events:none;transform:scale(.82);transition:opacity .4s,filter .4s,transform .4s}
+      .sp2-screw.covered{opacity:.4;filter:saturate(.15) brightness(.55);transform:scale(.8);transition:opacity .4s,filter .4s,transform .4s;cursor:not-allowed}
       .sp2-screw.covered::after{content:'🔒';position:absolute;top:-6px;right:-6px;font-size:12px;z-index:60;filter:brightness(1.8) drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+      .sp2-screw.covered.deny{animation:spDeny .4s ease}@keyframes spDeny{0%,100%{transform:scale(.8) translateX(0)}20%{transform:scale(.8) translateX(-4px)}40%{transform:scale(.8) translateX(4px)}60%{transform:scale(.8) translateX(-2px)}80%{transform:scale(.8) translateX(2px)}}
       .sp2-screw.removing{animation:spUnscrew .5s cubic-bezier(.4,0,.2,1) forwards}
       .sp2-screw:not(.covered):not(.removing):active{transform:scale(.88)}
       .sp2-slots{display:flex;gap:8px;justify-content:center;padding:10px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);box-shadow:0 -2px 16px rgba(0,0,0,.1)}
@@ -1362,6 +1363,7 @@ PuzzleGames.screwPuzzle = (() => {
       el.innerHTML = `<div class="scr-body" style="background:radial-gradient(circle at 32% 32%,${c.l},${c.f},${c.f}cc)"><div class="scr-shine"></div><div class="scr-cross"></div><div class="scr-rim"></div></div>`;
       el.dataset.sid = s.id;
       if(!cov) addEv(el,'click',()=>tapScrew(s.id));
+      else addEv(el,'click',()=>denyScrew(el));
       areaEl.appendChild(el);
     });
 
@@ -1380,6 +1382,15 @@ PuzzleGames.screwPuzzle = (() => {
       slotsEl.appendChild(d);
     }
     wrapEl.appendChild(slotsEl);
+  }
+
+  // ───────── KİLİTLİ VİDA GERİ BİLDİRİM ─────────
+  function denyScrew(el) {
+    el.classList.remove('deny');
+    void el.offsetWidth;
+    el.classList.add('deny');
+    GameAudio.play('error');
+    GameAudio.haptic(5);
   }
 
   // ───────── TAP SCREW ─────────
