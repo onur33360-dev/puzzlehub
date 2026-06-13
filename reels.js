@@ -1,24 +1,24 @@
-﻿/* ============================================
-   GameHup â€” Reels / KeÅŸfet Motoru
+/* ============================================
+   GameHup — Reels / Keşfet Motoru
    TikTok-style game discovery feed
    ============================================ */
 
-// ===== OYUN VERÄ°LERÄ° =====
+// ===== OYUN VERİLERİ =====
 
 const REEL_GAMES = [
-  { id:'blockPuzzle', name:'Bulmaca BloklarÄ±', emoji:'ğŸ§±', category:'puzzle', desc:'BloklarÄ± yerleÅŸtir, satÄ±rlarÄ± temizle!', difficulty:'Orta', gradient:['#7c3aed','#5b21b6'], playable:true },
-  { id:'game2048', name:'2048', emoji:'ğŸ”¢', category:'puzzle', desc:'KaydÄ±r, birleÅŸtir, 2048\'e ulaÅŸ!', difficulty:'Kolay', gradient:['#d97706','#92400e'], playable:true },
-  { id:'memoryGame', name:'HafÄ±za Oyunu', emoji:'ğŸ§ ', category:'puzzle', desc:'KartlarÄ± eÅŸleÅŸtir, hafÄ±zanÄ± test et!', difficulty:'Kolay', gradient:['#0891b2','#155e75'], playable:true },
-  { id:'wordSearch', name:'Kelime AvÄ±', emoji:'ğŸ“', category:'puzzle', desc:'Gizli kelimeleri bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
-  { id:'sudoku', name:'Sudoku', emoji:'#ï¸âƒ£', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
-  { id:'mazeGame', name:'Labirent', emoji:'ğŸŒ€', category:'puzzle', desc:'Ã‡Ä±kÄ±ÅŸÄ± bul, zamana karÅŸÄ± yarÄ±ÅŸ!', difficulty:'Orta', gradient:['#059669','#065f46'], playable:true },
+  { id:'blockPuzzle', name:'Bulmaca Blokları', emoji:'🧱', category:'puzzle', desc:'Blokları yerleştir, satırları temizle!', difficulty:'Orta', gradient:['#7c3aed','#5b21b6'], playable:true },
+  { id:'game2048', name:'2048', emoji:'🔢', category:'puzzle', desc:'Kaydır, birleştir, 2048\'e ulaş!', difficulty:'Kolay', gradient:['#d97706','#92400e'], playable:true },
+  { id:'memoryGame', name:'Hafıza Oyunu', emoji:'🧠', category:'puzzle', desc:'Kartları eşleştir, hafızanı test et!', difficulty:'Kolay', gradient:['#0891b2','#155e75'], playable:true },
+  { id:'wordSearch', name:'Kelime Avı', emoji:'📝', category:'puzzle', desc:'Gizli kelimeleri bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
+  { id:'sudoku', name:'Sudoku', emoji:'#️⃣', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
+  { id:'mazeGame', name:'Labirent', emoji:'🌀', category:'puzzle', desc:'Çıkışı bul, zamana karşı yarış!', difficulty:'Orta', gradient:['#059669','#065f46'], playable:true },
 ];
 
 const GAME_NAME_MAP = {
-  'blockPuzzle': 'Bulmaca BloklarÄ±',
+  'blockPuzzle': 'Bulmaca Blokları',
   'game2048': '2048',
-  'memoryGame': 'HafÄ±za Oyunu',
-  'wordSearch': 'Kelime AvÄ±',
+  'memoryGame': 'Hafıza Oyunu',
+  'wordSearch': 'Kelime Avı',
   'sudoku': 'Sudoku',
   'mazeGame': 'Labirent'
 };
@@ -43,12 +43,12 @@ function toggleFavorite(id) {
 }
 function isFavorite(id) { return getFavorites().includes(id); }
 
-// ===== DEMO FABRÄ°KALARI =====
+// ===== DEMO FABRİKALARI =====
 // Her demo: { el, pause(), resume(), destroy() }
 
 const MiniDemos = {};
 
-// YardÄ±mcÄ±: throttled RAF at ~30fps
+// Yardımcı: throttled RAF at ~30fps
 function _demoLoop(state, drawFn) {
   let frame = 0;
   function tick() {
@@ -61,7 +61,7 @@ function _demoLoop(state, drawFn) {
   state.raf = requestAnimationFrame(tick);
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€ 1. Block Puzzle Demo â”€â”€â”€â”€â”€â”€â”€â”€
+// ———————— 1. Block Puzzle Demo ————————
 MiniDemos.demo_blockPuzzle = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
@@ -137,7 +137,7 @@ MiniDemos.demo_blockPuzzle = function(gradient) {
   };
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€ 2. 2048 Demo â”€â”€â”€â”€â”€â”€â”€â”€
+// ———————— 2. 2048 Demo ————————
 MiniDemos.demo_2048 = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
@@ -221,11 +221,11 @@ MiniDemos.demo_2048 = function(gradient) {
   };
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€ 3. Memory Demo â”€â”€â”€â”€â”€â”€â”€â”€
+// ———————— 3. Memory Demo ————————
 MiniDemos.demo_memory = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
-  const EMOJIS = ['ğŸ®','ğŸ²','ğŸ¯','ğŸ†','âš½','ğŸ¸','ğŸš€','ğŸŒŸ'];
+  const EMOJIS = ['🎮','🎲','🎯','🏆','⚽','🎸','🚀','🌟'];
   const pairs = [...EMOJIS,...EMOJIS].sort(()=>Math.random()-0.5);
   const matched = new Set();
   const state = { paused:false, raf:0 };
@@ -236,7 +236,7 @@ MiniDemos.demo_memory = function(gradient) {
   for(let i=0;i<16;i++) {
     const c = document.createElement('div');
     c.style.cssText = 'aspect-ratio:1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;transition:transform 0.4s,background 0.3s;background:linear-gradient(135deg,'+gradient[0]+','+gradient[1]+');user-select:none;';
-    c.textContent = 'â“';
+    c.textContent = '?';
     gridEl.appendChild(c);
     cards.push(c);
   }
@@ -254,7 +254,7 @@ MiniDemos.demo_memory = function(gradient) {
         matched.clear();
         for(let i=0;i<16;i++){
           cards[i].style.background='linear-gradient(135deg,'+gradient[0]+','+gradient[1]+')';
-          cards[i].textContent='â“';
+          cards[i].textContent='?';
           cards[i].style.transform='';
         }
         return;
@@ -287,7 +287,7 @@ MiniDemos.demo_memory = function(gradient) {
           if(idx>=0&&!matched.has(idx)){
             cards[idx].style.transform='';
             cards[idx].style.background='linear-gradient(135deg,'+gradient[0]+','+gradient[1]+')';
-            cards[idx].textContent='â“';
+            cards[idx].textContent='?';
           }
         });
       }
@@ -304,12 +304,12 @@ MiniDemos.demo_memory = function(gradient) {
   };
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€ 4. Word Search Demo â”€â”€â”€â”€â”€â”€â”€â”€
+// ———————— 4. Word Search Demo ————————
 MiniDemos.demo_wordSearch = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const SIZE = 8;
-  const ALPHA = 'ABCDEFGHIJKLMNOPRSTUVYZÄ°Ã–ÃœÃ‡ÅÄ';
+  const ALPHA = 'ABCDEFGHIJKLMNOPRSTUVYZİÖÜÇŞĞ';
   const WORDS = ['OYUN','SKOR','BLOK','RENK'];
   const state = { paused:false, raf:0 };
 
@@ -385,7 +385,7 @@ MiniDemos.demo_wordSearch = function(gradient) {
   };
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€ 5. Sudoku Demo â”€â”€â”€â”€â”€â”€â”€â”€
+// ———————— 5. Sudoku Demo ————————
 MiniDemos.demo_sudoku = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
@@ -472,13 +472,13 @@ MiniDemos.demo_sudoku = function(gradient) {
   };
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€ 6. Maze Demo â”€â”€â”€â”€â”€â”€â”€â”€
+// ———————— 6. Maze Demo ————————
 MiniDemos.demo_maze = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
   const MZ = 11; // odd for maze
-  // Simple maze using recursive backtracker is overkill; use a fixed pattern
+  // Simple fixed maze pattern
   const maze = [
     1,1,1,1,1,1,1,1,1,1,1,
     1,0,0,0,1,0,0,0,0,0,1,
@@ -492,14 +492,7 @@ MiniDemos.demo_maze = function(gradient) {
     1,0,0,0,0,0,0,0,0,0,1,
     1,1,1,1,1,1,1,1,1,1,1,
   ];
-  // Path through the maze
-  const path = [
-    [1,1],[1,2],[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[3,7],[4,7],[5,7],[5,8],[5,9],
-    [6,9],[7,9],[7,8],[7,7],[7,6],[7,5],[7,4],[7,3],[6,3],[5,3],[5,4],[5,5],
-    [5,4],[5,3],[5,2],[5,1],[5,0],
-    [9,1],[9,2],[9,3],[9,4],[9,5],[9,6],[9,7],[9,8],[9,9]
-  ];
-  // Simplified: just use the valid path
+  // Valid path through the maze
   const validPath = [[1,1],[1,2],[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[3,7],[4,7],[5,7],[5,8],[5,9],[6,9],[7,9],[7,8],[7,7],[7,6],[7,5],[6,5],[5,5],[5,4],[5,3],[5,2],[5,1],[7,3],[7,2],[7,1],[9,1],[9,2],[9,3],[9,4],[9,5],[9,6],[9,7],[9,8],[9,9]];
 
   const gridEl = document.createElement('div');
@@ -557,7 +550,7 @@ MiniDemos.demo_maze = function(gradient) {
 };
 
 
-// ===== DEMO EÅLEME =====
+// ===== DEMO EŞLEME =====
 
 function getDemoFactory(game) {
   switch(game.id) {
@@ -582,7 +575,7 @@ function _gameRating(id) {
 
 window.ReelsEngine = (function() {
   let _observer = null;
-  let _demos = {};       // id â†’ demo instance
+  let _demos = {};       // id → demo instance
   let _container = null;
   let _cards = [];
 
@@ -633,7 +626,7 @@ window.ReelsEngine = (function() {
 
       .reel-card-counter{position:absolute;top:16px;left:16px;z-index:12;padding:4px 12px;border-radius:20px;background:rgba(0,0,0,0.4);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:11px;color:rgba(255,255,255,0.6);font-weight:700;border:1px solid rgba(255,255,255,0.06)}
 
-      @keyframes reelBtnPulse{0%,100%{transform:scale(1);box-shadow:0 4px 24px rgba(0,0,0,0.3)}50%{transform:scale(1.02);box-shadow:0 6px 32px rgba(0,0,0,0.4)}}
+      @keyframes reelBtnPulse{0%,100%{transform:scale(1);box-shadow:0 4px 24px rgba(0,0,0,0.3)}50%{transform:scale(1.04);box-shadow:0 6px 32px rgba(0,0,0,0.4)}}
       @keyframes reelBtnShine{0%,100%{transform:translateX(-100%) rotate(0)}50%{transform:translateX(100%) rotate(0)}}
       @keyframes reelInfoIn{0%{opacity:0;transform:translateY(30px)}100%{opacity:1;transform:translateY(0)}}
       @keyframes reelSwipeHint{0%,100%{transform:translateX(-50%) translateY(0);opacity:0.5}50%{transform:translateX(-50%) translateY(-12px);opacity:1}}
@@ -699,8 +692,8 @@ window.ReelsEngine = (function() {
 
     const rating = _gameRating(game.id);
     stats.innerHTML =
-      '<div class="reel-stat">â­ <span class="reel-stat-val">'+rating+'</span></div>'+
-      '<div class="reel-stat">ğŸ® <span class="reel-stat-val">'+getPlayCount(game.id)+'</span></div>'+
+      '<div class="reel-stat">⭐ <span class="reel-stat-val">'+rating+'</span></div>'+
+      '<div class="reel-stat">🎮 <span class="reel-stat-val">'+getPlayCount(game.id)+'</span></div>'+
       '<span class="reel-diff-badge '+_diffClass(game.difficulty)+'">'+game.difficulty+'</span>';
     info.appendChild(stats);
 
@@ -709,7 +702,7 @@ window.ReelsEngine = (function() {
     if(hi>0) {
       const hiEl = document.createElement('div');
       hiEl.className = 'reel-highscore';
-      hiEl.innerHTML = 'ğŸ† En YÃ¼ksek: <span>'+hi.toLocaleString()+'</span>';
+      hiEl.innerHTML = '🏆 En Yüksek: <span>'+hi.toLocaleString()+'</span>';
       info.appendChild(hiEl);
     }
 
@@ -717,14 +710,14 @@ window.ReelsEngine = (function() {
     const btn = document.createElement('button');
     btn.className = 'reel-play-btn';
     btn.style.background = 'linear-gradient(135deg,'+game.gradient[0]+','+game.gradient[1]+')';
-    btn.textContent = game.playable ? 'â–¶  OYNA' : 'ğŸ”’  YAKINDA';
+    btn.textContent = game.playable ? '▶  OYNA' : '🔒  YAKINDA';
 
     btn.addEventListener('click', function() {
       if(game.playable) {
         incPlayCount(game.id);
         if(typeof playGame==='function') playGame(GAME_NAME_MAP[game.id]);
       } else {
-        if(typeof showToast==='function') showToast('ğŸ® '+game.name+' â€” YakÄ±nda!');
+        if(typeof showToast==='function') showToast('Yakında!');
       }
     });
     info.appendChild(btn);
@@ -738,20 +731,19 @@ window.ReelsEngine = (function() {
     // Favorite button
     const favBtn = document.createElement('div');
     favBtn.className = 'reel-action-btn'+(isFavorite(game.id)?' fav-active':'');
-    favBtn.innerHTML = '<div class="act-icon">'+(isFavorite(game.id)?'â¤ï¸':'ğŸ¤')+'</div><span class="act-label">Favori</span>';
+    favBtn.innerHTML = '<div class="act-icon">'+(isFavorite(game.id)?'❤️':'🤍')+'</div><span class="act-label">Favori</span>';
     favBtn.addEventListener('click', function() {
       const isNow = toggleFavorite(game.id);
       favBtn.className = 'reel-action-btn'+(isNow?' fav-active':'');
-      favBtn.querySelector('.act-icon').textContent = isNow?'â¤ï¸':'ğŸ¤';
-      if(typeof showToast==='function') showToast(isNow?'â¤ï¸ Favorilere eklendi':'ğŸ’” Favorilerden Ã§Ä±karÄ±ldÄ±');
+      favBtn.querySelector('.act-icon').textContent = isNow?'❤️':'🤍';
+      if(typeof showToast==='function') showToast(isNow?'❤️ Favorilere eklendi':'💔 Favorilerden çıkarıldı');
     });
     actions.appendChild(favBtn);
 
     // Category label
     const catBtn = document.createElement('div');
     catBtn.className = 'reel-action-btn';
-    const catEmojis = {puzzle:'ğŸ§©',yaris:'ğŸï¸',giydirme:'ğŸ‘—',kisilik:'ğŸ²'};
-    catBtn.innerHTML = '<div class="act-icon">'+(catEmojis[game.category]||'ğŸ®')+'</div><span class="act-label">'+(CATEGORY_LABELS[game.category]||'')+'</span>';
+    catBtn.innerHTML = '<div class="act-icon">🧩</div><span class="act-label">Bulmaca</span>';
     actions.appendChild(catBtn);
 
     card.appendChild(actions);
@@ -760,7 +752,7 @@ window.ReelsEngine = (function() {
     if(idx===0) {
       const hint = document.createElement('div');
       hint.className = 'reel-swipe-hint';
-      hint.innerHTML = '<span class="hint-arrow">â¬†</span><span class="hint-text">KAYDIR</span>';
+      hint.innerHTML = '<span class="hint-arrow">⬆</span><span class="hint-text">KAYDIR</span>';
       card.appendChild(hint);
     }
 
@@ -791,7 +783,7 @@ window.ReelsEngine = (function() {
 
     container.appendChild(scroll);
 
-    // IntersectionObserver â€” activate/deactivate demos
+    // IntersectionObserver — activate/deactivate demos
     _observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         const card = entry.target;

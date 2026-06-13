@@ -84,6 +84,7 @@ a { color:inherit; text-decoration:none; }
 
 .screen.screen-fullbleed {
   padding: 0;
+  overflow: hidden;
 }
 
 /* ========== BOTTOM TABS ========== */
