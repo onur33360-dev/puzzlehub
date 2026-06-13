@@ -304,12 +304,16 @@
     <div id="toast" class="toast"></div>
   </div>
 
-  <script src="app.js?v=3"></script>
-  <script src="games.js?v=3"></script>
-  <script src="reels.js?v=3"></script>
+  <script src="app.js?v=20260613"></script>
+  <script src="games.js?v=20260613"></script>
+  <script src="reels.js?v=20260613"></script>
   <script>
+    // Eski service worker'ları temizle
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      });
+      caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
     }
   </script>
 </body>
