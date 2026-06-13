@@ -661,44 +661,105 @@ MiniDemos.demo_waterSort = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  const COLORS = ['#a855f7','#22d3ee','#ef4444','#22c55e','#fbbf24','#ec4899'];
-  const TC = 6, LY = 4;
-  const tubes = [];
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-end;justify-content:center;width:90%;max-width:280px;height:60%;';
-  for(let t=0;t<TC;t++) {
-    const tube = document.createElement('div');
-    tube.style.cssText = 'flex:1;max-width:38px;height:100%;border-radius:0 0 14px 14px;border:2px solid rgba(255,255,255,0.15);border-top:none;display:flex;flex-direction:column-reverse;gap:2px;padding:3px;overflow:hidden;background:rgba(0,0,0,0.2);';
-    const layers = [];
-    for(let l=0;l<LY;l++) {
-      const ly = document.createElement('div');
-      const c = COLORS[Math.floor(Math.random()*COLORS.length)];
-      ly.style.cssText = 'flex:1;border-radius:4px;background:'+c+';transition:all 0.5s cubic-bezier(.34,1.56,.64,1);opacity:0.9;box-shadow:inset 0 -2px 4px rgba(0,0,0,0.2),inset 0 2px 4px rgba(255,255,255,0.15);';
-      ly.dataset.color = c;
-      tube.appendChild(ly);
-      layers.push(ly);
-    }
-    wrap.appendChild(tube);
-    tubes.push({el:tube, layers});
+  const POTIONS = [
+    {color:'#a855f7', glow:'rgba(168,85,247,0.4)', name:'Büyü'},
+    {color:'#22d3ee', glow:'rgba(34,211,238,0.4)', name:'Buz'},
+    {color:'#ef4444', glow:'rgba(239,68,68,0.4)', name:'Ateş'},
+    {color:'#22c55e', glow:'rgba(34,197,94,0.4)', name:'Zehir'},
+    {color:'#fbbf24', glow:'rgba(251,191,36,0.4)', name:'Altın'},
+  ];
+  const TC=7, LY=4;
+  
+  // Container
+  const scene = document.createElement('div');
+  scene.style.cssText = 'width:92%;max-width:300px;display:flex;flex-direction:column;align-items:center;gap:12px;';
+  
+  // Magical particles background
+  const particles = document.createElement('div');
+  particles.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;';
+  for(let i=0;i<12;i++){
+    const p = document.createElement('div');
+    const sz = 2+Math.random()*4;
+    p.style.cssText = 'position:absolute;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:rgba(168,85,247,0.3);animation:_wsFloat '+(3+Math.random()*4)+'s ease-in-out infinite;left:'+(Math.random()*100)+'%;top:'+(Math.random()*100)+'%;animation-delay:'+(Math.random()*3)+'s;';
+    particles.appendChild(p);
   }
-  el.appendChild(wrap);
-  const title = document.createElement('div');
-  title.style.cssText = 'position:absolute;top:12%;font-size:14px;font-weight:800;color:rgba(255,255,255,0.3);letter-spacing:2px;';
-  title.textContent = '✨ İKSİR SIRALAMA ✨';
-  el.appendChild(title);
-  let step = 0;
-  function drawFn() {
-    step++;
-    if(step%90===0) {
-      const f=Math.floor(Math.random()*TC), src=tubes[f].layers[tubes[f].layers.length-1];
-      if(src){src.style.transform='scaleY(0)';src.style.opacity='0';
-        setTimeout(()=>{const nc=COLORS[Math.floor(Math.random()*COLORS.length)];src.style.background=nc;src.dataset.color=nc;src.style.transform='scaleY(1)';src.style.opacity='0.9';},800);
+  el.appendChild(particles);
+  
+  // Inject float animation
+  if(!document.getElementById('css-ws-demo')){
+    const s=document.createElement('style');s.id='css-ws-demo';
+    s.textContent='@keyframes _wsFloat{0%,100%{transform:translateY(0) scale(1);opacity:0.3}50%{transform:translateY(-30px) scale(1.5);opacity:0.7}}@keyframes _wsPour{0%{transform:scaleY(1)}50%{transform:scaleY(0.3)}100%{transform:scaleY(1)}}@keyframes _wsGlow{0%,100%{box-shadow:0 0 8px rgba(168,85,247,0.2)}50%{box-shadow:0 0 20px rgba(168,85,247,0.5)}}';
+    document.head.appendChild(s);
+  }
+  
+  // Tubes
+  const tubeWrap = document.createElement('div');
+  tubeWrap.style.cssText = 'display:flex;gap:6px;align-items:flex-end;justify-content:center;width:100%;';
+  const tubes = [];
+  for(let t=0;t<TC;t++){
+    const tube = document.createElement('div');
+    const isEmpty = t >= TC-2;
+    tube.style.cssText = 'width:34px;height:120px;border-radius:0 0 16px 16px;border:2px solid rgba(255,255,255,0.12);border-top:none;display:flex;flex-direction:column-reverse;padding:3px;gap:1px;background:rgba(0,0,0,0.25);backdrop-filter:blur(4px);position:relative;overflow:hidden;transition:all 0.3s;';
+    // Glass highlight
+    const gloss = document.createElement('div');
+    gloss.style.cssText = 'position:absolute;top:0;left:2px;width:6px;height:100%;background:linear-gradient(180deg,rgba(255,255,255,0.08),transparent);border-radius:0 0 0 12px;pointer-events:none;';
+    tube.appendChild(gloss);
+    const layers = [];
+    if(!isEmpty){
+      for(let l=0;l<LY;l++){
+        const ly = document.createElement('div');
+        const pot = POTIONS[Math.floor(Math.random()*POTIONS.length)];
+        ly.style.cssText = 'height:24%;border-radius:3px;background:linear-gradient(180deg,'+pot.color+' 0%,'+pot.color+'cc 100%);transition:all 0.6s cubic-bezier(.34,1.56,.64,1);position:relative;box-shadow:inset 0 2px 4px rgba(255,255,255,0.2),inset 0 -2px 4px rgba(0,0,0,0.3),0 0 6px '+pot.glow+';';
+        ly.dataset.color = pot.color;
+        tube.appendChild(ly);
+        layers.push(ly);
       }
     }
-    if(step%45===0){const t=Math.floor(Math.random()*TC);tubes[t].el.style.borderColor='rgba(168,85,247,0.5)';tubes[t].el.style.boxShadow='0 0 15px rgba(168,85,247,0.3)';setTimeout(()=>{tubes[t].el.style.borderColor='rgba(255,255,255,0.15)';tubes[t].el.style.boxShadow='none';},600);}
+    tubeWrap.appendChild(tube);
+    tubes.push({el:tube, layers, empty:isEmpty});
   }
-  _demoLoop(state, drawFn);
-  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+  scene.appendChild(tubeWrap);
+  
+  // Level indicator
+  const lvl = document.createElement('div');
+  lvl.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
+  lvl.innerHTML = '<span style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:700;">SEVİYE 42</span><span style="font-size:11px;color:rgba(255,255,255,0.25);">•</span><span style="font-size:11px;color:rgba(168,85,247,0.6);font-weight:700;">✨ 5 İksir</span>';
+  scene.appendChild(lvl);
+  el.appendChild(scene);
+  
+  let step=0;
+  function drawFn(){
+    step++;
+    if(step%80===0){
+      // Pour animation: pick a random non-empty tube
+      const nonEmpty = tubes.filter(t=>t.layers.length>0);
+      if(nonEmpty.length>0){
+        const src = nonEmpty[Math.floor(Math.random()*nonEmpty.length)];
+        const topLayer = src.layers[src.layers.length-1];
+        if(topLayer){
+          topLayer.style.transform='scaleY(0)';topLayer.style.opacity='0';
+          // Glow the tube
+          src.el.style.boxShadow='0 0 15px rgba(168,85,247,0.4)';
+          setTimeout(()=>{
+            const nc=POTIONS[Math.floor(Math.random()*POTIONS.length)];
+            topLayer.style.background='linear-gradient(180deg,'+nc.color+','+nc.color+'cc)';
+            topLayer.style.boxShadow='inset 0 2px 4px rgba(255,255,255,0.2),inset 0 -2px 4px rgba(0,0,0,0.3),0 0 6px '+nc.glow;
+            topLayer.dataset.color=nc.color;
+            topLayer.style.transform='scaleY(1)';topLayer.style.opacity='1';
+            src.el.style.boxShadow='none';
+          },700);
+        }
+      }
+    }
+    // Random tube glow
+    if(step%50===0){
+      const t=tubes[Math.floor(Math.random()*tubes.length)];
+      t.el.style.borderColor='rgba(168,85,247,0.4)';
+      setTimeout(()=>{t.el.style.borderColor='rgba(255,255,255,0.12)';},500);
+    }
+  }
+  _demoLoop(state,drawFn);
+  return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
 // ———————— 9. Ok Bulmaca Demo ————————
@@ -706,36 +767,129 @@ MiniDemos.demo_arrowPuzzle = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  const G = 6, ARROWS = ['⬆','⬇','⬅','➡'];
+  
+  // Kelebek şekli - 10x10 grid'de ok pattern (Amaze GO tarzı)
+  const G=10;
+  // 1=up,2=down,3=left,4=right, 0=empty
+  const BUTTERFLY = [
+    [0,0,0,4,4,4,4,0,0,0],
+    [0,0,4,1,1,1,1,4,0,0],
+    [0,4,1,1,0,0,1,1,4,0],
+    [4,1,1,0,0,0,0,1,1,4],
+    [4,1,0,0,2,2,0,0,1,4],
+    [4,1,0,0,1,1,0,0,1,4],
+    [4,1,1,0,0,0,0,1,1,4],
+    [0,4,1,1,0,0,1,1,4,0],
+    [0,0,4,1,1,1,1,4,0,0],
+    [0,0,0,4,4,4,4,0,0,0],
+  ];
+  const ARROWS_SYM = {1:'↑',2:'↓',3:'←',4:'→'};
+  const ARROW_CLR = {1:'#22d3ee',2:'#a855f7',3:'#22c55e',4:'#f97316'};
+  
+  if(!document.getElementById('css-arrow-demo')){
+    const s=document.createElement('style');s.id='css-arrow-demo';
+    s.textContent='@keyframes _arExit{0%{transform:scale(1);opacity:1}100%{opacity:0}}';
+    document.head.appendChild(s);
+  }
+  
+  const scene = document.createElement('div');
+  scene.style.cssText = 'width:90%;max-width:280px;display:flex;flex-direction:column;align-items:center;gap:8px;';
+  
+  // Level header
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 4px;';
+  header.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">← SEVİYE 27</span><span style="font-size:12px;color:rgba(255,255,255,0.3);">🦋 Kelebek</span><span style="font-size:14px;">⭐⭐⭐⭐</span>';
+  scene.appendChild(header);
+  
   const gridEl = document.createElement('div');
-  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:4px;width:80%;max-width:240px;aspect-ratio:1;';
-  const arrows = [];
-  for(let y=0;y<G;y++) for(let x=0;x<G;x++) {
+  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:2px;width:100%;aspect-ratio:1;background:rgba(255,255,255,0.02);border-radius:12px;padding:4px;';
+  const cellEls = [];
+  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
     const c = document.createElement('div');
-    c.style.cssText = 'border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:22px;transition:all 0.4s cubic-bezier(.34,1.56,.64,1);user-select:none;';
-    if(Math.random()<0.45) {
-      const dir=Math.floor(Math.random()*4);
-      c.textContent=ARROWS[dir]; c.dataset.dir=dir;
-      c.style.background='rgba(14,165,233,0.15)'; c.style.border='1px solid rgba(14,165,233,0.25)';
-      arrows.push({dir,el:c});
+    const v = BUTTERFLY[y][x];
+    c.style.cssText = 'border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.5s cubic-bezier(.34,1.56,.64,1);user-select:none;aspect-ratio:1;';
+    if(v>0){
+      c.textContent = ARROWS_SYM[v];
+      c.dataset.dir = v;
+      c.dataset.active = '1';
+      const clr = ARROW_CLR[v];
+      c.style.background = clr+'20';
+      c.style.border = '1px solid '+clr+'40';
+      c.style.color = clr;
+      c.style.textShadow = '0 0 6px '+clr+'60';
+    } else {
+      c.style.background = 'rgba(255,255,255,0.02)';
+      c.dataset.active = '0';
     }
     gridEl.appendChild(c);
+    cellEls.push(c);
   }
-  el.appendChild(gridEl);
-  let step=0;
-  function drawFn() {
+  scene.appendChild(gridEl);
+  
+  // Progress dots
+  const dots = document.createElement('div');
+  dots.style.cssText = 'display:flex;gap:4px;margin-top:4px;';
+  for(let i=0;i<5;i++){
+    const d=document.createElement('div');
+    d.style.cssText = 'width:6px;height:6px;border-radius:50%;background:'+(i<2?'#22d3ee':'rgba(255,255,255,0.15)')+';transition:background 0.3s;';
+    dots.appendChild(d);
+  }
+  scene.appendChild(dots);
+  el.appendChild(scene);
+  
+  let step=0, removeOrder=[];
+  // Pre-compute removal order (outside-in)
+  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
+    if(BUTTERFLY[y][x]>0) removeOrder.push({y,x,dir:BUTTERFLY[y][x]});
+  }
+  // Shuffle slightly for visual interest
+  removeOrder.sort(()=>Math.random()-0.5);
+  let rmIdx=0;
+  
+  function drawFn(){
     step++;
-    if(step%75===0&&arrows.length>0) {
-      const a=arrows[Math.floor(Math.random()*arrows.length)];
-      const dm={0:'translateY(-200px)',1:'translateY(200px)',2:'translateX(-200px)',3:'translateX(200px)'};
-      a.el.style.transform=dm[a.dir]; a.el.style.opacity='0';
-      setTimeout(()=>{a.el.textContent='';a.el.style.transform='scale(1)';a.el.style.opacity='1';a.el.style.background='rgba(255,255,255,0.06)';a.el.style.border='none';
-        setTimeout(()=>{const d=Math.floor(Math.random()*4);a.dir=d;a.el.textContent=ARROWS[d];a.el.dataset.dir=d;a.el.style.background='rgba(14,165,233,0.15)';a.el.style.border='1px solid rgba(14,165,233,0.25)';a.el.style.transform='scale(0)';setTimeout(()=>{a.el.style.transform='scale(1)'},50)},400);
-      },500);
+    if(step%40===0 && rmIdx<removeOrder.length){
+      const {y,x,dir} = removeOrder[rmIdx];
+      const cell = cellEls[y*G+x];
+      if(cell.dataset.active==='1'){
+        const dirMap = {1:'translateY(-120px)',2:'translateY(120px)',3:'translateX(-120px)',4:'translateX(120px)'};
+        cell.style.transform = dirMap[dir];
+        cell.style.opacity = '0';
+        cell.style.border = 'none';
+        setTimeout(()=>{
+          cell.textContent='';
+          cell.style.transform='scale(1)';
+          cell.style.opacity='1';
+          cell.style.background='rgba(34,197,94,0.08)';
+          cell.dataset.active='0';
+        },500);
+      }
+      rmIdx++;
+    }
+    // Reset when all removed
+    if(rmIdx>=removeOrder.length && step%120===0){
+      rmIdx=0;
+      removeOrder.sort(()=>Math.random()-0.5);
+      cellEls.forEach((c,i)=>{
+        const y=Math.floor(i/G),x=i%G,v=BUTTERFLY[y][x];
+        if(v>0){
+          c.style.transform='scale(0)';
+          setTimeout(()=>{
+            c.textContent=ARROWS_SYM[v];
+            c.dataset.dir=v;c.dataset.active='1';
+            const clr=ARROW_CLR[v];
+            c.style.background=clr+'20';c.style.border='1px solid '+clr+'40';
+            c.style.color=clr;c.style.textShadow='0 0 6px '+clr+'60';
+            c.style.transform='scale(1)';c.style.opacity='1';
+          },50+Math.random()*300);
+        } else {
+          c.style.background='rgba(255,255,255,0.02)';
+        }
+      });
     }
   }
-  _demoLoop(state, drawFn);
-  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+  _demoLoop(state,drawFn);
+  return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
 // ———————— 10. Akış Bağlantı Demo ————————
@@ -743,39 +897,91 @@ MiniDemos.demo_flowConnect = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  const G=6, CLR=['#ef4444','#3b82f6','#22c55e','#eab308','#a855f7'];
+  const G=6;
+  const FLOWS = [
+    {c:'#ef4444',path:[[0,0],[0,1],[0,2],[1,2],[2,2],[2,1],[2,0]]},   // Kırmızı: L şekli
+    {c:'#3b82f6',path:[[1,0],[1,1],[1,2],[1,3],[1,4],[1,5]]},          // Mavi: düz çizgi
+    {c:'#22c55e',path:[[3,0],[3,1],[4,1],[5,1],[5,2],[5,3]]},          // Yeşil: merdiven
+    {c:'#eab308',path:[[0,4],[0,5],[1,5],[2,5],[3,5],[4,5],[5,5]]},    // Sarı: kenar
+    {c:'#a855f7',path:[[4,0],[5,0],[5,1],[4,2],[3,2],[3,3],[4,3],[4,4],[5,4]]}, // Mor: yılan
+  ];
+  
+  const scene = document.createElement('div');
+  scene.style.cssText = 'width:85%;max-width:260px;display:flex;flex-direction:column;align-items:center;gap:8px;';
+  
+  // Header
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;';
+  header.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">6x6</span><span style="font-size:12px;color:rgba(255,255,255,0.3);font-weight:600;">Akış: 0/5</span><span style="font-size:12px;color:rgba(255,255,255,0.25);">Boru: 0%</span>';
+  scene.appendChild(header);
+  
   const gridEl = document.createElement('div');
-  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:3px;width:82%;max-width:250px;aspect-ratio:1;';
-  const cells=[], dots=[];
-  const used=new Set();
-  for(let i=0;i<CLR.length;i++){
-    let p1,p2;
-    do{p1=Math.floor(Math.random()*G*G)}while(used.has(p1));used.add(p1);
-    do{p2=Math.floor(Math.random()*G*G)}while(used.has(p2)||p2===p1);used.add(p2);
-    dots.push({c:CLR[i],p1,p2});
-  }
-  for(let i=0;i<G*G;i++){
-    const c=document.createElement('div');
-    c.style.cssText='border-radius:6px;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;transition:all 0.4s;aspect-ratio:1;';
-    const dot=dots.find(d=>d.p1===i||d.p2===i);
-    if(dot){c.style.background=dot.c;c.style.borderRadius='50%';c.style.boxShadow='0 0 8px '+dot.c+'60';c.dataset.dot='1';}
+  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:2px;width:100%;aspect-ratio:1;background:rgba(255,255,255,0.03);border-radius:10px;padding:3px;border:1px solid rgba(255,255,255,0.06);';
+  const cells = [];
+  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
+    const c = document.createElement('div');
+    c.style.cssText = 'border-radius:4px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;transition:all 0.3s;aspect-ratio:1;position:relative;';
     gridEl.appendChild(c);cells.push(c);
   }
-  el.appendChild(gridEl);
-  let step=0, pathIdx=0;
+  scene.appendChild(gridEl);
+  el.appendChild(scene);
+  
+  // Place dots
+  FLOWS.forEach(f=>{
+    const start=f.path[0], end=f.path[f.path.length-1];
+    [start,end].forEach(([y,x])=>{
+      const c=cells[y*G+x];
+      const dot=document.createElement('div');
+      dot.style.cssText='width:70%;height:70%;border-radius:50%;background:'+f.c+';box-shadow:0 0 8px '+f.c+'80;position:absolute;';
+      c.appendChild(dot);
+      c.dataset.dot='1';
+    });
+  });
+  
+  let step=0, flowIdx=0, pathStep=0;
   function drawFn(){
     step++;
-    if(step%30===0&&pathIdx<dots.length){
-      const d=dots[pathIdx];
-      const x1=d.p1%G,y1=Math.floor(d.p1/G),x2=d.p2%G,y2=Math.floor(d.p2/G);
-      for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++){const cl=cells[y1*G+x];if(!cl.dataset.dot){cl.style.background=d.c+'40';cl.style.border='1px solid '+d.c+'60';}}
-      for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++){const cl=cells[y*G+x2];if(!cl.dataset.dot){cl.style.background=d.c+'40';cl.style.border='1px solid '+d.c+'60';}}
-      pathIdx++;
+    if(flowIdx<FLOWS.length){
+      if(step%8===0){ // Draw path step by step (fast)
+        const f=FLOWS[flowIdx];
+        if(pathStep<f.path.length){
+          const [y,x]=f.path[pathStep];
+          const c=cells[y*G+x];
+          if(!c.dataset.dot){
+            c.style.background=f.c+'30';
+            c.style.boxShadow='inset 0 0 8px '+f.c+'20';
+            // Add pipe segment
+            const pipe=document.createElement('div');
+            pipe.style.cssText='width:60%;height:60%;border-radius:3px;background:'+f.c+'90;position:absolute;transition:all 0.2s;transform:scale(0);';
+            c.appendChild(pipe);
+            setTimeout(()=>{pipe.style.transform='scale(1)'},30);
+          }
+          pathStep++;
+        } else {
+          flowIdx++;pathStep=0;
+          // Update header
+          header.children[1].textContent='Akış: '+flowIdx+'/5';
+          header.children[2].textContent='Boru: '+Math.round(flowIdx*20)+'%';
+        }
+      }
     }
-    if(pathIdx>=dots.length&&step%180===0){cells.forEach(c=>{if(!c.dataset.dot){c.style.background='rgba(255,255,255,0.04)';c.style.border='none';}});pathIdx=0;}
+    // Reset after all drawn
+    if(flowIdx>=FLOWS.length && step%200===0){
+      cells.forEach(c=>{
+        while(c.children.length>0){
+          if(c.children[0].style.borderRadius==='50%'){break;} // Keep dots
+          if(c.children.length<=1 && c.dataset.dot) break;
+          c.removeChild(c.lastChild);
+        }
+        if(!c.dataset.dot){c.style.background='rgba(255,255,255,0.03)';c.style.boxShadow='none';c.innerHTML='';}
+      });
+      flowIdx=0;pathStep=0;step=0;
+      header.children[1].textContent='Akış: 0/5';
+      header.children[2].textContent='Boru: 0%';
+    }
   }
-  _demoLoop(state, drawFn);
-  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+  _demoLoop(state,drawFn);
+  return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
 // ———————— 11. Yapboz Kart Demo ————————
@@ -783,27 +989,135 @@ MiniDemos.demo_jigsawCard = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  const G=4, EMJ=['🌄','🏔️','🌅','🌊','🌺','🦋','🌈','🍀','🎨','🌸','🦜','🏝️','🌻','🦚','🍁','🌙'];
+  const G=4;
+  // Güzel gradient renkleri ile "resim parçaları" simüle et
+  const PIECES = [
+    {bg:'linear-gradient(135deg,#ff6b6b,#ee5a24)',icon:'🌅'},
+    {bg:'linear-gradient(135deg,#74b9ff,#0984e3)',icon:'🌊'},
+    {bg:'linear-gradient(135deg,#55efc4,#00b894)',icon:'🌿'},
+    {bg:'linear-gradient(135deg,#fdcb6e,#e17055)',icon:'🌄'},
+    {bg:'linear-gradient(135deg,#a29bfe,#6c5ce7)',icon:'🦋'},
+    {bg:'linear-gradient(135deg,#fd79a8,#e84393)',icon:'🌸'},
+    {bg:'linear-gradient(135deg,#ffeaa7,#dfe6e9)',icon:'⭐'},
+    {bg:'linear-gradient(135deg,#00cec9,#81ecec)',icon:'💎'},
+    {bg:'linear-gradient(135deg,#fab1a0,#e17055)',icon:'🍂'},
+    {bg:'linear-gradient(135deg,#dfe6e9,#b2bec3)',icon:'❓'},
+    {bg:'linear-gradient(135deg,#ff7675,#d63031)',icon:'🌹'},
+    {bg:'linear-gradient(135deg,#a0c4ff,#bdb2ff)',icon:'🔮'},
+    {bg:'linear-gradient(135deg,#caffbf,#9bf6ff)',icon:'🍀'},
+    {bg:'linear-gradient(135deg,#ffc6ff,#bdb2ff)',icon:'🎀'},
+    {bg:'linear-gradient(135deg,#fdffb6,#ffd6a5)',icon:'🌻'},
+    {bg:'linear-gradient(135deg,#ffadad,#ffd6a5)',icon:'🎨'},
+  ];
+  
+  if(!document.getElementById('css-jig-demo')){
+    const s=document.createElement('style');s.id='css-jig-demo';
+    s.textContent='@keyframes _jigFlip{0%{transform:perspective(300px) rotateY(0)}50%{transform:perspective(300px) rotateY(90deg)}100%{transform:perspective(300px) rotateY(0)}}@keyframes _jigSnap{0%{transform:scale(1.15);box-shadow:0 0 20px rgba(34,197,94,0.5)}100%{transform:scale(1);box-shadow:none}}';
+    document.head.appendChild(s);
+  }
+  
+  const scene = document.createElement('div');
+  scene.style.cssText='width:82%;max-width:260px;display:flex;flex-direction:column;align-items:center;gap:10px;';
+  
+  // Header
+  const header = document.createElement('div');
+  header.style.cssText='display:flex;align-items:center;justify-content:space-between;width:100%;';
+  header.innerHTML='<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">🧩 4x4 Yapboz</span><span style="font-size:12px;color:rgba(255,255,255,0.3);">0/16 yerleşti</span>';
+  scene.appendChild(header);
+  
   const gridEl = document.createElement('div');
-  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:4px;width:78%;max-width:230px;aspect-ratio:1;';
-  const cards=[], shuffled=[...EMJ].slice(0,G*G).sort(()=>Math.random()-0.5);
+  gridEl.style.cssText='display:grid;grid-template-columns:repeat('+G+',1fr);gap:3px;width:100%;aspect-ratio:1;background:rgba(255,255,255,0.03);border-radius:12px;padding:4px;border:1px solid rgba(255,255,255,0.06);';
+  const cards=[];
+  const order=[...Array(G*G).keys()].sort(()=>Math.random()-0.5);
+  
   for(let i=0;i<G*G;i++){
     const c=document.createElement('div');
-    const hid=Math.random()<0.3;
-    c.style.cssText='border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;transition:all 0.5s cubic-bezier(.34,1.56,.64,1);user-select:none;aspect-ratio:1;';
-    if(hid){c.style.background='linear-gradient(135deg,#d97706,#92400e)';c.textContent='❓';c.dataset.hidden='1';c.dataset.emoji=shuffled[i];}
-    else{c.style.background='rgba(255,255,255,0.08)';c.textContent=shuffled[i];c.dataset.hidden='0';}
+    const piece=PIECES[order[i]];
+    const isHidden=Math.random()<0.35;
+    c.style.cssText='border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;transition:all 0.5s cubic-bezier(.34,1.56,.64,1);user-select:none;aspect-ratio:1;cursor:pointer;position:relative;overflow:hidden;';
+    if(isHidden){
+      c.style.background='linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))';
+      c.style.border='1px dashed rgba(255,255,255,0.15)';
+      c.textContent='❓';
+      c.dataset.hidden='1';
+      c.dataset.icon=piece.icon;
+      c.dataset.bg=piece.bg;
+    } else {
+      c.style.background=piece.bg;
+      c.style.border='1px solid rgba(255,255,255,0.1)';
+      c.textContent=piece.icon;
+      c.dataset.hidden='0';
+      // Add subtle shine overlay
+      const shine=document.createElement('div');
+      shine.style.cssText='position:absolute;top:-50%;left:-50%;width:100%;height:100%;background:linear-gradient(135deg,rgba(255,255,255,0.2),transparent);transform:rotate(45deg);pointer-events:none;';
+      c.appendChild(shine);
+    }
     gridEl.appendChild(c);cards.push(c);
   }
-  el.appendChild(gridEl);
-  let step=0;
+  scene.appendChild(gridEl);
+  
+  // Bottom: "Snap to place" hint
+  const hint=document.createElement('div');
+  hint.style.cssText='font-size:11px;color:rgba(255,255,255,0.25);font-weight:600;';
+  hint.textContent='📌 Kartları sürükle, yerine oturt';
+  scene.appendChild(hint);
+  el.appendChild(scene);
+  
+  let step=0, placed=0;
   function drawFn(){
     step++;
-    if(step%75===0){const hdn=cards.filter(c=>c.dataset.hidden==='1');if(hdn.length>0){const c=hdn[Math.floor(Math.random()*hdn.length)];c.style.transform='rotateY(90deg)';setTimeout(()=>{c.textContent=c.dataset.emoji;c.style.background='rgba(255,255,255,0.08)';c.dataset.hidden='0';c.style.transform='rotateY(0)';},250);}}
-    if(step%105===0){const a=Math.floor(Math.random()*cards.length);let b=Math.floor(Math.random()*cards.length);if(b===a)b=(b+1)%cards.length;const ca=cards[a],cb=cards[b];ca.style.transform='scale(0.5) rotate(10deg)';cb.style.transform='scale(0.5) rotate(-10deg)';setTimeout(()=>{const t=ca.textContent;ca.textContent=cb.textContent;cb.textContent=t;ca.style.transform='scale(1)';cb.style.transform='scale(1)';ca.style.background='rgba(34,197,94,0.15)';setTimeout(()=>{ca.style.background='rgba(255,255,255,0.08)'},500)},300);}
+    // Reveal hidden card every ~2.5s
+    if(step%75===0){
+      const hdn=cards.filter(c=>c.dataset.hidden==='1');
+      if(hdn.length>0){
+        const c=hdn[Math.floor(Math.random()*hdn.length)];
+        c.style.animation='_jigFlip 0.5s ease';
+        setTimeout(()=>{
+          c.textContent=c.dataset.icon;
+          c.style.background=c.dataset.bg;
+          c.style.border='1px solid rgba(255,255,255,0.1)';
+          c.dataset.hidden='0';
+          c.style.animation='_jigSnap 0.3s ease';
+          placed++;
+          header.children[1].textContent=placed+'/16 yerleşti';
+        },250);
+      }
+    }
+    // Swap two visible cards every ~3s
+    if(step%90===0){
+      const vis=cards.filter(c=>c.dataset.hidden==='0');
+      if(vis.length>=2){
+        const a=vis[Math.floor(Math.random()*vis.length)];
+        let b=vis[Math.floor(Math.random()*vis.length)];
+        if(b===a) b=vis[(vis.indexOf(a)+1)%vis.length];
+        a.style.transform='scale(0.7) rotate(5deg)';
+        b.style.transform='scale(0.7) rotate(-5deg)';
+        setTimeout(()=>{
+          const tmpT=a.textContent,tmpBg=a.style.background;
+          a.textContent=b.textContent;a.style.background=b.style.background;
+          b.textContent=tmpT;b.style.background=tmpBg;
+          a.style.transform='scale(1) rotate(0)';
+          b.style.transform='scale(1) rotate(0)';
+          a.style.animation='_jigSnap 0.3s ease';
+        },350);
+      }
+    }
+    // Reset cycle
+    if(step>600){
+      step=0;placed=0;
+      header.children[1].textContent='0/16 yerleşti';
+      cards.forEach((c,i)=>{
+        const piece=PIECES[order[i]];
+        if(Math.random()<0.35){
+          c.style.background='linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))';
+          c.style.border='1px dashed rgba(255,255,255,0.15)';
+          c.textContent='❓';c.dataset.hidden='1';c.dataset.icon=piece.icon;c.dataset.bg=piece.bg;
+        }
+      });
+    }
   }
-  _demoLoop(state, drawFn);
-  return { el, pause(){state.paused=true}, resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}}, destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''} };
+  _demoLoop(state,drawFn);
+  return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
 // ===== DEMO EŞLEME =====
