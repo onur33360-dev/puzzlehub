@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Güncelleniyor...</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f0a1e;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:20px}
+.spinner{width:48px;height:48px;border:4px solid rgba(168,85,247,.2);border-top-color:#a855f7;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+h2{font-size:18px;color:#c084fc}
+p{font-size:14px;color:#9a9ab0;text-align:center;max-width:300px}
+.done{color:#22c55e;font-size:20px;font-weight:700}
+</style></head><body>
+<div class="spinner" id="sp"></div>
+<h2 id="title">Güncelleniyor...</h2>
+<p id="msg">Eski cache temizleniyor, lütfen bekleyin.</p>
+<script>
+(async function() {
+  const title = document.getElementById('title');
+  const msg = document.getElementById('msg');
+  const sp = document.getElementById('sp');
+  
+  let steps = 0;
+  
+  // 1. Tüm Service Worker'ları kaldır
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) {
+      await r.unregister();
+      steps++;
+    }
+  }
+  
+  // 2. Tüm cache'leri sil
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    for (const k of keys) {
+      await caches.delete(k);
+      steps++;
+    }
+  }
+  
+  // 3. SessionStorage/IndexedDB temizle
+  try { sessionStorage.clear(); } catch(e) {}
+  
+  title.textContent = '✅ Güncelleme Tamamlandı!';
+  title.classList.add('done');
+  msg.textContent = `${steps} cache öğesi temizlendi. 3 saniye içinde yönlendiriliyorsunuz...`;
+  sp.style.display = 'none';
+  
+  // 4. Ana sayfaya yönlendir (cache-busting ile)
+  setTimeout(() => {
+    window.location.replace('./index.html?updated=' + Date.now());
+  }, 3000);
+})();
+</script>
+</body></html>
