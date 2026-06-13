@@ -996,340 +996,398 @@ PuzzleGames.mazeGame = (() => {
   return {init,cleanup};
 })();
 
+
 // ╔══════════════════════════════════════╗
 // ║     7. VİDA USTASI (SCREW PUZZLE)    ║
 // ╚══════════════════════════════════════╝
 PuzzleGames.screwPuzzle = (() => {
-  const SCREW_COLORS = ['#ef4444','#3b82f6','#22c55e','#eab308','#a855f7'];
-  const BOARD_COLORS = ['#8B6914','#A0522D','#6B4226','#DEB887','#CD853F','#9B7653'];
+  // ───────── RENK PALETİ ─────────
+  const PAL = [
+    {f:'#ef4444',l:'#f87171',g:'rgba(239,68,68,.4)'},
+    {f:'#3b82f6',l:'#60a5fa',g:'rgba(59,130,246,.4)'},
+    {f:'#22c55e',l:'#4ade80',g:'rgba(34,197,94,.4)'},
+    {f:'#eab308',l:'#fbbf24',g:'rgba(234,179,8,.4)'},
+    {f:'#a855f7',l:'#c084fc',g:'rgba(168,85,247,.4)'},
+  ];
+  const WOOD = [
+    {f:'#b8860b',l:'#d4a834',d:'#7a5a08'},
+    {f:'#a0522d',l:'#c4764d',d:'#6d3519'},
+    {f:'#8b6914',l:'#b08a3a',d:'#5c4610'},
+    {f:'#cd853f',l:'#dca060',d:'#9a6228'},
+    {f:'#9b7653',l:'#b89474',d:'#6b4e33'},
+    {f:'#8b4513',l:'#b06030',d:'#5a2d0c'},
+  ];
   const MAX_SLOTS = 5;
-  const AREA_W = 380;
-  const SCREW_SZ = 36;
+  const SCR_SZ = 44; // vida pixel boyutu
 
+  // ───────── 20 LEVEL ─────────
   const LEVELS = [
-    {boards:[{x:50,y:200,w:280,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:100,y:140,w:200,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:40,y:220,w:300,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:1}]},{x:90,y:160,w:220,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:30,y:180,w:260,h:110,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:110,y:130,w:240,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:30,y:260,w:320,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:60,y:180,w:260,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:100,y:120,w:200,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:20,y:250,w:300,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:80,y:190,w:280,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:50,y:130,w:240,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]}]},
-    {boards:[{x:10,y:270,w:280,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]},{x:100,y:200,w:270,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:60,y:140,w:220,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:40,y:280,w:300,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:20,y:200,w:250,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:120,y:140,w:240,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]}]},
-    {boards:[{x:30,y:270,w:320,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]},{x:60,y:190,w:280,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:90,y:120,w:220,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]}]},
-    {boards:[{x:20,y:300,w:340,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:60,y:230,w:280,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:30,y:160,w:260,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:0}]},{x:100,y:100,w:200,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:10,y:310,w:360,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:80,y:240,w:290,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:1}]},{x:20,y:170,w:270,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:3}]},{x:110,y:105,w:230,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]}]},
-    {boards:[{x:40,y:290,w:300,h:100,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:10,y:220,w:320,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:3},{rx:1,ry:1,c:0}]},{x:70,y:155,w:280,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:3},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]},{x:50,y:90,w:240,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:3}]}]},
-    {boards:[{x:20,y:300,w:340,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:1}]},{x:50,y:225,w:300,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:10,y:150,w:280,h:95,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:3}]},{x:90,y:80,w:260,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]}]},
-    {boards:[{x:20,y:310,w:340,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:4},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:60,y:240,w:300,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]},{x:10,y:165,w:280,h:95,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:4}]},{x:100,y:95,w:250,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:4}]}]},
-    {boards:[{x:10,y:340,w:360,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:50,y:280,w:300,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:20,y:215,w:280,h:85,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]},{x:80,y:150,w:270,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:60,y:85,w:230,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]}]},
-    {boards:[{x:10,y:340,w:360,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:4},{rx:0,ry:1,c:1},{rx:1,ry:1,c:3}]},{x:40,y:275,w:310,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]},{x:20,y:210,w:290,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:4}]},{x:70,y:145,w:280,h:80,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:50,y:80,w:240,h:80,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]}]},
-    {boards:[{x:20,y:330,w:340,h:85,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:50,y:270,w:310,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:4},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:10,y:205,w:300,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:4}]},{x:80,y:140,w:290,h:80,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:30,y:80,w:260,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:30,y:340,w:320,h:80,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:4},{rx:1,ry:1,c:0}]},{x:60,y:280,w:300,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:4}]},{x:10,y:215,w:330,h:80,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]},{x:70,y:150,w:280,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:3}]},{x:40,y:85,w:250,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:4},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]}]},
-    {boards:[{x:10,y:360,w:360,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]},{x:40,y:305,w:320,h:75,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:4}]},{x:10,y:250,w:340,h:75,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:50,y:195,w:300,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:20,y:140,w:280,h:75,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:4},{rx:0,ry:1,c:3},{rx:1,ry:1,c:0}]},{x:80,y:80,w:240,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:4},{rx:1,ry:1,c:3}]}]},
-    {boards:[{x:20,y:360,w:340,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:50,y:300,w:310,h:75,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:4},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:10,y:245,w:350,h:75,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:1},{rx:0,ry:1,c:4},{rx:1,ry:1,c:0}]},{x:60,y:185,w:290,h:75,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:1},{rx:1,ry:1,c:4}]},{x:20,y:130,w:310,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:1}]},{x:80,y:75,w:250,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]}]},
-    {boards:[{x:10,y:360,w:360,h:75,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:4},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:30,y:300,w:330,h:75,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:4},{rx:1,ry:1,c:0}]},{x:10,y:240,w:340,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:4}]},{x:50,y:180,w:310,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:20,y:120,w:300,h:75,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:70,y:60,w:260,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:3},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]}]}
+    {boards:[{x:12,y:45,w:76,h:28,screws:[{rx:.15,ry:.35,c:0},{rx:.85,ry:.35,c:1},{rx:.15,ry:.75,c:0},{rx:.85,ry:.75,c:1}]},{x:25,y:30,w:50,h:24,screws:[{rx:.2,ry:.35,c:1},{rx:.8,ry:.35,c:0},{rx:.2,ry:.75,c:0},{rx:.8,ry:.75,c:1}]}]},
+    {boards:[{x:10,y:48,w:80,h:26,screws:[{rx:.15,ry:.35,c:0},{rx:.85,ry:.35,c:0},{rx:.15,ry:.75,c:1},{rx:.85,ry:.75,c:1}]},{x:22,y:32,w:56,h:24,screws:[{rx:.2,ry:.35,c:1},{rx:.8,ry:.35,c:0},{rx:.2,ry:.75,c:0},{rx:.8,ry:.75,c:1}]}]},
+    {boards:[{x:8,y:46,w:70,h:28,screws:[{rx:.15,ry:.3,c:1},{rx:.85,ry:.3,c:0},{rx:.15,ry:.7,c:1},{rx:.85,ry:.7,c:0}]},{x:30,y:30,w:58,h:24,screws:[{rx:.2,ry:.35,c:0},{rx:.8,ry:.35,c:1},{rx:.2,ry:.75,c:0},{rx:.8,ry:.75,c:1}]}]},
+    {boards:[{x:8,y:55,w:84,h:22,screws:[{rx:.12,ry:.4,c:0},{rx:.5,ry:.4,c:1},{rx:.88,ry:.4,c:2},{rx:.3,ry:.8,c:0}]},{x:18,y:40,w:64,h:22,screws:[{rx:.15,ry:.4,c:1},{rx:.85,ry:.4,c:2},{rx:.5,ry:.8,c:0}]},{x:28,y:26,w:48,h:20,screws:[{rx:.2,ry:.4,c:2},{rx:.8,ry:.4,c:0},{rx:.5,ry:.8,c:1}]}]},
+    {boards:[{x:6,y:56,w:82,h:22,screws:[{rx:.12,ry:.4,c:2},{rx:.5,ry:.4,c:0},{rx:.88,ry:.4,c:1}]},{x:20,y:42,w:68,h:22,screws:[{rx:.15,ry:.4,c:0},{rx:.85,ry:.4,c:1},{rx:.5,ry:.8,c:2}]},{x:14,y:28,w:58,h:20,screws:[{rx:.2,ry:.4,c:1},{rx:.8,ry:.4,c:2},{rx:.5,ry:.8,c:0}]}]},
+    {boards:[{x:5,y:58,w:78,h:20,screws:[{rx:.12,ry:.4,c:1},{rx:.5,ry:.4,c:0},{rx:.88,ry:.4,c:2}]},{x:24,y:44,w:66,h:20,screws:[{rx:.15,ry:.4,c:0},{rx:.85,ry:.4,c:2},{rx:.5,ry:.8,c:1}]},{x:16,y:30,w:54,h:18,screws:[{rx:.2,ry:.4,c:2},{rx:.8,ry:.4,c:0},{rx:.5,ry:.8,c:1}]}]},
+    {boards:[{x:10,y:58,w:80,h:20,screws:[{rx:.12,ry:.4,c:0},{rx:.5,ry:.4,c:2},{rx:.88,ry:.4,c:1}]},{x:5,y:44,w:64,h:20,screws:[{rx:.15,ry:.4,c:2},{rx:.85,ry:.4,c:1},{rx:.5,ry:.8,c:0}]},{x:34,y:30,w:56,h:18,screws:[{rx:.2,ry:.4,c:1},{rx:.8,ry:.4,c:0},{rx:.5,ry:.8,c:2}]}]},
+    {boards:[{x:8,y:58,w:84,h:20,screws:[{rx:.1,ry:.4,c:0},{rx:.4,ry:.4,c:1},{rx:.7,ry:.4,c:3},{rx:.9,ry:.4,c:2}]},{x:18,y:42,w:66,h:20,screws:[{rx:.15,ry:.4,c:2},{rx:.85,ry:.4,c:3},{rx:.5,ry:.8,c:0}]},{x:26,y:28,w:50,h:18,screws:[{rx:.2,ry:.4,c:1},{rx:.8,ry:.4,c:0},{rx:.5,ry:.8,c:3}]}]},
+    {boards:[{x:5,y:62,w:88,h:18,screws:[{rx:.1,ry:.4,c:0},{rx:.35,ry:.4,c:1},{rx:.65,ry:.4,c:2},{rx:.9,ry:.4,c:3}]},{x:18,y:48,w:66,h:18,screws:[{rx:.15,ry:.4,c:3},{rx:.85,ry:.4,c:0},{rx:.5,ry:.8,c:1}]},{x:10,y:34,w:62,h:18,screws:[{rx:.15,ry:.4,c:1},{rx:.85,ry:.4,c:2},{rx:.5,ry:.8,c:3}]},{x:32,y:20,w:46,h:18,screws:[{rx:.2,ry:.5,c:2},{rx:.8,ry:.5,c:0}]}]},
+    {boards:[{x:3,y:64,w:92,h:16,screws:[{rx:.1,ry:.4,c:1},{rx:.35,ry:.4,c:3},{rx:.65,ry:.4,c:0},{rx:.9,ry:.4,c:2}]},{x:20,y:50,w:68,h:18,screws:[{rx:.15,ry:.4,c:0},{rx:.85,ry:.4,c:2},{rx:.5,ry:.8,c:3}]},{x:8,y:36,w:66,h:18,screws:[{rx:.15,ry:.4,c:2},{rx:.85,ry:.4,c:1},{rx:.5,ry:.8,c:0}]},{x:30,y:22,w:50,h:18,screws:[{rx:.2,ry:.5,c:3},{rx:.8,ry:.5,c:1}]}]},
+    {boards:[{x:8,y:60,w:80,h:18,screws:[{rx:.12,ry:.4,c:3},{rx:.5,ry:.4,c:0},{rx:.88,ry:.4,c:1}]},{x:3,y:46,w:84,h:18,screws:[{rx:.1,ry:.4,c:2},{rx:.4,ry:.4,c:1},{rx:.7,ry:.4,c:3},{rx:.9,ry:.4,c:0}]},{x:18,y:32,w:62,h:16,screws:[{rx:.15,ry:.4,c:0},{rx:.85,ry:.4,c:3},{rx:.5,ry:.8,c:2}]},{x:10,y:18,w:54,h:16,screws:[{rx:.2,ry:.5,c:1},{rx:.8,ry:.5,c:2}]}]},
+    {boards:[{x:5,y:62,w:86,h:16,screws:[{rx:.1,ry:.4,c:2},{rx:.35,ry:.4,c:0},{rx:.65,ry:.4,c:1},{rx:.9,ry:.4,c:3}]},{x:15,y:48,w:70,h:18,screws:[{rx:.15,ry:.4,c:1},{rx:.85,ry:.4,c:3},{rx:.5,ry:.8,c:0}]},{x:3,y:34,w:78,h:16,screws:[{rx:.1,ry:.4,c:0},{rx:.5,ry:.4,c:2},{rx:.9,ry:.4,c:1}]},{x:28,y:20,w:52,h:16,screws:[{rx:.2,ry:.5,c:3},{rx:.8,ry:.5,c:2}]}]},
+    {boards:[{x:3,y:64,w:90,h:16,screws:[{rx:.1,ry:.4,c:0},{rx:.3,ry:.4,c:4},{rx:.5,ry:.4,c:1},{rx:.7,ry:.4,c:2},{rx:.9,ry:.4,c:3}]},{x:15,y:50,w:72,h:16,screws:[{rx:.12,ry:.4,c:3},{rx:.5,ry:.4,c:0},{rx:.88,ry:.4,c:4}]},{x:5,y:36,w:78,h:16,screws:[{rx:.12,ry:.4,c:2},{rx:.5,ry:.4,c:3},{rx:.88,ry:.4,c:0}]},{x:25,y:22,w:52,h:16,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:4},{rx:.8,ry:.5,c:2}]}]},
+    {boards:[{x:2,y:66,w:94,h:14,screws:[{rx:.08,ry:.5,c:0},{rx:.25,ry:.5,c:1},{rx:.42,ry:.5,c:2},{rx:.58,ry:.5,c:3},{rx:.75,ry:.5,c:0},{rx:.92,ry:.5,c:1}]},{x:12,y:52,w:76,h:16,screws:[{rx:.12,ry:.4,c:3},{rx:.5,ry:.4,c:2},{rx:.88,ry:.4,c:0}]},{x:5,y:38,w:80,h:16,screws:[{rx:.12,ry:.4,c:1},{rx:.5,ry:.4,c:0},{rx:.88,ry:.4,c:3}]},{x:22,y:24,w:58,h:16,screws:[{rx:.15,ry:.5,c:2},{rx:.85,ry:.5,c:1}]},{x:15,y:12,w:50,h:14,screws:[{rx:.2,ry:.5,c:0},{rx:.8,ry:.5,c:3}]}]},
+    {boards:[{x:2,y:68,w:94,h:14,screws:[{rx:.08,ry:.5,c:0},{rx:.25,ry:.5,c:4},{rx:.42,ry:.5,c:1},{rx:.58,ry:.5,c:3},{rx:.75,ry:.5,c:2},{rx:.92,ry:.5,c:0}]},{x:10,y:54,w:78,h:14,screws:[{rx:.12,ry:.5,c:2},{rx:.4,ry:.5,c:0},{rx:.68,ry:.5,c:4},{rx:.88,ry:.5,c:1}]},{x:5,y:40,w:72,h:14,screws:[{rx:.12,ry:.5,c:3},{rx:.5,ry:.5,c:2},{rx:.88,ry:.5,c:0}]},{x:22,y:26,w:60,h:14,screws:[{rx:.15,ry:.5,c:1},{rx:.85,ry:.5,c:3},{rx:.5,ry:.5,c:4}]},{x:15,y:12,w:52,h:14,screws:[{rx:.2,ry:.5,c:4},{rx:.8,ry:.5,c:2}]}]},
+    {boards:[{x:3,y:68,w:92,h:14,screws:[{rx:.08,ry:.5,c:4},{rx:.25,ry:.5,c:1},{rx:.42,ry:.5,c:0},{rx:.58,ry:.5,c:2},{rx:.75,ry:.5,c:3},{rx:.92,ry:.5,c:1}]},{x:12,y:54,w:76,h:14,screws:[{rx:.1,ry:.5,c:3},{rx:.35,ry:.5,c:4},{rx:.65,ry:.5,c:1},{rx:.9,ry:.5,c:0}]},{x:3,y:40,w:82,h:14,screws:[{rx:.1,ry:.5,c:2},{rx:.35,ry:.5,c:0},{rx:.65,ry:.5,c:3},{rx:.9,ry:.5,c:4}]},{x:20,y:26,w:62,h:14,screws:[{rx:.15,ry:.5,c:1},{rx:.5,ry:.5,c:4},{rx:.85,ry:.5,c:2}]},{x:10,y:12,w:60,h:14,screws:[{rx:.15,ry:.5,c:0},{rx:.5,ry:.5,c:3},{rx:.85,ry:.5,c:1}]}]},
+    {boards:[{x:5,y:68,w:88,h:14,screws:[{rx:.1,ry:.5,c:1},{rx:.3,ry:.5,c:3},{rx:.5,ry:.5,c:4},{rx:.7,ry:.5,c:0},{rx:.9,ry:.5,c:2}]},{x:12,y:54,w:72,h:14,screws:[{rx:.12,ry:.5,c:0},{rx:.5,ry:.5,c:2},{rx:.88,ry:.5,c:1}]},{x:3,y:40,w:84,h:14,screws:[{rx:.1,ry:.5,c:4},{rx:.35,ry:.5,c:0},{rx:.65,ry:.5,c:3},{rx:.9,ry:.5,c:2}]},{x:20,y:26,w:62,h:14,screws:[{rx:.15,ry:.5,c:2},{rx:.5,ry:.5,c:1},{rx:.85,ry:.5,c:0}]},{x:10,y:12,w:66,h:14,screws:[{rx:.15,ry:.5,c:3},{rx:.5,ry:.5,c:4},{rx:.85,ry:.5,c:2}]}]},
+    {boards:[{x:2,y:70,w:94,h:13,screws:[{rx:.06,ry:.5,c:0},{rx:.22,ry:.5,c:2},{rx:.38,ry:.5,c:4},{rx:.54,ry:.5,c:1},{rx:.7,ry:.5,c:3},{rx:.86,ry:.5,c:0}]},{x:10,y:56,w:78,h:14,screws:[{rx:.1,ry:.5,c:3},{rx:.35,ry:.5,c:0},{rx:.65,ry:.5,c:1},{rx:.9,ry:.5,c:4}]},{x:3,y:42,w:84,h:14,screws:[{rx:.1,ry:.5,c:2},{rx:.35,ry:.5,c:3},{rx:.65,ry:.5,c:0},{rx:.9,ry:.5,c:1}]},{x:18,y:28,w:66,h:14,screws:[{rx:.15,ry:.5,c:4},{rx:.5,ry:.5,c:1},{rx:.85,ry:.5,c:2}]},{x:8,y:14,w:72,h:14,screws:[{rx:.12,ry:.5,c:1},{rx:.5,ry:.5,c:4},{rx:.88,ry:.5,c:0}]},{x:26,y:2,w:46,h:12,screws:[{rx:.25,ry:.5,c:3},{rx:.75,ry:.5,c:2}]}]},
+    {boards:[{x:2,y:72,w:94,h:13,screws:[{rx:.06,ry:.5,c:4},{rx:.22,ry:.5,c:0},{rx:.38,ry:.5,c:2},{rx:.54,ry:.5,c:3},{rx:.7,ry:.5,c:1},{rx:.86,ry:.5,c:4}]},{x:8,y:58,w:82,h:14,screws:[{rx:.1,ry:.5,c:1},{rx:.3,ry:.5,c:4},{rx:.5,ry:.5,c:0},{rx:.7,ry:.5,c:2},{rx:.9,ry:.5,c:3}]},{x:3,y:44,w:88,h:14,screws:[{rx:.1,ry:.5,c:3},{rx:.35,ry:.5,c:1},{rx:.65,ry:.5,c:4},{rx:.9,ry:.5,c:0}]},{x:15,y:30,w:68,h:14,screws:[{rx:.12,ry:.5,c:2},{rx:.5,ry:.5,c:3},{rx:.88,ry:.5,c:1}]},{x:5,y:16,w:76,h:14,screws:[{rx:.12,ry:.5,c:0},{rx:.5,ry:.5,c:2},{rx:.88,ry:.5,c:4}]},{x:22,y:2,w:54,h:14,screws:[{rx:.2,ry:.5,c:3},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:0}]}]},
+    {boards:[{x:1,y:74,w:96,h:12,screws:[{rx:.06,ry:.5,c:2},{rx:.18,ry:.5,c:4},{rx:.32,ry:.5,c:0},{rx:.46,ry:.5,c:1},{rx:.6,ry:.5,c:3},{rx:.74,ry:.5,c:0},{rx:.88,ry:.5,c:2}]},{x:6,y:60,w:86,h:14,screws:[{rx:.08,ry:.5,c:1},{rx:.25,ry:.5,c:3},{rx:.42,ry:.5,c:4},{rx:.58,ry:.5,c:0},{rx:.75,ry:.5,c:2},{rx:.92,ry:.5,c:1}]},{x:3,y:46,w:90,h:14,screws:[{rx:.1,ry:.5,c:0},{rx:.3,ry:.5,c:2},{rx:.5,ry:.5,c:1},{rx:.7,ry:.5,c:4},{rx:.9,ry:.5,c:3}]},{x:12,y:32,w:72,h:14,screws:[{rx:.12,ry:.5,c:3},{rx:.5,ry:.5,c:0},{rx:.88,ry:.5,c:4}]},{x:5,y:18,w:80,h:14,screws:[{rx:.1,ry:.5,c:4},{rx:.35,ry:.5,c:1},{rx:.65,ry:.5,c:3},{rx:.9,ry:.5,c:2}]},{x:20,y:4,w:58,h:14,screws:[{rx:.15,ry:.5,c:0},{rx:.5,ry:.5,c:3},{rx:.85,ry:.5,c:4}]}]}
   ];
 
   let container, level, score, slots, screws, boards, undoStack, undoUsed;
-  let gameAreaEl, slotsEl, wrapEl;
+  let wrapEl, areaEl, slotsEl;
   let animating = false;
+  let aCtx = null;
 
+  // ───────── HAPTİK ─────────
+  function haptic(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch(e){} }
+
+  // ───────── SES ─────────
+  function snd(type) {
+    try {
+      if (!aCtx) aCtx = new (window.AudioContext||window.webkitAudioContext)();
+      if (aCtx.state==='suspended') aCtx.resume();
+      const t = aCtx.currentTime;
+      const mk = (tp,freq,dur,vol,start) => {
+        const o=aCtx.createOscillator(),g=aCtx.createGain();
+        o.type=tp;o.connect(g);g.connect(aCtx.destination);
+        if(typeof freq==='number'){o.frequency.setValueAtTime(freq,t+start)}
+        else{o.frequency.setValueAtTime(freq[0],t+start);o.frequency.exponentialRampToValueAtTime(freq[1],t+start+dur)}
+        g.gain.setValueAtTime(vol,t+start);g.gain.exponentialRampToValueAtTime(.001,t+start+dur);
+        o.start(t+start);o.stop(t+start+dur);
+      };
+      if(type==='unscrew'){mk('sine',[600,200],.15,.25,0);mk('triangle',[400,150],.1,.15,.02);}
+      else if(type==='match'){[523,659,784].forEach((f,i)=>mk('sine',f,.25,.18,i*.04));mk('triangle',[300,900],.2,.08,.05);}
+      else if(type==='board'){mk('sine',[200,80],.3,.2,0);mk('triangle',100,.15,.12,.1);}
+      else if(type==='win'){[523,659,784,1047].forEach((f,i)=>mk('sine',f,.35,.16,i*.05));mk('triangle',[300,1200],.3,.08,.05);}
+      else if(type==='lose'){mk('sawtooth',[350,60],.6,.18,0);mk('sine',[250,70],.4,.12,.1);}
+    } catch(e){}
+  }
+
+  // ───────── EKRAN SARSINTISI ─────────
+  function screenShake(intensity, dur) {
+    const el = wrapEl, start = performance.now();
+    const anim = (now) => {
+      const elapsed = now - start;
+      if (elapsed > dur) { el.style.transform = ''; return; }
+      const decay = 1 - elapsed/dur;
+      el.style.transform = `translate(${(Math.random()*2-1)*intensity*decay}px,${(Math.random()*2-1)*intensity*decay}px)`;
+      requestAnimationFrame(anim);
+    };
+    requestAnimationFrame(anim);
+  }
+
+  // ───────── PARTİKÜLLER ─────────
+  function particles(cx, cy, color, n) {
+    for(let i=0;i<n;i++){
+      const p=document.createElement('div');
+      const a=(Math.PI*2/n)*i+Math.random()*.4, d=20+Math.random()*50, sz=3+Math.random()*6;
+      p.style.cssText=`position:absolute;left:${cx}px;top:${cy}px;width:${sz}px;height:${sz}px;background:${color};border-radius:${Math.random()>.5?'50%':'2px'};pointer-events:none;z-index:200;box-shadow:0 0 ${sz*2}px ${color};animation:spPart ${400+Math.random()*300}ms cubic-bezier(.2,.8,.3,1) forwards`;
+      p.style.setProperty('--px',Math.cos(a)*d+'px');
+      p.style.setProperty('--py',Math.sin(a)*d+'px');
+      areaEl.appendChild(p);
+      setTimeout(()=>p.remove(),750);
+    }
+  }
+
+  // ───────── UÇAN SKOR ─────────
+  function floatText(text, x, y, color, big) {
+    const el=document.createElement('div');
+    el.textContent=text;
+    const sz=big?28:18;
+    el.style.cssText=`position:absolute;left:${x}px;top:${y}px;font-size:${sz}px;font-weight:900;color:${color||'#fbbf24'};pointer-events:none;z-index:210;white-space:nowrap;text-shadow:0 0 12px ${color||'#fbbf24'},0 2px 8px rgba(0,0,0,.5);animation:spFloat 1s ease-out forwards`;
+    areaEl.appendChild(el);
+    setTimeout(()=>el.remove(),1100);
+  }
+
+  // ───────── CSS ─────────
   function injectCSS() {
     injectStyle('css-screw', `
-      .sp-wrap{position:relative;width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto}
-      .sp-top{display:flex;justify-content:space-between;align-items:center;width:100%;padding:4px 8px}
-      .sp-top .sp-level{font-size:14px;font-weight:900;color:#c084fc;letter-spacing:1.5px;text-transform:uppercase}
-      .sp-top .sp-score{font-size:20px;font-weight:900;color:#fbbf24;text-shadow:0 0 12px rgba(251,191,36,0.4)}
-      .sp-undo{background:linear-gradient(135deg,rgba(168,85,247,0.3),rgba(124,58,237,0.2));border:1.5px solid rgba(168,85,247,0.5);color:#e9d5ff;font-size:13px;font-weight:800;padding:8px 18px;border-radius:24px;cursor:pointer;transition:all .2s;user-select:none;box-shadow:0 2px 8px rgba(168,85,247,0.2)}
-      .sp-undo:active{transform:scale(0.9);background:rgba(168,85,247,0.45)}
-      .sp-undo.off{opacity:0.3;pointer-events:none;box-shadow:none}
-      .sp-area{position:relative;width:100%;height:0;padding-bottom:135%;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,0.02) 0%,rgba(0,0,0,0.1) 100%);border:1.5px solid rgba(255,255,255,0.08);overflow:hidden;box-shadow:inset 0 2px 20px rgba(0,0,0,0.3)}
-      .sp-board{position:absolute;border-radius:14px;transition:transform .6s cubic-bezier(.4,0,.2,1),opacity .5s ease;pointer-events:none;overflow:hidden}
-      .sp-board.shake{animation:spShake .35s ease}
-      .sp-board.rm{transform:translateY(140%) rotate(8deg)!important;opacity:0!important}
-      .sp-grain{position:absolute;inset:0;border-radius:14px;opacity:.15;background-image:repeating-linear-gradient(90deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 5px),repeating-linear-gradient(0deg,transparent,transparent 10px,rgba(255,255,255,.03) 10px,rgba(255,255,255,.03) 12px);pointer-events:none}
-      .sp-edge{position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 3px 0 rgba(255,255,255,.2),inset 0 -3px 0 rgba(0,0,0,.35),inset 3px 0 0 rgba(255,255,255,.1),inset -3px 0 0 rgba(0,0,0,.2);pointer-events:none}
-      .sp-nails{position:absolute;inset:0;pointer-events:none}
-      .sp-screw{position:absolute;border-radius:50%;cursor:pointer;transition:transform .35s cubic-bezier(.4,0,.2,1),opacity .35s ease,filter .2s;z-index:100;display:flex;align-items:center;justify-content:center;user-select:none;touch-action:none;box-shadow:0 3px 10px rgba(0,0,0,0.5),0 1px 3px rgba(0,0,0,0.3),inset 0 -2px 4px rgba(0,0,0,0.2)}
-      .sp-screw::before,.sp-screw::after{content:'';position:absolute;background:rgba(0,0,0,.4);border-radius:1px}
-      .sp-screw::before{width:55%;height:11%;transform:rotate(45deg)}
-      .sp-screw::after{width:11%;height:55%;transform:rotate(45deg)}
-      .sp-screw.cov{filter:brightness(.35) saturate(.5);cursor:default;pointer-events:none}
-      .sp-screw.cov::after{content:'🔒';position:absolute;font-size:10px;width:auto;height:auto;background:none;transform:none;top:-2px;right:-4px}
-      .sp-screw.press{transform:scale(0.85)!important;transition:transform .1s!important}
-      .sp-screw.out{transform:rotate(540deg) scale(0)!important;opacity:0!important;transition:transform .5s cubic-bezier(.4,0,.2,1),opacity .4s ease!important}
-      .sp-screw:not(.cov):not(.out):hover{filter:brightness(1.15)}
-      .sp-screw:not(.cov):not(.out):active{transform:scale(0.88)}
-      .sp-shine{position:absolute;width:35%;height:35%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.55) 0%,rgba(255,255,255,.1) 60%,transparent 100%);top:12%;left:15%;pointer-events:none}
-      .sp-ring{position:absolute;inset:2px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);pointer-events:none}
-      .sp-slots{display:flex;gap:10px;justify-content:center;width:100%;padding:12px 8px;background:linear-gradient(180deg,rgba(0,0,0,0.15),rgba(0,0,0,0.3));border-radius:16px;border:1px solid rgba(255,255,255,0.05)}
-      .sp-slot{width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;transition:all .3s;box-shadow:inset 0 2px 6px rgba(0,0,0,0.3)}
-      .sp-slot.has{border-color:rgba(255,255,255,.2);box-shadow:inset 0 2px 6px rgba(0,0,0,0.3),0 0 8px rgba(168,85,247,0.15)}
-      .sp-ss{width:32px;height:32px;border-radius:50%;position:relative;animation:spBnc .4s cubic-bezier(.34,1.56,.64,1);box-shadow:0 2px 6px rgba(0,0,0,.4),inset 0 -1px 3px rgba(0,0,0,.2)}
-      .sp-ss::before,.sp-ss::after{content:'';position:absolute;background:rgba(0,0,0,.35);border-radius:1px;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg)}
-      .sp-ss::before{width:14px;height:2.5px}
-      .sp-ss::after{width:2.5px;height:14px}
-      .sp-slot.clr{animation:spClr .6s ease forwards}
-      @keyframes spBnc{0%{transform:scale(0) translateY(-40px);opacity:0}50%{transform:scale(1.25) translateY(0)}70%{transform:scale(0.9)}100%{transform:scale(1);opacity:1}}
-      @keyframes spClr{0%{transform:scale(1);opacity:1;filter:brightness(1) drop-shadow(0 0 0 transparent)}40%{transform:scale(1.4);filter:brightness(2) drop-shadow(0 0 12px #fbbf24)}100%{transform:scale(0);opacity:0;filter:brightness(3) drop-shadow(0 0 20px #fbbf24)}}
-      @keyframes spSp{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--sx),var(--sy)) scale(0);opacity:0}}
-      @keyframes spShake{0%,100%{transform:translateX(0) rotate(0)}20%{transform:translateX(-4px) rotate(-1deg)}40%{transform:translateX(4px) rotate(1deg)}60%{transform:translateX(-3px) rotate(-0.5deg)}80%{transform:translateX(2px) rotate(0.5deg)}}
-      .sp-spark{position:absolute;border-radius:50%;pointer-events:none;z-index:300;animation:spSp .7s ease-out forwards}
-      .sp-popup{position:absolute;font-size:16px;font-weight:900;color:#fbbf24;text-shadow:0 0 10px rgba(251,191,36,0.6);pointer-events:none;z-index:400;animation:spPopup .9s ease-out forwards;opacity:0}
-      @keyframes spPopup{0%{transform:translateY(0) scale(0.5);opacity:0}20%{transform:translateY(-10px) scale(1.1);opacity:1}100%{transform:translateY(-50px) scale(0.8);opacity:0}}
-      .sp-msg{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 24px rgba(168,85,247,.8),0 2px 8px rgba(0,0,0,0.5);pointer-events:none;z-index:400;animation:spMsgIn .7s cubic-bezier(.34,1.56,.64,1) forwards;opacity:0;text-align:center;line-height:1.5;background:rgba(0,0,0,0.3);backdrop-filter:blur(8px);padding:20px 28px;border-radius:20px;border:1px solid rgba(255,255,255,0.1)}
-      @keyframes spMsgIn{0%{transform:translate(-50%,-50%) scale(0);opacity:0}60%{transform:translate(-50%,-50%) scale(1.1);opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
-      .sp-lvl-overlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);animation:fadeIn .3s ease}
-      .sp-lvl-text{font-size:36px;font-weight:900;color:#fff;text-shadow:0 0 30px rgba(168,85,247,0.6);animation:spMsgIn .6s cubic-bezier(.34,1.56,.64,1) forwards}
-      @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+      .sp2-wrap{position:relative;width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:12px;will-change:transform;margin:0 auto}
+      .sp2-bar{display:flex;justify-content:space-between;align-items:center;width:100%;padding:0 4px}
+      .sp2-bar .sb-left{display:flex;align-items:center;gap:6px}
+      .sp2-bar .sb-lbl{font-size:11px;font-weight:700;color:#5d5d78;letter-spacing:1px}
+      .sp2-bar .sb-val{font-size:22px;font-weight:900;color:#fbbf24;transition:transform .15s}
+      .sp2-bar .sb-val.bump{animation:spBump .3s ease}
+      .sp2-bar .sb-hi{font-size:11px;color:#5d5d78;font-weight:600}
+      .sp2-undo{background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.3);color:#c084fc;font:700 12px/1 inherit;padding:7px 14px;border-radius:20px;cursor:pointer;transition:.2s;user-select:none}
+      .sp2-undo:active{transform:scale(.92);background:rgba(168,85,247,.3)}
+      .sp2-undo.off{opacity:.25;pointer-events:none}
+      .sp2-area{position:relative;width:100%;aspect-ratio:5/6;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 4px 24px rgba(0,0,0,.2);overflow:hidden}
+      .sp2-board{position:absolute;border-radius:10px;pointer-events:none;transition:transform .5s cubic-bezier(.4,0,.2,1),opacity .4s;overflow:hidden}
+      .sp2-board .wood-grain{position:absolute;inset:0;border-radius:10px;opacity:.18;background:repeating-linear-gradient(92deg,transparent 0,transparent 3px,rgba(0,0,0,.04) 3px,rgba(0,0,0,.04) 5px)}
+      .sp2-board .wood-bevel{position:absolute;inset:0;border-radius:10px;box-shadow:inset 0 2px 0 rgba(255,255,255,.18),inset 0 -2px 0 rgba(0,0,0,.3),inset 2px 0 rgba(255,255,255,.08),inset -2px 0 rgba(0,0,0,.15)}
+      .sp2-board.shake{animation:spShake .3s ease}
+      .sp2-board.fall{transform:translateY(130%) rotate(8deg)!important;opacity:0!important}
+      .sp2-screw{position:absolute;border-radius:50%;cursor:pointer;z-index:50;transition:transform .2s,opacity .2s,filter .15s;user-select:none;-webkit-tap-highlight-color:transparent}
+      .sp2-screw .scr-body{width:100%;height:100%;border-radius:50%;position:relative;box-shadow:0 3px 8px rgba(0,0,0,.5),inset 0 -2px 4px rgba(0,0,0,.25);overflow:hidden}
+      .sp2-screw .scr-shine{position:absolute;width:38%;height:38%;top:8%;left:12%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.55),transparent 70%)}
+      .sp2-screw .scr-cross::before,.sp2-screw .scr-cross::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);background:rgba(0,0,0,.35);border-radius:1px}
+      .sp2-screw .scr-cross::before{width:55%;height:11%}
+      .sp2-screw .scr-cross::after{width:11%;height:55%}
+      .sp2-screw .scr-rim{position:absolute;inset:3px;border-radius:50%;border:1.5px solid rgba(255,255,255,.15)}
+      .sp2-screw.covered{filter:brightness(.3) saturate(.3);pointer-events:none}
+      .sp2-screw.removing{animation:spUnscrew .5s cubic-bezier(.4,0,.2,1) forwards}
+      .sp2-screw:not(.covered):not(.removing):active{transform:scale(.88)}
+      .sp2-slots{display:flex;gap:8px;justify-content:center;padding:10px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);box-shadow:0 -2px 16px rgba(0,0,0,.1)}
+      .sp2-slot{width:50px;height:50px;border-radius:12px;background:rgba(255,255,255,.04);border:2px dashed rgba(255,255,255,.08);display:grid;place-items:center;transition:.3s}
+      .sp2-slot.filled{border-style:solid;border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.06)}
+      .sp2-slot .mini{width:34px;height:34px;border-radius:50%;position:relative;animation:spPop .4s cubic-bezier(.34,1.56,.64,1);box-shadow:0 2px 6px rgba(0,0,0,.4),inset 0 -2px 3px rgba(0,0,0,.2);overflow:hidden}
+      .sp2-slot .mini .scr-shine{position:absolute;width:30%;height:30%;top:10%;left:12%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.45),transparent 70%)}
+      .sp2-slot .mini .scr-cross{position:absolute;inset:0}
+      .sp2-slot .mini .scr-cross::before,.sp2-slot .mini .scr-cross::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);background:rgba(0,0,0,.3);border-radius:1px}
+      .sp2-slot .mini .scr-cross::before{width:50%;height:10%}
+      .sp2-slot .mini .scr-cross::after{width:10%;height:50%}
+      .sp2-slot.clearing{animation:spClear .55s ease forwards}
+      .sp2-overlay{position:absolute;inset:0;z-index:300;display:grid;place-items:center;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);animation:spFadeIn .25s ease}
+      .sp2-overlay h2{font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 20px rgba(168,85,247,.5);text-align:center;line-height:1.6;animation:spPop .5s cubic-bezier(.34,1.56,.64,1)}
+      @keyframes spUnscrew{0%{transform:scale(1) rotate(0)}20%{transform:scale(.85)}100%{transform:scale(0) rotate(540deg);opacity:0}}
+      @keyframes spPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.15)}80%{transform:scale(.95)}100%{transform:scale(1);opacity:1}}
+      @keyframes spClear{0%{transform:scale(1);filter:brightness(1)}30%{transform:scale(1.25);filter:brightness(2.5) drop-shadow(0 0 10px #fbbf24)}100%{transform:scale(0);opacity:0;filter:brightness(3)}}
+      @keyframes spShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px) rotate(-.5deg)}50%{transform:translateX(4px) rotate(.5deg)}80%{transform:translateX(-2px)}}
+      @keyframes spPart{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--px),var(--py)) scale(0);opacity:0}}
+      @keyframes spFloat{0%{transform:translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translateY(-55px) scale(1.3);opacity:0}}
+      @keyframes spBump{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
+      @keyframes spFadeIn{from{opacity:0}to{opacity:1}}
+      @keyframes spGlow{0%{box-shadow:0 0 0 rgba(168,85,247,0)}50%{box-shadow:0 0 20px rgba(168,85,247,.4)}100%{box-shadow:0 0 0 rgba(168,85,247,0)}}
+      .sp2-slots.glow{animation:spGlow .5s ease}
     `);
   }
 
-  function screwPos(b, s) {
-    const p = 15;
-    return { x: b.x + p + s.rx * (b.w - 2 * p), y: b.y + p + s.ry * (b.h - 2 * p) };
-  }
-
+  // ───────── COVERED CHECK ─────────
   function isCovered(sc) {
-    const r = SCREW_SZ / 2;
     for (let i = sc.bi + 1; i < boards.length; i++) {
       if (boards[i].removed) continue;
       const b = boards[i];
-      if (sc.ax + r > b.x && sc.ax - r < b.x + b.w && sc.ay + r > b.y && sc.ay - r < b.y + b.h) return true;
+      if (sc.px > b.x && sc.px < b.x + b.w && sc.py > b.y && sc.py < b.y + b.h) return true;
     }
     return false;
   }
 
-  function getScale() { return gameAreaEl ? gameAreaEl.offsetWidth / AREA_W : 1; }
-
-  function dk(hex, f) {
-    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-    return `rgb(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)})`;
-  }
-  function lt(hex, f) {
-    const r = Math.min(255,parseInt(hex.slice(1,3),16)*f), g = Math.min(255,parseInt(hex.slice(3,5),16)*f), b = Math.min(255,parseInt(hex.slice(5,7),16)*f);
-    return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
-  }
-
-  function showPopup(text, x, y) {
-    if (!gameAreaEl) return;
-    const sc = getScale();
-    const el = document.createElement('div');
-    el.className = 'sp-popup';
-    el.textContent = text;
-    el.style.left = (x * sc) + 'px';
-    el.style.top = (y * sc) + 'px';
-    gameAreaEl.appendChild(el);
-    setTimeout(() => el.remove(), 1000);
-  }
-
+  // ───────── LOAD LEVEL ─────────
   function loadLevel(lv) {
     const data = LEVELS[lv]; if (!data) return;
     score = 0; slots = []; undoStack = []; undoUsed = false; animating = false;
-    boards = data.boards.map((b, i) => ({ ...b, idx: i, removed: false, sids: [] }));
+    boards = data.boards.map((b,i) => ({...b, idx:i, removed:false, sids:[]}));
     screws = [];
     let sid = 0;
-    boards.forEach((b, bi) => {
+    boards.forEach((b,bi) => {
       b.screws.forEach(s => {
-        const pos = screwPos(b, s);
-        const o = { id: sid++, bi, color: s.c, ax: pos.x, ay: pos.y, removed: false };
-        screws.push(o);
-        b.sids.push(o.id);
+        screws.push({id:sid++, bi, color:s.c, px:b.x+s.rx*b.w, py:b.y+s.ry*b.h, removed:false});
+        boards[bi].sids.push(sid-1);
       });
     });
-    draw();
+    render();
   }
 
-  function draw() {
+  // ───────── RENDER ─────────
+  function render() {
     wrapEl.innerHTML = '';
-    // Top bar
-    const top = document.createElement('div'); top.className = 'sp-top';
-    top.innerHTML = `<span class="sp-level">SEVİYE ${level+1} / ${LEVELS.length}</span><span class="sp-score">⭐ ${score}</span>`;
-    const ub = document.createElement('div');
-    ub.className = 'sp-undo' + (undoUsed || !undoStack.length ? ' off' : '');
+
+    // Score bar
+    const bar = document.createElement('div'); bar.className = 'sp2-bar';
+    bar.innerHTML = `
+      <div class="sb-left"><span class="sb-lbl">SEVİYE ${level+1}</span></div>
+      <span class="sb-val" id="sp-score">⭐ ${score}</span>
+      <span class="sb-hi">🏆 ${LEVELS.length} Level</span>`;
+    const ub = document.createElement('button');
+    ub.className = 'sp2-undo' + (undoUsed||!undoStack.length?' off':'');
     ub.textContent = '↩ Geri Al';
-    if (!undoUsed && undoStack.length) addEv(ub, 'click', doUndo);
-    top.appendChild(ub);
-    wrapEl.appendChild(top);
+    if(!undoUsed&&undoStack.length) addEv(ub,'click',doUndo);
+    bar.appendChild(ub);
+    wrapEl.appendChild(bar);
 
-    gameAreaEl = document.createElement('div'); gameAreaEl.className = 'sp-area';
-    wrapEl.appendChild(gameAreaEl);
+    // Game area
+    areaEl = document.createElement('div'); areaEl.className = 'sp2-area';
+    wrapEl.appendChild(areaEl);
 
-    requestAnimationFrame(() => {
-      const sc = getScale();
-      // boards
-      boards.forEach((b, i) => {
-        const el = document.createElement('div');
-        el.className = 'sp-board' + (b.removed ? ' rm' : '');
-        const col = BOARD_COLORS[i % BOARD_COLORS.length];
-        el.style.cssText = `left:${b.x*sc}px;top:${b.y*sc}px;width:${b.w*sc}px;height:${b.h*sc}px;background:linear-gradient(145deg,${col},${dk(col,.85)});z-index:${10+i};box-shadow:0 4px 12px rgba(0,0,0,.4)`;
-        el.innerHTML = '<div class="sp-grain"></div><div class="sp-edge"></div>';
-        el.dataset.bi = i;
-        gameAreaEl.appendChild(el);
-      });
-      // screws
-      screws.forEach(s => {
-        if (s.removed) return;
-        const cov = isCovered(s);
-        const el = document.createElement('div');
-        el.className = 'sp-screw' + (cov ? ' cov' : '');
-        const c = SCREW_COLORS[s.color];
-        const sz = SCREW_SZ * sc;
-        el.style.cssText = `left:${s.ax*sc - sz/2}px;top:${s.ay*sc - sz/2}px;width:${sz}px;height:${sz}px;background:radial-gradient(circle at 35% 35%,${lt(c,1.3)},${c},${dk(c,.7)});box-shadow:0 2px 6px rgba(0,0,0,.5),inset 0 1px 2px rgba(255,255,255,.3);z-index:${100+s.bi}`;
-        el.innerHTML = '<div class="sp-shine"></div><div class="sp-ring"></div>';
-        el.dataset.sid = s.id;
-        if (!cov) addEv(el, 'click', () => tapScrew(s.id));
-        gameAreaEl.appendChild(el);
-      });
-      // slots
-      drawSlots();
+    // Boards
+    boards.forEach((b,i) => {
+      const el = document.createElement('div'); el.className = 'sp2-board'+(b.removed?' fall':'');
+      const w = WOOD[i%WOOD.length];
+      el.style.cssText = `left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%;background:linear-gradient(145deg,${w.l},${w.f},${w.d});z-index:${5+i};border:1px solid ${w.d}`;
+      el.innerHTML = '<div class="wood-grain"></div><div class="wood-bevel"></div>';
+      el.dataset.bi = i;
+      areaEl.appendChild(el);
     });
-  }
 
-  function drawSlots() {
-    slotsEl = document.createElement('div'); slotsEl.className = 'sp-slots';
-    for (let i = 0; i < MAX_SLOTS; i++) {
+    // Screws
+    screws.forEach(s => {
+      if(s.removed) return;
+      const cov = isCovered(s);
+      const el = document.createElement('div');
+      el.className = 'sp2-screw'+(cov?' covered':'');
+      const sz = SCR_SZ;
+      el.style.cssText = `left:calc(${s.px}% - ${sz/2}px);top:calc(${s.py}% - ${sz/2}px);width:${sz}px;height:${sz}px;z-index:${50+s.bi}`;
+      const c = PAL[s.color];
+      el.innerHTML = `<div class="scr-body" style="background:radial-gradient(circle at 32% 32%,${c.l},${c.f},${c.f}cc)"><div class="scr-shine"></div><div class="scr-cross"></div><div class="scr-rim"></div></div>`;
+      el.dataset.sid = s.id;
+      if(!cov) addEv(el,'click',()=>tapScrew(s.id));
+      areaEl.appendChild(el);
+    });
+
+    // Slots
+    slotsEl = document.createElement('div'); slotsEl.className = 'sp2-slots';
+    for(let i=0;i<MAX_SLOTS;i++) {
       const d = document.createElement('div');
-      d.className = 'sp-slot' + (slots[i] !== undefined ? ' has' : '');
-      if (slots[i] !== undefined) {
-        const sc = document.createElement('div'); sc.className = 'sp-ss';
-        const c = SCREW_COLORS[slots[i]];
-        sc.style.background = `radial-gradient(circle at 35% 35%,${lt(c,1.4)},${c},${dk(c,.65)})`;
-        sc.innerHTML = '<div class="sp-shine" style="width:28%;height:28%;top:10%;left:12%"></div>';
-        d.appendChild(sc);
+      d.className = 'sp2-slot'+(slots[i]!==undefined?' filled':'');
+      if(slots[i]!==undefined) {
+        const c = PAL[slots[i]];
+        const m = document.createElement('div'); m.className = 'mini';
+        m.style.background = `radial-gradient(circle at 32% 32%,${c.l},${c.f})`;
+        m.innerHTML = '<div class="scr-shine"></div><div class="scr-cross"></div>';
+        d.appendChild(m);
       }
       slotsEl.appendChild(d);
     }
     wrapEl.appendChild(slotsEl);
   }
 
+  // ───────── TAP SCREW ─────────
   function tapScrew(sid) {
-    if (animating) return;
-    const s = screws.find(x => x.id === sid);
-    if (!s || s.removed || isCovered(s)) return;
-    if (slots.length >= MAX_SLOTS) return;
+    if(animating) return;
+    const s = screws.find(x=>x.id===sid);
+    if(!s||s.removed||isCovered(s)) return;
+    if(slots.length>=MAX_SLOTS) return;
     animating = true;
+    haptic(15);
+    snd('unscrew');
 
-    undoStack.push({ sid: s.id, bi: s.bi, col: s.color, ss: [...slots] });
+    undoStack.push({sid:s.id, bi:s.bi, col:s.color, ss:[...slots]});
     s.removed = true;
     score += 10; updateGameScore(score);
+    bumpScore();
 
-    const el = gameAreaEl.querySelector(`[data-sid="${sid}"]`);
-    if (el) {
-      el.classList.add('press');
-      setTimeout(() => el.classList.add('out'), 120);
-    }
+    const el = areaEl.querySelector(`[data-sid="${sid}"]`);
+    if(el) el.classList.add('removing');
 
     slots.push(s.color);
 
-    // board cleared?
+    // Board clear check
     const bd = boards[s.bi];
-    if (bd.sids.every(id => screws.find(x => x.id === id).removed) && !bd.removed) {
+    if(bd.sids.every(id=>screws.find(x=>x.id===id).removed) && !bd.removed) {
       bd.removed = true;
       score += 100; updateGameScore(score);
-      showPopup('+100', bd.x + bd.w/2, bd.y);
-      const be = gameAreaEl.querySelector(`[data-bi="${s.bi}"]`);
-      if (be) {
+      snd('board');
+      haptic(30);
+      const be = areaEl.querySelector(`[data-bi="${s.bi}"]`);
+      if(be) {
         be.classList.add('shake');
-        setTimeout(() => be.classList.add('rm'), 400);
+        setTimeout(()=>be.classList.add('fall'),300);
       }
+      const bRect = areaEl.getBoundingClientRect();
+      const cx = bRect.width*(bd.x+bd.w/2)/100;
+      const cy = bRect.height*(bd.y+bd.h/2)/100;
+      floatText('+100',cx-20,cy-10,'#fbbf24',true);
+      particles(cx,cy,WOOD[bd.idx%WOOD.length].l,10);
+      screenShake(3,250);
     }
 
-    setTimeout(() => {
-      chk3(() => { animating = false; draw(); checkEnd(); });
-    }, 450);
+    setTimeout(()=>chk3(()=>{animating=false;render();checkEnd();}),550);
   }
 
+  function bumpScore() {
+    const el = document.getElementById('sp-score');
+    if(el){el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump');}
+  }
+
+  // ───────── 3 MATCH CHECK ─────────
   function chk3(cb) {
     const cc = {};
-    slots.forEach(c => { cc[c] = (cc[c]||0) + 1; });
+    slots.forEach(c => {cc[c]=(cc[c]||0)+1;});
     let mc = -1;
-    for (const c in cc) { if (cc[c] >= 3) { mc = parseInt(c); break; } }
-    if (mc >= 0) {
+    for(const c in cc) {if(cc[c]>=3){mc=parseInt(c);break;}}
+    if(mc >= 0) {
       score += 50; updateGameScore(score);
-      showPopup('+50 ✨', AREA_W/2, 200);
-      let rm = 0;
-      const ns = [];
-      for (let i = 0; i < slots.length; i++) {
-        if (slots[i] === mc && rm < 3) rm++;
-        else ns.push(slots[i]);
+      snd('match');
+      haptic(25);
+
+      const bRect = areaEl.getBoundingClientRect();
+      const cx = bRect.width/2, cy = bRect.height*.85;
+      floatText('+50 ✨',cx-15,cy-30,'#fbbf24');
+      particles(cx,cy,PAL[mc].l,14);
+      screenShake(2,200);
+
+      slotsEl.classList.remove('glow');
+      void slotsEl.offsetWidth;
+      slotsEl.classList.add('glow');
+
+      let rm=0; const ns=[];
+      for(let i=0;i<slots.length;i++){
+        if(slots[i]===mc&&rm<3) rm++; else ns.push(slots[i]);
       }
-      sparkles(mc);
-      setTimeout(() => { slots = ns; chk3(cb); }, 500);
-    } else { if (cb) cb(); }
+      setTimeout(()=>{slots=ns;chk3(cb);},550);
+    } else {if(cb)cb();}
   }
 
-  function sparkles(ci) {
-    if (!slotsEl || !wrapEl) return;
-    const c = SCREW_COLORS[ci];
-    const wr = wrapEl.getBoundingClientRect();
-    const sr = slotsEl.getBoundingClientRect();
-    for (let i = 0; i < 14; i++) {
-      const p = document.createElement('div');
-      p.className = 'sp-spark';
-      const sz = 3 + Math.random() * 5;
-      const a = Math.random() * Math.PI * 2;
-      const d = 20 + Math.random() * 50;
-      p.style.cssText = `width:${sz}px;height:${sz}px;background:${c};left:${sr.left-wr.left+sr.width/2}px;top:${sr.top-wr.top+sr.height/2}px;box-shadow:0 0 6px ${c}`;
-      p.style.setProperty('--sx', Math.cos(a)*d+'px');
-      p.style.setProperty('--sy', Math.sin(a)*d+'px');
-      wrapEl.appendChild(p);
-      setTimeout(() => p.remove(), 650);
-    }
-  }
-
+  // ───────── UNDO ─────────
   function doUndo() {
-    if (undoUsed || !undoStack.length || animating) return;
-    undoUsed = true;
+    if(undoUsed||!undoStack.length||animating) return;
+    undoUsed = true; haptic(10);
     const u = undoStack.pop();
-    const s = screws.find(x => x.id === u.sid);
-    if (s) {
+    const s = screws.find(x=>x.id===u.sid);
+    if(s) {
       s.removed = false;
       const bd = boards[s.bi];
-      if (bd.removed && !bd.sids.every(id => screws.find(x => x.id === id).removed)) bd.removed = false;
+      if(bd.removed && !bd.sids.every(id=>screws.find(x=>x.id===id).removed)) bd.removed=false;
     }
-    slots = u.ss;
-    score = Math.max(0, score - 10); updateGameScore(score);
-    draw();
+    slots = u.ss; score = Math.max(0,score-10); updateGameScore(score);
+    render();
   }
 
+  // ───────── WIN/LOSE CHECK ─────────
   function checkEnd() {
-    if (screws.every(s => s.removed)) {
+    if(screws.every(s=>s.removed)) {
       const empty = MAX_SLOTS - slots.length;
-      const bonus = 200 + empty * 30;
+      const bonus = 200 + empty*30;
       score += bonus; updateGameScore(score);
+      snd('win'); haptic([50,30,50]);
       const nxt = level + 1;
-      if (nxt < LEVELS.length) localStorage.setItem('ph_screw_level', nxt.toString());
-      setTimeout(() => {
-        if (nxt >= LEVELS.length) {
-          showGameOver(true, 'Tebrikler! 🏆', 'Tüm seviyeleri tamamladın! Skor: ' + score);
+      if(nxt < LEVELS.length) localStorage.setItem('ph_screw_level',nxt.toString());
+      setTimeout(()=>{
+        if(nxt>=LEVELS.length) {
+          showGameOver(true,'Tebrikler! 🏆','Tüm seviyeleri tamamladın!\nSkor: '+score);
         } else {
-          const m = document.createElement('div'); m.className = 'sp-msg';
-          m.innerHTML = '✅ Seviye ' + (level+1) + ' Tamam!<br><span style="font-size:16px;color:#fbbf24">+' + bonus + ' bonus</span>';
-          if (gameAreaEl) gameAreaEl.appendChild(m);
-          setTimeout(() => { if (m.parentNode) m.remove(); level = nxt; loadLevel(level); }, 1500);
+          const ov = document.createElement('div'); ov.className='sp2-overlay';
+          ov.innerHTML=`<h2>✅ Seviye ${level+1} Tamam!<br><span style="font-size:18px;color:#fbbf24">+${bonus} bonus</span></h2>`;
+          areaEl.appendChild(ov);
+          screenShake(4,300);
+          setTimeout(()=>{ov.remove();level=nxt;loadLevel(level);},1800);
         }
-      }, 600);
+      },400);
       return;
     }
-    if (slots.length >= MAX_SLOTS) {
-      const cc = {}; slots.forEach(c => { cc[c] = (cc[c]||0)+1; });
-      if (!Object.values(cc).some(v => v >= 3)) {
-        setTimeout(() => showGameOver(false, 'Oyun Bitti! 😔', 'Slotlar doldu!\nSkor: ' + score), 300);
+    if(slots.length>=MAX_SLOTS) {
+      const cc={}; slots.forEach(c=>{cc[c]=(cc[c]||0)+1;});
+      if(!Object.values(cc).some(v=>v>=3)) {
+        snd('lose'); haptic(100);
+        setTimeout(()=>showGameOver(false,'Oyun Bitti! 😔','Slotlar doldu!\nSkor: '+score),300);
       }
     }
   }
 
+  // ───────── INIT ─────────
   function init(c) {
     container = c;
-    level = parseInt(localStorage.getItem('ph_screw_level') || '0', 10);
-    if (level >= LEVELS.length) level = 0;
+    level = parseInt(localStorage.getItem('ph_screw_level')||'0',10);
+    if(level>=LEVELS.length) level=0;
     injectCSS();
-    wrapEl = document.createElement('div'); wrapEl.className = 'sp-wrap';
+    wrapEl = document.createElement('div'); wrapEl.className='sp2-wrap';
     container.appendChild(wrapEl);
     loadLevel(level);
   }
 
-  function cleanup() { clearEvs(); animating = false; }
-
-  return { init, cleanup };
+  function cleanup() { clearEvs(); animating=false; }
+  return {init,cleanup};
 })();
+
