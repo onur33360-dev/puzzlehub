@@ -1295,11 +1295,16 @@ PuzzleGames.screwPuzzle = (() => {
   }
 
   // ───────── COVERED CHECK ─────────
+  // Vidanın board'u, üstteki herhangi bir board ile örtüşüyorsa → kilitli
   function isCovered(sc) {
+    const my = boards[sc.bi];
     for (let i = sc.bi + 1; i < boards.length; i++) {
       if (boards[i].removed) continue;
       const b = boards[i];
-      if (sc.px > b.x && sc.px < b.x + b.w && sc.py > b.y && sc.py < b.y + b.h) return true;
+      // İki board birbiriyle örtüşüyor mu?
+      const overlapX = my.x < b.x + b.w && my.x + my.w > b.x;
+      const overlapY = my.y < b.y + b.h && my.y + my.h > b.y;
+      if (overlapX && overlapY) return true;
     }
     return false;
   }
