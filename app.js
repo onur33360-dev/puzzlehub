@@ -145,8 +145,9 @@ const StreakSystem = {
   },
   
   getDayInWeek() {
-    // Which day of the 7-day reward cycle are we on (0-6)
-    return ((this.getData().totalDays || 1) - 1) % 7;
+    // Gerçek takvim günü: Pzt=0, Sal=1, Çar=2, Per=3, Cum=4, Cmt=5, Paz=6
+    const day = new Date().getDay(); // JS: 0=Pazar, 1=Pzt...6=Cmt
+    return day === 0 ? 6 : day - 1;
   }
 };
 
@@ -235,6 +236,161 @@ const RewardedAd = {
     );
   }
 };
+
+// ==================== PLUS SİSTEMİ ====================
+
+const PlusSystem = {
+  _key: 'ph_plus',
+  
+  getData() {
+    try { return JSON.parse(localStorage.getItem(this._key) || '{}'); }
+    catch(e) { return {}; }
+  },
+  
+  isActive() {
+    const data = this.getData();
+    if (!data.active) return false;
+    if (data.expiresAt && new Date(data.expiresAt) < new Date()) {
+      // Expired
+      this.deactivate();
+      return false;
+    }
+    return true;
+  },
+  
+  activate(plan) {
+    const data = { active: true, plan: plan, activatedAt: new Date().toISOString() };
+    const now = new Date();
+    if (plan === 'weekly') now.setDate(now.getDate() + 7);
+    else if (plan === 'monthly') now.setMonth(now.getMonth() + 1);
+    else if (plan === 'yearly') now.setFullYear(now.getFullYear() + 1);
+    data.expiresAt = now.toISOString();
+    localStorage.setItem(this._key, JSON.stringify(data));
+    this.updateUI();
+  },
+  
+  deactivate() {
+    localStorage.removeItem(this._key);
+    this.updateUI();
+  },
+  
+  updateUI() {
+    const badge = document.getElementById('plus-badge');
+    if (badge) {
+      if (this.isActive()) {
+        badge.classList.add('plus-active');
+        badge.querySelector('.plus-text').textContent = 'PLUS ✓';
+      } else {
+        badge.classList.remove('plus-active');
+        badge.querySelector('.plus-text').textContent = 'PLUS';
+      }
+    }
+  }
+};
+
+let _selectedPlan = 'yearly';
+
+function selectPlan(plan) {
+  _selectedPlan = plan;
+  document.querySelectorAll('.plus-plan').forEach(p => {
+    p.classList.toggle('selected', p.dataset.plan === plan);
+  });
+}
+
+function purchasePlus() {
+  if (PlusSystem.isActive()) {
+    showToast('⭐ Zaten Plus üyesisin!');
+    return;
+  }
+  // Placeholder — gerçek ödeme entegrasyonu sonra
+  showToast('👑 Plus üyelik yakında aktif olacak!');
+}
+
+function showPlusPage() {
+  document.getElementById('bottom-tabs').style.display = 'none';
+  showScreen('screen-plus');
+}
+
+function closePlusPage() {
+  document.getElementById('bottom-tabs').style.display = 'flex';
+  switchTab(currentTab || 'home');
+}
+
+// ==================== ELMAS MAĞAZASI ====================
+
+const DIAMOND_PACKAGES = [
+  { id: 'small', amount: 100, price: '₺19.99', bonus: 0, badge: null },
+  { id: 'medium', amount: 500, price: '₺79.99', bonus: 50, badge: 'Popüler' },
+  { id: 'large', amount: 1500, price: '₺199.99', bonus: 300, badge: null },
+  { id: 'mega', amount: 5000, price: '₺499.99', bonus: 1500, badge: 'En İyi! ⭐' },
+];
+
+const FREE_DIAMOND_SOURCES = [
+  { icon: '📺', title: 'Reklam İzle', desc: 'Günde 5 kez', reward: '+10💎', action: 'watchAdForDiamonds' },
+  { icon: '🎯', title: 'Günlük Görevler', desc: '3 görev tamamla', reward: '+45💎', action: 'goToHome' },
+  { icon: '📅', title: 'Günlük Ödül', desc: 'Her gün giriş yap', reward: '+5-100💎', action: 'goToHome' },
+  { icon: '🏆', title: 'Başarımlar', desc: 'Hedefleri tamamla', reward: '+10-100💎', action: 'showAchievements' },
+];
+
+function openShop() {
+  document.getElementById('bottom-tabs').style.display = 'none';
+  renderShop();
+  showScreen('screen-shop');
+}
+
+function closeShop() {
+  document.getElementById('bottom-tabs').style.display = 'flex';
+  switchTab(currentTab || 'home');
+}
+
+function renderShop() {
+  // Packages grid
+  const grid = document.getElementById('shop-grid');
+  grid.innerHTML = DIAMOND_PACKAGES.map(pkg => {
+    const totalAmount = pkg.amount + pkg.bonus;
+    return `
+      <div class="shop-package ${pkg.badge === 'En İyi! ⭐' ? 'shop-best' : ''} ${pkg.badge === 'Popüler' ? 'shop-popular' : ''}" onclick="buyPackage('${pkg.id}')">
+        ${pkg.badge ? '<div class="shop-badge">' + pkg.badge + '</div>' : ''}
+        <span class="shop-pkg-icon">💎</span>
+        <span class="shop-pkg-amount">${pkg.amount.toLocaleString()}</span>
+        ${pkg.bonus > 0 ? '<span class="shop-pkg-bonus">+' + pkg.bonus + ' BONUS</span>' : ''}
+        <button class="shop-pkg-price">${pkg.price}</button>
+      </div>
+    `;
+  }).join('');
+  
+  // Free sources
+  const free = document.getElementById('shop-free');
+  free.innerHTML = FREE_DIAMOND_SOURCES.map(src => `
+    <div class="shop-free-item" onclick="${src.action}()">
+      <span class="sfi-icon">${src.icon}</span>
+      <div class="sfi-info">
+        <span class="sfi-title">${src.title}</span>
+        <span class="sfi-desc">${src.desc}</span>
+      </div>
+      <span class="sfi-reward">${src.reward}</span>
+    </div>
+  `).join('');
+  
+  DiamondSystem.updateUI();
+}
+
+function buyPackage(id) {
+  showToast('💎 Satın alma yakında!');
+}
+
+function watchAdForDiamonds() {
+  RewardedAd.showForDiamonds(10);
+}
+
+function goToHome() {
+  closeShop();
+  switchTab('home');
+}
+
+function showAchievements() {
+  showToast('🏆 Başarımlar yakında!');
+}
 
 // ==================== DURUM ====================
 let currentScreen = 'home';
@@ -589,6 +745,7 @@ function showToast(msg) {
 
 document.addEventListener('DOMContentLoaded', () => {
   DiamondSystem.updateUI();
+  PlusSystem.updateUI();
   renderHome();
   renderLeaderboard();
   renderSettings();

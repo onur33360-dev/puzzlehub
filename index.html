@@ -26,19 +26,16 @@
       <div id="screen-home" class="screen active">
         <!-- Üst bar -->
         <header class="home-header">
-          <div class="streak-badge" id="streak-badge">
-            <span class="streak-fire">🔥</span>
-            <div class="streak-info">
-              <span class="streak-num">7</span>
-              <span class="streak-label">GÜN</span>
-            </div>
+          <div class="plus-badge" id="plus-badge" onclick="showPlusPage()">
+            <span class="plus-icon">👑</span>
+            <span class="plus-text">PLUS</span>
           </div>
           <div class="brand">
             <span class="brand-text">PUZZLE<span class="brand-accent">HUB</span></span>
             <span class="brand-sub">HOŞGELDİN! 👋</span>
           </div>
           <div class="header-right">
-            <div class="diamond-display" onclick="showToast('💎 Elmas: ' + DiamondSystem.get())">
+            <div class="diamond-display" onclick="openShop()">
               <span class="diamond-icon">💎</span>
               <span class="diamond-count">100</span>
             </div>
@@ -134,6 +131,112 @@
         <div class="settings-section" id="settings-list"></div>
       </div>
 
+      <!-- ====== PLUS SAYFA ====== -->
+      <div id="screen-plus" class="screen">
+        <div class="plus-page">
+          <button class="plus-close" onclick="closePlusPage()">← Geri</button>
+          
+          <div class="plus-hero">
+            <div class="plus-stars">✨ ⭐ ✨</div>
+            <h1 class="plus-title">PUZZLE<span>HUB</span></h1>
+            <h2 class="plus-subtitle">P L U S</h2>
+          </div>
+          
+          <div class="plus-benefits">
+            <div class="plus-benefit">
+              <span class="pb-icon">🚫</span>
+              <div class="pb-info">
+                <span class="pb-title">Reklamsız Deneyim</span>
+                <span class="pb-desc">Hiçbir reklam görmezsin</span>
+              </div>
+            </div>
+            <div class="plus-benefit">
+              <span class="pb-icon">♾️</span>
+              <div class="pb-info">
+                <span class="pb-title">Sınırsız Devam Hakkı</span>
+                <span class="pb-desc">Elmas harcamadan devam et</span>
+              </div>
+            </div>
+            <div class="plus-benefit">
+              <span class="pb-icon">💎</span>
+              <div class="pb-info">
+                <span class="pb-title">5x Günlük Elmas</span>
+                <span class="pb-desc">Her gün 25💎 (5💎 yerine)</span>
+              </div>
+            </div>
+            <div class="plus-benefit">
+              <span class="pb-icon">🎨</span>
+              <div class="pb-info">
+                <span class="pb-title">Özel Temalar</span>
+                <span class="pb-desc">Premium tema koleksiyonu</span>
+              </div>
+            </div>
+            <div class="plus-benefit">
+              <span class="pb-icon">🎯</span>
+              <div class="pb-info">
+                <span class="pb-title">Özel Görevler</span>
+                <span class="pb-desc">Plus-only haftalık görevler</span>
+              </div>
+            </div>
+            <div class="plus-benefit">
+              <span class="pb-icon">⭐</span>
+              <div class="pb-info">
+                <span class="pb-title">Profil Rozeti</span>
+                <span class="pb-desc">⭐ Plus rozeti profilinde</span>
+              </div>
+            </div>
+            <div class="plus-benefit">
+              <span class="pb-icon">🔓</span>
+              <div class="pb-info">
+                <span class="pb-title">Erken Erişim</span>
+                <span class="pb-desc">Yeni oyunlara 1 hafta önce eriş</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="plus-plans" id="plus-plans">
+            <div class="plus-plan plan-yearly selected" onclick="selectPlan('yearly')" data-plan="yearly">
+              <div class="plan-best">🏆 EN İYİ!</div>
+              <span class="plan-name">Yıllık</span>
+              <span class="plan-price">₺299.99<small>/yıl</small></span>
+              <span class="plan-monthly">₺25/ay • %50 tasarruf</span>
+            </div>
+            <div class="plus-plan plan-monthly" onclick="selectPlan('monthly')" data-plan="monthly">
+              <span class="plan-name">Aylık</span>
+              <span class="plan-price">₺49.99<small>/ay</small></span>
+            </div>
+            <div class="plus-plan plan-weekly" onclick="selectPlan('weekly')" data-plan="weekly">
+              <span class="plan-name">Haftalık</span>
+              <span class="plan-price">₺19.99<small>/hafta</small></span>
+            </div>
+          </div>
+          
+          <button class="plus-cta" onclick="purchasePlus()">⭐ PLUS'A GEÇ</button>
+          <p class="plus-disclaimer">İstediğin zaman iptal et • 7 gün ücretsiz dene</p>
+        </div>
+      </div>
+
+      <!-- ====== ELMAS MAĞAZASI ====== -->
+      <div id="screen-shop" class="screen">
+        <div class="shop-page">
+          <header class="shop-header">
+            <button class="btn-back" onclick="closeShop()">← Geri</button>
+            <h2 class="page-title">💎 Elmas Mağazası</h2>
+          </header>
+          
+          <div class="shop-balance">
+            <span class="shop-balance-icon">💎</span>
+            <span class="shop-balance-amount diamond-count">0</span>
+            <span class="shop-balance-label">mevcut elmasın</span>
+          </div>
+          
+          <h3 class="shop-section-title">💰 SATIN AL</h3>
+          <div class="shop-grid" id="shop-grid"></div>
+          
+          <h3 class="shop-section-title">🎁 ÜCRETSIZ KAZAN</h3>
+          <div class="shop-free" id="shop-free"></div>
+        </div>
+      </div>
 
 
       <!-- ====== OYUN EKRANI ====== -->

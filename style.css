@@ -734,3 +734,351 @@ a { color:inherit; text-decoration:none; }
   justify-content: center;
   gap: 8px;
 }
+
+/* ========== PLUS BADGE ========== */
+.plus-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, rgba(251,191,36,0.12), rgba(245,158,11,0.06));
+  border: 1px solid rgba(251,191,36,0.25);
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  animation: plusGlow 3s ease-in-out infinite;
+}
+.plus-badge:active { transform: scale(0.95); }
+.plus-badge.plus-active {
+  background: linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.15));
+  border-color: rgba(251,191,36,0.5);
+}
+.plus-icon { font-size: 14px; }
+.plus-text { font-size: 11px; font-weight: 900; color: #fbbf24; letter-spacing: 1px; }
+
+@keyframes plusGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0); }
+  50% { box-shadow: 0 0 12px 2px rgba(251,191,36,0.15); }
+}
+
+/* ========== PLUS PAGE ========== */
+.plus-page {
+  min-height: 100%;
+  background: linear-gradient(180deg, #0f0a1e 0%, #1a1035 50%, #0f0a1e 100%);
+  padding: 16px;
+  position: relative;
+  overflow-y: auto;
+}
+.plus-close {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plus-close:active { transform: scale(0.95); }
+
+.plus-hero {
+  text-align: center;
+  padding: 32px 0 24px;
+}
+.plus-stars {
+  font-size: 28px;
+  margin-bottom: 8px;
+  animation: plusStarsPulse 2s ease-in-out infinite;
+}
+.plus-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 36px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0;
+}
+.plus-title span {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.plus-subtitle {
+  font-family: 'Outfit', sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 8px;
+  margin: 4px 0 0;
+}
+
+@keyframes plusStarsPulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+/* Plus Benefits */
+.plus-benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.plus-benefit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.pb-icon { font-size: 24px; flex-shrink: 0; }
+.pb-info { display: flex; flex-direction: column; gap: 2px; }
+.pb-title { font-size: 15px; font-weight: 700; color: #fff; }
+.pb-desc { font-size: 12px; color: rgba(255,255,255,0.45); }
+
+/* Plus Plans */
+.plus-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.plus-plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  border-radius: 16px;
+  border: 2px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: all 0.25s;
+}
+.plus-plan:active { transform: scale(0.98); }
+.plus-plan.selected {
+  border-color: #fbbf24;
+  background: rgba(251,191,36,0.06);
+  box-shadow: 0 0 20px rgba(251,191,36,0.1);
+}
+.plan-best {
+  position: absolute;
+  top: -10px;
+  right: 16px;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #000;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+.plan-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.plan-price {
+  font-size: 24px;
+  font-weight: 900;
+  color: #fff;
+  margin: 4px 0;
+}
+.plan-price small {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.5);
+}
+.plan-monthly {
+  font-size: 12px;
+  color: #86efac;
+  font-weight: 700;
+}
+
+/* Plus CTA */
+.plus-cta {
+  width: 100%;
+  padding: 18px;
+  border-radius: 16px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+  color: #000;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 24px rgba(251,191,36,0.3);
+  animation: plusCtaPulse 2.5s ease-in-out infinite;
+  -webkit-tap-highlight-color: transparent;
+}
+.plus-cta:active { transform: scale(0.97); animation: none; }
+
+@keyframes plusCtaPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 4px 24px rgba(251,191,36,0.3); }
+  50% { transform: scale(1.02); box-shadow: 0 6px 32px rgba(251,191,36,0.45); }
+}
+
+.plus-disclaimer {
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  margin-top: 12px;
+  padding-bottom: 40px;
+}
+
+/* ========== DIAMOND SHOP ========== */
+.shop-page {
+  padding: 0 16px 40px;
+}
+.shop-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+.shop-balance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(168,85,247,0.1), rgba(59,130,246,0.06));
+  border: 1px solid rgba(168,85,247,0.15);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.shop-balance-icon { font-size: 32px; }
+.shop-balance-amount {
+  font-size: 36px;
+  font-weight: 900;
+  color: #c084fc;
+}
+.shop-balance-label {
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  font-weight: 600;
+}
+
+.shop-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 1px;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+/* Shop Grid */
+.shop-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.shop-package {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 12px 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.shop-package:active { transform: scale(0.96); }
+.shop-package.shop-best {
+  border-color: #fbbf24;
+  background: rgba(251,191,36,0.06);
+  box-shadow: 0 0 16px rgba(251,191,36,0.1);
+}
+.shop-package.shop-popular {
+  border-color: #a855f7;
+  background: rgba(168,85,247,0.06);
+}
+.shop-badge {
+  position: absolute;
+  top: -8px;
+  right: -4px;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+.shop-best .shop-badge {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #000;
+}
+.shop-pkg-icon { font-size: 28px; }
+.shop-pkg-amount {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+}
+.shop-pkg-bonus {
+  font-size: 11px;
+  font-weight: 800;
+  color: #86efac;
+  background: rgba(34,197,94,0.12);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+.shop-pkg-price {
+  width: 100%;
+  padding: 8px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  border: none;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.shop-best .shop-pkg-price {
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  color: #000;
+}
+
+/* Shop Free Sources */
+.shop-free {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shop-free-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.shop-free-item:active { background: rgba(255,255,255,0.08); }
+.sfi-icon { font-size: 24px; flex-shrink: 0; }
+.sfi-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.sfi-title { font-size: 14px; font-weight: 700; color: #fff; }
+.sfi-desc { font-size: 11px; color: rgba(255,255,255,0.4); }
+.sfi-reward {
+  font-size: 14px;
+  font-weight: 800;
+  color: #c084fc;
+  white-space: nowrap;
+}
