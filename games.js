@@ -995,3 +995,310 @@ PuzzleGames.mazeGame = (() => {
   function cleanup(){clearEvs()}
   return {init,cleanup};
 })();
+
+// ╔══════════════════════════════════════╗
+// ║     7. VİDA USTASI (SCREW PUZZLE)    ║
+// ╚══════════════════════════════════════╝
+PuzzleGames.screwPuzzle = (() => {
+  const SCREW_COLORS = ['#ef4444','#3b82f6','#22c55e','#eab308','#a855f7'];
+  const BOARD_COLORS = ['#8B6914','#A0522D','#6B4226','#DEB887','#CD853F','#9B7653'];
+  const MAX_SLOTS = 5;
+  const AREA_W = 380;
+  const SCREW_SZ = 28;
+
+  const LEVELS = [
+    {boards:[{x:50,y:200,w:280,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:100,y:140,w:200,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:40,y:220,w:300,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:1}]},{x:90,y:160,w:220,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:30,y:180,w:260,h:110,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:110,y:130,w:240,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:30,y:260,w:320,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:60,y:180,w:260,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:100,y:120,w:200,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:20,y:250,w:300,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:80,y:190,w:280,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:50,y:130,w:240,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]}]},
+    {boards:[{x:10,y:270,w:280,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]},{x:100,y:200,w:270,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:60,y:140,w:220,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:40,y:280,w:300,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:20,y:200,w:250,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:120,y:140,w:240,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]}]},
+    {boards:[{x:30,y:270,w:320,h:100,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]},{x:60,y:190,w:280,h:100,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:90,y:120,w:220,h:100,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]}]},
+    {boards:[{x:20,y:300,w:340,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:60,y:230,w:280,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:30,y:160,w:260,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:0}]},{x:100,y:100,w:200,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:10,y:310,w:360,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:80,y:240,w:290,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:1}]},{x:20,y:170,w:270,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:3}]},{x:110,y:105,w:230,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]}]},
+    {boards:[{x:40,y:290,w:300,h:100,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:10,y:220,w:320,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:3},{rx:1,ry:1,c:0}]},{x:70,y:155,w:280,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:3},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]},{x:50,y:90,w:240,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:3}]}]},
+    {boards:[{x:20,y:300,w:340,h:90,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:1}]},{x:50,y:225,w:300,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:10,y:150,w:280,h:95,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:3}]},{x:90,y:80,w:260,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]}]},
+    {boards:[{x:20,y:310,w:340,h:90,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:4},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:60,y:240,w:300,h:90,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]},{x:10,y:165,w:280,h:95,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:4}]},{x:100,y:95,w:250,h:90,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:4}]}]},
+    {boards:[{x:10,y:340,w:360,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:50,y:280,w:300,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:20,y:215,w:280,h:85,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]},{x:80,y:150,w:270,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:60,y:85,w:230,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]}]},
+    {boards:[{x:10,y:340,w:360,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:4},{rx:0,ry:1,c:1},{rx:1,ry:1,c:3}]},{x:40,y:275,w:310,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]},{x:20,y:210,w:290,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:2},{rx:0,ry:1,c:0},{rx:1,ry:1,c:4}]},{x:70,y:145,w:280,h:80,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:50,y:80,w:240,h:80,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]}]},
+    {boards:[{x:20,y:330,w:340,h:85,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:50,y:270,w:310,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:4},{rx:0,ry:1,c:1},{rx:1,ry:1,c:0}]},{x:10,y:205,w:300,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:4}]},{x:80,y:140,w:290,h:80,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:2},{rx:1,ry:1,c:0}]},{x:30,y:80,w:260,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:30,y:340,w:320,h:80,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:4},{rx:1,ry:1,c:0}]},{x:60,y:280,w:300,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:1},{rx:1,ry:1,c:4}]},{x:10,y:215,w:330,h:80,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:0},{rx:0,ry:1,c:3},{rx:1,ry:1,c:2}]},{x:70,y:150,w:280,h:80,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:1},{rx:0,ry:1,c:0},{rx:1,ry:1,c:3}]},{x:40,y:85,w:250,h:80,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:4},{rx:0,ry:1,c:2},{rx:1,ry:1,c:1}]}]},
+    {boards:[{x:10,y:360,w:360,h:80,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]},{x:40,y:305,w:320,h:75,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:4}]},{x:10,y:250,w:340,h:75,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:50,y:195,w:300,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:20,y:140,w:280,h:75,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:4},{rx:0,ry:1,c:3},{rx:1,ry:1,c:0}]},{x:80,y:80,w:240,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:4},{rx:1,ry:1,c:3}]}]},
+    {boards:[{x:20,y:360,w:340,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:0},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:50,y:300,w:310,h:75,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:4},{rx:0,ry:1,c:0},{rx:1,ry:1,c:2}]},{x:10,y:245,w:350,h:75,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:1},{rx:0,ry:1,c:4},{rx:1,ry:1,c:0}]},{x:60,y:185,w:290,h:75,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:3},{rx:0,ry:1,c:1},{rx:1,ry:1,c:4}]},{x:20,y:130,w:310,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:1}]},{x:80,y:75,w:250,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]}]},
+    {boards:[{x:10,y:360,w:360,h:75,screws:[{rx:0,ry:0,c:2},{rx:1,ry:0,c:4},{rx:0,ry:1,c:0},{rx:1,ry:1,c:1}]},{x:30,y:300,w:330,h:75,screws:[{rx:0,ry:0,c:1},{rx:1,ry:0,c:3},{rx:0,ry:1,c:4},{rx:1,ry:1,c:0}]},{x:10,y:240,w:340,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:2},{rx:0,ry:1,c:3},{rx:1,ry:1,c:4}]},{x:50,y:180,w:310,h:75,screws:[{rx:0,ry:0,c:4},{rx:1,ry:0,c:1},{rx:0,ry:1,c:2},{rx:1,ry:1,c:3}]},{x:20,y:120,w:300,h:75,screws:[{rx:0,ry:0,c:3},{rx:1,ry:0,c:0},{rx:0,ry:1,c:1},{rx:1,ry:1,c:2}]},{x:70,y:60,w:260,h:75,screws:[{rx:0,ry:0,c:0},{rx:1,ry:0,c:3},{rx:0,ry:1,c:4},{rx:1,ry:1,c:1}]}]}
+  ];
+
+  let container, level, score, slots, screws, boards, undoStack, undoUsed;
+  let gameAreaEl, slotsEl, wrapEl;
+  let animating = false;
+
+  function injectCSS() {
+    injectStyle('css-screw', `
+      .sp-wrap{position:relative;width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:8px}
+      .sp-top{display:flex;justify-content:space-between;align-items:center;width:100%;padding:0 8px}
+      .sp-top .sp-level{font-size:13px;font-weight:800;color:#c084fc;letter-spacing:1px}
+      .sp-top .sp-score{font-size:18px;font-weight:900;color:#fbbf24}
+      .sp-undo{background:rgba(168,85,247,0.25);border:1px solid rgba(168,85,247,0.4);color:#e9d5ff;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer;transition:all .2s;user-select:none}
+      .sp-undo:active{transform:scale(0.93);background:rgba(168,85,247,0.4)}
+      .sp-undo.off{opacity:0.35;pointer-events:none}
+      .sp-area{position:relative;width:100%;height:0;padding-bottom:131.5%;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);overflow:hidden}
+      .sp-board{position:absolute;border-radius:10px;transition:transform .5s ease-in,opacity .5s ease-in;pointer-events:none}
+      .sp-board.rm{transform:translateY(120%) rotate(5deg)!important;opacity:0!important}
+      .sp-grain{position:absolute;inset:0;border-radius:10px;opacity:.12;background-image:repeating-linear-gradient(90deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px),repeating-linear-gradient(0deg,transparent,transparent 8px,rgba(255,255,255,.04) 8px,rgba(255,255,255,.04) 10px);pointer-events:none}
+      .sp-edge{position:absolute;inset:0;border-radius:10px;box-shadow:inset 0 2px 0 rgba(255,255,255,.15),inset 0 -2px 0 rgba(0,0,0,.25),inset 2px 0 0 rgba(255,255,255,.08),inset -2px 0 0 rgba(0,0,0,.15);pointer-events:none}
+      .sp-screw{position:absolute;border-radius:50%;cursor:pointer;transition:transform .4s ease,opacity .4s ease;z-index:100;display:flex;align-items:center;justify-content:center;user-select:none;touch-action:none}
+      .sp-screw::before,.sp-screw::after{content:'';position:absolute;background:rgba(0,0,0,.35);border-radius:1px}
+      .sp-screw::before{width:50%;height:9%}
+      .sp-screw::after{width:9%;height:50%}
+      .sp-screw.cov{filter:brightness(.45);cursor:default;pointer-events:none}
+      .sp-screw.out{transform:rotate(720deg) scale(0)!important;opacity:0!important}
+      .sp-screw:not(.cov):not(.out):active{transform:scale(1.15)}
+      .sp-shine{position:absolute;width:30%;height:30%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.45),transparent);top:14%;left:18%;pointer-events:none}
+      .sp-slots{display:flex;gap:8px;justify-content:center;width:100%;padding:10px 8px}
+      .sp-slot{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;transition:all .3s}
+      .sp-slot.has{border-color:rgba(255,255,255,.15)}
+      .sp-ss{width:28px;height:28px;border-radius:50%;position:relative;animation:spBnc .35s cubic-bezier(.34,1.56,.64,1)}
+      .sp-ss::before,.sp-ss::after{content:'';position:absolute;background:rgba(0,0,0,.3);border-radius:1px;top:50%;left:50%;transform:translate(-50%,-50%)}
+      .sp-ss::before{width:12px;height:2px}
+      .sp-ss::after{width:2px;height:12px}
+      .sp-slot.clr{animation:spClr .5s ease forwards}
+      @keyframes spBnc{0%{transform:scale(0) translateY(-30px);opacity:0}60%{transform:scale(1.2) translateY(0)}100%{transform:scale(1);opacity:1}}
+      @keyframes spClr{0%{transform:scale(1);opacity:1;filter:brightness(1)}50%{transform:scale(1.3);filter:brightness(2)}100%{transform:scale(0);opacity:0;filter:brightness(3)}}
+      @keyframes spSp{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--sx),var(--sy)) scale(0);opacity:0}}
+      .sp-spark{position:absolute;border-radius:50%;pointer-events:none;z-index:300;animation:spSp .6s ease-out forwards}
+      .sp-msg{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-size:24px;font-weight:900;color:#fff;text-shadow:0 0 20px rgba(168,85,247,.8);pointer-events:none;z-index:400;animation:spMsgIn .6s cubic-bezier(.34,1.56,.64,1) forwards;opacity:0;text-align:center;line-height:1.4}
+      @keyframes spMsgIn{0%{transform:translate(-50%,-50%) scale(0);opacity:0}60%{transform:translate(-50%,-50%) scale(1.15);opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+    `);
+  }
+
+  function screwPos(b, s) {
+    const p = 15;
+    return { x: b.x + p + s.rx * (b.w - 2 * p), y: b.y + p + s.ry * (b.h - 2 * p) };
+  }
+
+  function isCovered(sc) {
+    const r = SCREW_SZ / 2;
+    for (let i = sc.bi + 1; i < boards.length; i++) {
+      if (boards[i].removed) continue;
+      const b = boards[i];
+      if (sc.ax + r > b.x && sc.ax - r < b.x + b.w && sc.ay + r > b.y && sc.ay - r < b.y + b.h) return true;
+    }
+    return false;
+  }
+
+  function getScale() { return gameAreaEl ? gameAreaEl.offsetWidth / AREA_W : 1; }
+
+  function dk(hex, f) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return `rgb(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)})`;
+  }
+  function lt(hex, f) {
+    const r = Math.min(255,parseInt(hex.slice(1,3),16)*f), g = Math.min(255,parseInt(hex.slice(3,5),16)*f), b = Math.min(255,parseInt(hex.slice(5,7),16)*f);
+    return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+  }
+
+  function loadLevel(lv) {
+    const data = LEVELS[lv]; if (!data) return;
+    score = 0; slots = []; undoStack = []; undoUsed = false; animating = false;
+    boards = data.boards.map((b, i) => ({ ...b, idx: i, removed: false, sids: [] }));
+    screws = [];
+    let sid = 0;
+    boards.forEach((b, bi) => {
+      b.screws.forEach(s => {
+        const pos = screwPos(b, s);
+        const o = { id: sid++, bi, color: s.c, ax: pos.x, ay: pos.y, removed: false };
+        screws.push(o);
+        b.sids.push(o.id);
+      });
+    });
+    draw();
+  }
+
+  function draw() {
+    wrapEl.innerHTML = '';
+    // Top bar
+    const top = document.createElement('div'); top.className = 'sp-top';
+    top.innerHTML = `<span class="sp-level">SEVİYE ${level+1} / ${LEVELS.length}</span><span class="sp-score">⭐ ${score}</span>`;
+    const ub = document.createElement('div');
+    ub.className = 'sp-undo' + (undoUsed || !undoStack.length ? ' off' : '');
+    ub.textContent = '↩ Geri Al';
+    if (!undoUsed && undoStack.length) addEv(ub, 'click', doUndo);
+    top.appendChild(ub);
+    wrapEl.appendChild(top);
+
+    gameAreaEl = document.createElement('div'); gameAreaEl.className = 'sp-area';
+    wrapEl.appendChild(gameAreaEl);
+
+    requestAnimationFrame(() => {
+      const sc = getScale();
+      // boards
+      boards.forEach((b, i) => {
+        const el = document.createElement('div');
+        el.className = 'sp-board' + (b.removed ? ' rm' : '');
+        const col = BOARD_COLORS[i % BOARD_COLORS.length];
+        el.style.cssText = `left:${b.x*sc}px;top:${b.y*sc}px;width:${b.w*sc}px;height:${b.h*sc}px;background:linear-gradient(145deg,${col},${dk(col,.85)});z-index:${10+i};box-shadow:0 4px 12px rgba(0,0,0,.4)`;
+        el.innerHTML = '<div class="sp-grain"></div><div class="sp-edge"></div>';
+        el.dataset.bi = i;
+        gameAreaEl.appendChild(el);
+      });
+      // screws
+      screws.forEach(s => {
+        if (s.removed) return;
+        const cov = isCovered(s);
+        const el = document.createElement('div');
+        el.className = 'sp-screw' + (cov ? ' cov' : '');
+        const c = SCREW_COLORS[s.color];
+        const sz = SCREW_SZ * sc;
+        el.style.cssText = `left:${s.ax*sc - sz/2}px;top:${s.ay*sc - sz/2}px;width:${sz}px;height:${sz}px;background:radial-gradient(circle at 35% 35%,${lt(c,1.3)},${c},${dk(c,.7)});box-shadow:0 2px 6px rgba(0,0,0,.5),inset 0 1px 2px rgba(255,255,255,.3);z-index:${100+s.bi}`;
+        el.innerHTML = '<div class="sp-shine"></div>';
+        el.dataset.sid = s.id;
+        if (!cov) addEv(el, 'click', () => tapScrew(s.id));
+        gameAreaEl.appendChild(el);
+      });
+      // slots
+      drawSlots();
+    });
+  }
+
+  function drawSlots() {
+    slotsEl = document.createElement('div'); slotsEl.className = 'sp-slots';
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      const d = document.createElement('div');
+      d.className = 'sp-slot' + (slots[i] !== undefined ? ' has' : '');
+      if (slots[i] !== undefined) {
+        const sc = document.createElement('div'); sc.className = 'sp-ss';
+        const c = SCREW_COLORS[slots[i]];
+        sc.style.background = `radial-gradient(circle at 35% 35%,${lt(c,1.3)},${c},${dk(c,.7)})`;
+        d.appendChild(sc);
+      }
+      slotsEl.appendChild(d);
+    }
+    wrapEl.appendChild(slotsEl);
+  }
+
+  function tapScrew(sid) {
+    if (animating) return;
+    const s = screws.find(x => x.id === sid);
+    if (!s || s.removed || isCovered(s)) return;
+    if (slots.length >= MAX_SLOTS) return;
+    animating = true;
+
+    undoStack.push({ sid: s.id, bi: s.bi, col: s.color, ss: [...slots] });
+    s.removed = true;
+    score += 10; updateGameScore(score);
+
+    const el = gameAreaEl.querySelector(`[data-sid="${sid}"]`);
+    if (el) el.classList.add('out');
+
+    slots.push(s.color);
+
+    // board cleared?
+    const bd = boards[s.bi];
+    if (bd.sids.every(id => screws.find(x => x.id === id).removed) && !bd.removed) {
+      bd.removed = true;
+      score += 100; updateGameScore(score);
+      setTimeout(() => {
+        const be = gameAreaEl.querySelector(`[data-bi="${s.bi}"]`);
+        if (be) be.classList.add('rm');
+      }, 300);
+    }
+
+    setTimeout(() => {
+      chk3(() => { animating = false; draw(); checkEnd(); });
+    }, 450);
+  }
+
+  function chk3(cb) {
+    const cc = {};
+    slots.forEach(c => { cc[c] = (cc[c]||0) + 1; });
+    let mc = -1;
+    for (const c in cc) { if (cc[c] >= 3) { mc = parseInt(c); break; } }
+    if (mc >= 0) {
+      score += 50; updateGameScore(score);
+      let rm = 0;
+      const ns = [];
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i] === mc && rm < 3) rm++;
+        else ns.push(slots[i]);
+      }
+      sparkles(mc);
+      setTimeout(() => { slots = ns; chk3(cb); }, 500);
+    } else { if (cb) cb(); }
+  }
+
+  function sparkles(ci) {
+    if (!slotsEl || !wrapEl) return;
+    const c = SCREW_COLORS[ci];
+    const wr = wrapEl.getBoundingClientRect();
+    const sr = slotsEl.getBoundingClientRect();
+    for (let i = 0; i < 14; i++) {
+      const p = document.createElement('div');
+      p.className = 'sp-spark';
+      const sz = 3 + Math.random() * 5;
+      const a = Math.random() * Math.PI * 2;
+      const d = 20 + Math.random() * 50;
+      p.style.cssText = `width:${sz}px;height:${sz}px;background:${c};left:${sr.left-wr.left+sr.width/2}px;top:${sr.top-wr.top+sr.height/2}px;box-shadow:0 0 6px ${c}`;
+      p.style.setProperty('--sx', Math.cos(a)*d+'px');
+      p.style.setProperty('--sy', Math.sin(a)*d+'px');
+      wrapEl.appendChild(p);
+      setTimeout(() => p.remove(), 650);
+    }
+  }
+
+  function doUndo() {
+    if (undoUsed || !undoStack.length || animating) return;
+    undoUsed = true;
+    const u = undoStack.pop();
+    const s = screws.find(x => x.id === u.sid);
+    if (s) {
+      s.removed = false;
+      const bd = boards[s.bi];
+      if (bd.removed && !bd.sids.every(id => screws.find(x => x.id === id).removed)) bd.removed = false;
+    }
+    slots = u.ss;
+    score = Math.max(0, score - 10); updateGameScore(score);
+    draw();
+  }
+
+  function checkEnd() {
+    if (screws.every(s => s.removed)) {
+      const empty = MAX_SLOTS - slots.length;
+      const bonus = 200 + empty * 30;
+      score += bonus; updateGameScore(score);
+      const nxt = level + 1;
+      if (nxt < LEVELS.length) localStorage.setItem('ph_screw_level', nxt.toString());
+      setTimeout(() => {
+        if (nxt >= LEVELS.length) {
+          showGameOver(true, 'Tebrikler! 🏆', 'Tüm seviyeleri tamamladın! Skor: ' + score);
+        } else {
+          const m = document.createElement('div'); m.className = 'sp-msg';
+          m.innerHTML = '✅ Seviye ' + (level+1) + ' Tamam!<br><span style="font-size:16px;color:#fbbf24">+' + bonus + ' bonus</span>';
+          if (gameAreaEl) gameAreaEl.appendChild(m);
+          setTimeout(() => { if (m.parentNode) m.remove(); level = nxt; loadLevel(level); }, 1500);
+        }
+      }, 600);
+      return;
+    }
+    if (slots.length >= MAX_SLOTS) {
+      const cc = {}; slots.forEach(c => { cc[c] = (cc[c]||0)+1; });
+      if (!Object.values(cc).some(v => v >= 3)) {
+        setTimeout(() => showGameOver(false, 'Oyun Bitti! 😔', 'Slotlar doldu!\nSkor: ' + score), 300);
+      }
+    }
+  }
+
+  function init(c) {
+    container = c;
+    level = parseInt(localStorage.getItem('ph_screw_level') || '0', 10);
+    if (level >= LEVELS.length) level = 0;
+    injectCSS();
+    wrapEl = document.createElement('div'); wrapEl.className = 'sp-wrap';
+    container.appendChild(wrapEl);
+    loadLevel(level);
+  }
+
+  function cleanup() { clearEvs(); animating = false; }
+
+  return { init, cleanup };
+})();

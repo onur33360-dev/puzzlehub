@@ -6,6 +6,7 @@
 // ===== OYUN VERİLERİ =====
 
 const REEL_GAMES = [
+  { id:'screwPuzzle', name:'Vida Ustası', emoji:'🔩', category:'puzzle', desc:'Vidaları sök, renkleri eşleştir!', difficulty:'Orta', gradient:['#b45309','#78350f'], playable:true },
   { id:'blockPuzzle', name:'Bulmaca Blokları', emoji:'🧱', category:'puzzle', desc:'Blokları yerleştir, satırları temizle!', difficulty:'Orta', gradient:['#7c3aed','#5b21b6'], playable:true },
   { id:'game2048', name:'2048', emoji:'🔢', category:'puzzle', desc:'Kaydır, birleştir, 2048\'e ulaş!', difficulty:'Kolay', gradient:['#d97706','#92400e'], playable:true },
   { id:'memoryGame', name:'Hafıza Oyunu', emoji:'🧠', category:'puzzle', desc:'Kartları eşleştir, hafızanı test et!', difficulty:'Kolay', gradient:['#0891b2','#155e75'], playable:true },
@@ -15,6 +16,7 @@ const REEL_GAMES = [
 ];
 
 const GAME_NAME_MAP = {
+  'screwPuzzle': 'Vida Ustası',
   'blockPuzzle': 'Bulmaca Blokları',
   'game2048': '2048',
   'memoryGame': 'Hafıza Oyunu',

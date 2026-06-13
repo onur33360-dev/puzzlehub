@@ -5,12 +5,13 @@
 // ==================== VERİ ====================
 
 const PUZZLE_GAMES = [
+  { name:'Vida Ustası', emoji:'🔩', rating:4.9, badge:'yeni', desc:'Vidaları sök, eşleştir!', bg:'linear-gradient(135deg,#b45309,#78350f)' },
   { name:'2048', emoji:'🔢', rating:4.8, badge:null, desc:'Sayı birleştir', bg:'linear-gradient(135deg,#d97706,#92400e)' },
   { name:'Bulmaca Blokları', emoji:'🧱', rating:4.5, badge:null, desc:'Blok yerleştir', bg:'linear-gradient(135deg,#7c3aed,#5b21b6)' },
-  { name:'Hafıza Oyunu', emoji:'🧠', rating:4.3, badge:'yeni', desc:'Kartları eşleştir', bg:'linear-gradient(135deg,#0891b2,#155e75)' },
+  { name:'Hafıza Oyunu', emoji:'🧠', rating:4.3, badge:null, desc:'Kartları eşleştir', bg:'linear-gradient(135deg,#0891b2,#155e75)' },
   { name:'Kelime Avı', emoji:'📝', rating:4.6, badge:null, desc:'Gizli kelimeleri bul', bg:'linear-gradient(135deg,#16a34a,#166534)' },
   { name:'Sudoku', emoji:'#️⃣', rating:4.7, badge:null, desc:'9x9 tabloyu doldur', bg:'linear-gradient(135deg,#1d4ed8,#1e3a8a)' },
-  { name:'Labirent', emoji:'🌀', rating:4.2, badge:'hot', desc:'Çıkışı bul', bg:'linear-gradient(135deg,#059669,#065f46)' },
+  { name:'Labirent', emoji:'🌀', rating:4.2, badge:null, desc:'Çıkışı bul', bg:'linear-gradient(135deg,#059669,#065f46)' },
 ];
 
 const DAILY_MISSIONS = [
@@ -606,6 +607,7 @@ function renderFavorites() {
 // ==================== OYUN MOTORU ====================
 
 const GAME_MAP = {
+  'Vida Ustası': 'screwPuzzle',
   '2048': 'game2048',
   'Hafıza Oyunu': 'memoryGame',
   'Kelime Avı': 'wordSearch',
