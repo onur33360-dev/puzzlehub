@@ -1,5 +1,5 @@
-const CACHE_NAME = 'gamehup-v2';
-const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/games.js', '/reels.js', '/icon-192.png', '/icon-512.png'];
+const CACHE_NAME = 'puzzlehub-v3';
+const ASSETS = ['./', './index.html', './style.css', './app.js', './games.js', './reels.js', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
@@ -11,12 +11,13 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Network-first: önce sunucudan çek, başarısız olursa cache'den
 self.addEventListener('fetch', e => {
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).then(res => {
+    fetch(e.request).then(res => {
       const clone = res.clone();
       caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
       return res;
-    }))
+    }).catch(() => caches.match(e.request))
   );
 });
