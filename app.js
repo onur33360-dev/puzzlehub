@@ -776,7 +776,9 @@ function showToast(msg) {
 
 // ==================== BAŞLANGIÇ ====================
 
-document.addEventListener('DOMContentLoaded', () => {
+// app.js en son yükleniyor (games.js → reels.js → app.js)
+// Bu noktada DOM zaten hazır
+(function initApp() {
   DiamondSystem.updateUI();
   PlusSystem.updateUI();
   renderHome();
@@ -791,5 +793,5 @@ document.addEventListener('DOMContentLoaded', () => {
   // Update eco-streak
   const ecoStreak = document.getElementById('eco-streak');
   if (ecoStreak) ecoStreak.textContent = streakCount || '0';
-});
+})();
 

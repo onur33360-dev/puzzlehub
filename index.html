@@ -318,7 +318,6 @@
 
   <script>
     // === CACHE KILLER v2 ===
-    // 1. SW temizle
     (async function(){
       if('serviceWorker' in navigator){
         const regs=await navigator.serviceWorker.getRegistrations();
@@ -330,12 +329,19 @@
       }
     })();
 
-    // 2. Dinamik cache-busting ile scriptleri yükle
+    // Sıralı yükleme: games.js → reels.js → app.js
     const _v = Date.now();
-    ['app.js','games.js','reels.js'].forEach(f=>{
-      const s=document.createElement('script');
-      s.src=f+'?v='+_v;
+    function loadScript(src, cb) {
+      const s = document.createElement('script');
+      s.src = src + '?v=' + _v;
+      s.onload = cb || function(){};
+      s.onerror = function(){ console.error('Script yüklenemedi: ' + src); if(cb) cb(); };
       document.body.appendChild(s);
+    }
+    loadScript('games.js', function(){
+      loadScript('reels.js', function(){
+        loadScript('app.js');
+      });
     });
   </script>
 </body>
