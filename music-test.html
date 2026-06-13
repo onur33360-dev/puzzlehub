@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎵 GameHup - Müzik Test</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, #0a0e1a 0%, #1a1040 50%, #0a0e1a 100%);
+    color: #fff; min-height: 100vh; padding: 20px;
+  }
+  h1 { text-align:center; font-size:24px; margin-bottom:8px; }
+  .subtitle { text-align:center; color:rgba(255,255,255,0.5); font-size:13px; margin-bottom:24px; }
+  
+  .card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+    transition: all 0.3s;
+  }
+  .card:hover { background: rgba(255,255,255,0.08); }
+  
+  .card-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .card-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .card-title { font-size: 16px; font-weight: 700; }
+  .card-desc { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  
+  .card-tags {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;
+  }
+  .tag {
+    padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6);
+  }
+  
+  .links {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .link-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #fff; text-decoration: none;
+    font-size: 13px; font-weight: 600;
+    transition: all 0.2s;
+  }
+  .link-btn:hover { background: rgba(255,255,255,0.1); transform: translateX(4px); }
+  .link-btn .arrow { margin-left: auto; color: rgba(255,255,255,0.3); }
+  
+  .note {
+    text-align: center; color: rgba(255,255,255,0.3);
+    font-size: 11px; margin-top: 20px; padding: 12px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  
+  .vote-btns {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  .vote-btn {
+    flex: 1; padding: 10px; border-radius: 10px; border: none;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s; color: #fff;
+  }
+  .vote-btn.like { background: linear-gradient(135deg, #22c55e, #16a34a); }
+  .vote-btn.skip { background: rgba(255,255,255,0.08); }
+  .vote-btn:active { transform: scale(0.95); }
+  .vote-btn.selected { box-shadow: 0 0 0 2px #fff; }
+</style>
+</head>
+<body>
+
+<h1>🎵 Müzik Seçimi</h1>
+<p class="subtitle">Her tarzdan örnekleri dinle, beğendiğini seç</p>
+
+<!-- 1. Chiptune -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-icon" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9)">🕹️</div>
+    <div>
+      <div class="card-title">Chiptune / 8-Bit Retro</div>
+      <div class="card-desc">Nintendo tarzı — neşeli, piksel hissi, hareketli</div>
+    </div>
+  </div>
+  <div class="card-tags">
+    <span class="tag">Vida Ustası</span>
+    <span class="tag">2048</span>
+    <span class="tag">Ok Bulmaca</span>
+  </div>
+  <div class="links">
+    <a class="link-btn" href="https://pixabay.com/music/search/8-bit%20game/" target="_blank">
+      🎧 Pixabay — 8-Bit Game Müzikleri <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://uppbeat.io/browse/music/8-bit" target="_blank">
+      🎧 Uppbeat — 8-Bit Koleksiyonu <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://soundimage.org/chiptunes/" target="_blank">
+      🎧 Soundimage — Chiptune Galeri <span class="arrow">→</span>
+    </a>
+  </div>
+</div>
+
+<!-- 2. Lo-Fi -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-icon" style="background:linear-gradient(135deg,#0ea5e9,#0369a1)">🎹</div>
+    <div>
+      <div class="card-title">Lo-Fi Chill Hop</div>
+      <div class="card-desc">Yumuşak piyano + hafif beat — rahatlatıcı ama ritimli</div>
+    </div>
+  </div>
+  <div class="card-tags">
+    <span class="tag">Sudoku</span>
+    <span class="tag">Akış Bağlantı</span>
+    <span class="tag">Resim Kaydır</span>
+  </div>
+  <div class="links">
+    <a class="link-btn" href="https://pixabay.com/music/search/lofi%20chill/" target="_blank">
+      🎧 Pixabay — Lo-Fi Chill <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://uppbeat.io/browse/music/lo-fi" target="_blank">
+      🎧 Uppbeat — Lo-Fi Koleksiyonu <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://pixabay.com/music/search/study%20beats/" target="_blank">
+      🎧 Pixabay — Study Beats <span class="arrow">→</span>
+    </a>
+  </div>
+</div>
+
+<!-- 3. Jazz -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)">🎷</div>
+    <div>
+      <div class="card-title">Jazzy / Swing</div>
+      <div class="card-desc">Neşeli caz piyano — akıllıca, eğlenceli, şık</div>
+    </div>
+  </div>
+  <div class="card-tags">
+    <span class="tag">Kelime Avı</span>
+    <span class="tag">Hafıza Oyunu</span>
+    <span class="tag">Labirent</span>
+  </div>
+  <div class="links">
+    <a class="link-btn" href="https://pixabay.com/music/search/jazz%20upbeat/" target="_blank">
+      🎧 Pixabay — Jazz Upbeat <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://uppbeat.io/browse/music/jazz" target="_blank">
+      🎧 Uppbeat — Jazz <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100198" target="_blank">
+      🎧 Incompetech — Kevin MacLeod Jazz <span class="arrow">→</span>
+    </a>
+  </div>
+</div>
+
+<!-- 4. Casual Bubbly -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-icon" style="background:linear-gradient(135deg,#ec4899,#be185d)">🌈</div>
+    <div>
+      <div class="card-title">Casual / Bubbly Pop</div>
+      <div class="card-desc">Candy Crush tarzı — parlak, ödüllendirici, neşeli</div>
+    </div>
+  </div>
+  <div class="card-tags">
+    <span class="tag">İksir Sıralama</span>
+    <span class="tag">Resim Kaydır</span>
+    <span class="tag">Genel</span>
+  </div>
+  <div class="links">
+    <a class="link-btn" href="https://pixabay.com/music/search/happy%20game/" target="_blank">
+      🎧 Pixabay — Happy Game <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://pixabay.com/music/search/cute%20casual/" target="_blank">
+      🎧 Pixabay — Cute Casual <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://soundimage.org/puzzle-music/" target="_blank">
+      🎧 Soundimage — Puzzle Music <span class="arrow">→</span>
+    </a>
+  </div>
+</div>
+
+<!-- 5. Electronic -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-icon" style="background:linear-gradient(135deg,#ef4444,#b91c1c)">⚡</div>
+    <div>
+      <div class="card-title">Electronic / Synthwave</div>
+      <div class="card-desc">Modern sentetik — enerjik, premium, mobil oyun hissi</div>
+    </div>
+  </div>
+  <div class="card-tags">
+    <span class="tag">Ana Ekran</span>
+    <span class="tag">Keşfet</span>
+    <span class="tag">Genel Fon</span>
+  </div>
+  <div class="links">
+    <a class="link-btn" href="https://pixabay.com/music/search/synthwave%20game/" target="_blank">
+      🎧 Pixabay — Synthwave Game <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://uppbeat.io/browse/music/electronic" target="_blank">
+      🎧 Uppbeat — Electronic <span class="arrow">→</span>
+    </a>
+    <a class="link-btn" href="https://pixabay.com/music/search/electronic%20gaming/" target="_blank">
+      🎧 Pixabay — Electronic Gaming <span class="arrow">→</span>
+    </a>
+  </div>
+</div>
+
+<div class="note">
+  🎯 Linklere tıkla → sitelerde örnekleri dinle → beğendiğini bana söyle<br>
+  Parça adını veya linkini paylaşırsan direkt oyuna entegre ederim!
+</div>
+
+</body>
+</html>
