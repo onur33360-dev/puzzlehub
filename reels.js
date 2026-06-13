@@ -16,7 +16,7 @@ const REEL_GAMES = [
   { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#8b5cf6','#4c1d95'], playable:false },
   { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🏹', category:'puzzle', desc:'Okları doğru sırayla çıkar!', difficulty:'Kolay', gradient:['#0ea5e9','#0c4a6e'], playable:false },
   { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Zor', gradient:['#e11d48','#881337'], playable:false },
-  { id:'jigsawCard', name:'Yapboz Kart', emoji:'🧩', category:'puzzle', desc:'Kartları sürükle, resmi tamamla!', difficulty:'Kolay', gradient:['#d97706','#78350f'], playable:false },
+  { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#d97706','#78350f'], playable:false },
 ];
 
 const GAME_NAME_MAP = {
@@ -30,7 +30,7 @@ const GAME_NAME_MAP = {
   'waterSort': 'İksir Sıralama',
   'arrowPuzzle': 'Ok Bulmaca',
   'flowConnect': 'Akış Bağlantı',
-  'jigsawCard': 'Yapboz Kart'
+  'jigsawCard': 'Resim Kaydır'
 };
 
 
@@ -984,136 +984,169 @@ MiniDemos.demo_flowConnect = function(gradient) {
   return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
-// ———————— 11. Yapboz Kart Demo ————————
+// ———————— 11. Resim Kaydır (Photo Slider Puzzle) Demo ————————
 MiniDemos.demo_jigsawCard = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  const G=4;
-  // Güzel gradient renkleri ile "resim parçaları" simüle et
-  const PIECES = [
-    {bg:'linear-gradient(135deg,#ff6b6b,#ee5a24)',icon:'🌅'},
-    {bg:'linear-gradient(135deg,#74b9ff,#0984e3)',icon:'🌊'},
-    {bg:'linear-gradient(135deg,#55efc4,#00b894)',icon:'🌿'},
-    {bg:'linear-gradient(135deg,#fdcb6e,#e17055)',icon:'🌄'},
-    {bg:'linear-gradient(135deg,#a29bfe,#6c5ce7)',icon:'🦋'},
-    {bg:'linear-gradient(135deg,#fd79a8,#e84393)',icon:'🌸'},
-    {bg:'linear-gradient(135deg,#ffeaa7,#dfe6e9)',icon:'⭐'},
-    {bg:'linear-gradient(135deg,#00cec9,#81ecec)',icon:'💎'},
-    {bg:'linear-gradient(135deg,#fab1a0,#e17055)',icon:'🍂'},
-    {bg:'linear-gradient(135deg,#dfe6e9,#b2bec3)',icon:'❓'},
-    {bg:'linear-gradient(135deg,#ff7675,#d63031)',icon:'🌹'},
-    {bg:'linear-gradient(135deg,#a0c4ff,#bdb2ff)',icon:'🔮'},
-    {bg:'linear-gradient(135deg,#caffbf,#9bf6ff)',icon:'🍀'},
-    {bg:'linear-gradient(135deg,#ffc6ff,#bdb2ff)',icon:'🎀'},
-    {bg:'linear-gradient(135deg,#fdffb6,#ffd6a5)',icon:'🌻'},
-    {bg:'linear-gradient(135deg,#ffadad,#ffd6a5)',icon:'🎨'},
-  ];
+  const G=4; // 4x4 grid = 15 puzzle
   
-  if(!document.getElementById('css-jig-demo')){
-    const s=document.createElement('style');s.id='css-jig-demo';
-    s.textContent='@keyframes _jigFlip{0%{transform:perspective(300px) rotateY(0)}50%{transform:perspective(300px) rotateY(90deg)}100%{transform:perspective(300px) rotateY(0)}}@keyframes _jigSnap{0%{transform:scale(1.15);box-shadow:0 0 20px rgba(34,197,94,0.5)}100%{transform:scale(1);box-shadow:none}}';
+  // Manzara fotoğrafı simüle eden gradient renk matrisi (günbatımı dağ manzarası)
+  // Her hücre, büyük resmin o kısmının rengini temsil eder
+  const IMG_COLORS = [
+    // Row 0: Gökyüzü (üst)
+    ['#f97316','#fb923c','#fdba74','#fed7aa'],
+    // Row 1: Dağlar + gökyüzü geçişi
+    ['#ea580c','#9a3412','#7c2d12','#f97316'],
+    // Row 2: Dağ gövdesi + göl
+    ['#78350f','#451a03','#0ea5e9','#0284c7'],
+    // Row 3: Göl + orman (alt)
+    ['#065f46','#047857','#0369a1','#0c4a6e'],
+  ];
+  // Corresponding background-position for each tile (simulating a split photo)
+  
+  if(!document.getElementById('css-slider-demo')){
+    const s=document.createElement('style');s.id='css-slider-demo';
+    s.textContent='@keyframes _slSlide{0%{transform:translate(0,0)}100%{transform:translate(var(--dx),var(--dy))}}@keyframes _slCorrect{0%{box-shadow:0 0 0 2px #22c55e}100%{box-shadow:none}}';
     document.head.appendChild(s);
   }
   
   const scene = document.createElement('div');
-  scene.style.cssText='width:82%;max-width:260px;display:flex;flex-direction:column;align-items:center;gap:10px;';
+  scene.style.cssText='width:86%;max-width:270px;display:flex;flex-direction:column;align-items:center;gap:8px;';
   
-  // Header
+  // Header - seviye + hamle sayısı
   const header = document.createElement('div');
   header.style.cssText='display:flex;align-items:center;justify-content:space-between;width:100%;';
-  header.innerHTML='<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">🧩 4x4 Yapboz</span><span style="font-size:12px;color:rgba(255,255,255,0.3);">0/16 yerleşti</span>';
+  header.innerHTML='<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">Seviye 2-5</span><span id="sl-moves" style="font-size:12px;color:rgba(255,255,255,0.3);font-weight:600;">Hamle: 0</span><span style="font-size:12px;color:rgba(255,255,255,0.25);">⏱ 0:00</span>';
   scene.appendChild(header);
   
-  const gridEl = document.createElement('div');
-  gridEl.style.cssText='display:grid;grid-template-columns:repeat('+G+',1fr);gap:3px;width:100%;aspect-ratio:1;background:rgba(255,255,255,0.03);border-radius:12px;padding:4px;border:1px solid rgba(255,255,255,0.06);';
-  const cards=[];
-  const order=[...Array(G*G).keys()].sort(()=>Math.random()-0.5);
+  // Grid container
+  const gridWrap = document.createElement('div');
+  gridWrap.style.cssText='position:relative;width:100%;aspect-ratio:1;background:rgba(0,0,0,0.3);border-radius:10px;overflow:hidden;border:2px solid rgba(255,255,255,0.08);';
   
-  for(let i=0;i<G*G;i++){
-    const c=document.createElement('div');
-    const piece=PIECES[order[i]];
-    const isHidden=Math.random()<0.35;
-    c.style.cssText='border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;transition:all 0.5s cubic-bezier(.34,1.56,.64,1);user-select:none;aspect-ratio:1;cursor:pointer;position:relative;overflow:hidden;';
-    if(isHidden){
-      c.style.background='linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))';
-      c.style.border='1px dashed rgba(255,255,255,0.15)';
-      c.textContent='❓';
-      c.dataset.hidden='1';
-      c.dataset.icon=piece.icon;
-      c.dataset.bg=piece.bg;
-    } else {
-      c.style.background=piece.bg;
-      c.style.border='1px solid rgba(255,255,255,0.1)';
-      c.textContent=piece.icon;
-      c.dataset.hidden='0';
-      // Add subtle shine overlay
-      const shine=document.createElement('div');
-      shine.style.cssText='position:absolute;top:-50%;left:-50%;width:100%;height:100%;background:linear-gradient(135deg,rgba(255,255,255,0.2),transparent);transform:rotate(45deg);pointer-events:none;';
-      c.appendChild(shine);
-    }
-    gridEl.appendChild(c);cards.push(c);
+  // Create tiles: indices 0..14 are tiles, 15 is empty
+  const tileSize = 100/G; // percentage
+  const tiles = []; // {el, idx (current position), home (correct position)}
+  // Shuffle: create a solvable permutation
+  const perm = [];
+  for(let i=0;i<G*G-1;i++) perm.push(i);
+  perm.push(-1); // -1 = empty
+  // Fisher-Yates shuffle (simple, may not always be solvable but it's just a demo)
+  for(let i=perm.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [perm[i],perm[j]]=[perm[j],perm[i]];
   }
-  scene.appendChild(gridEl);
+  // Ensure empty is at last position for simplicity
+  const emptyIdx = perm.indexOf(-1);
+  [perm[emptyIdx],perm[G*G-1]]=[perm[G*G-1],perm[emptyIdx]];
   
-  // Bottom: "Snap to place" hint
-  const hint=document.createElement('div');
-  hint.style.cssText='font-size:11px;color:rgba(255,255,255,0.25);font-weight:600;';
-  hint.textContent='📌 Kartları sürükle, yerine oturt';
-  scene.appendChild(hint);
+  let emptyPos = G*G-1; // current position of empty slot
+  
+  for(let pos=0;pos<G*G;pos++){
+    const tileId = perm[pos];
+    if(tileId===-1) { tiles.push(null); continue; } // empty slot
+    
+    const t = document.createElement('div');
+    const homeRow = Math.floor(tileId/G), homeCol = tileId%G;
+    const curRow = Math.floor(pos/G), curCol = pos%G;
+    
+    // Each tile shows a piece of the "photo" using gradient
+    const c1 = IMG_COLORS[homeRow][homeCol];
+    const c2Row = Math.min(homeRow+1,G-1);
+    const c2 = IMG_COLORS[c2Row][Math.min(homeCol+1,G-1)];
+    
+    t.style.cssText = 'position:absolute;width:'+tileSize+'%;height:'+tileSize+'%;border-radius:4px;transition:left 0.25s cubic-bezier(.25,.1,.25,1),top 0.25s cubic-bezier(.25,.1,.25,1);overflow:hidden;box-sizing:border-box;border:1px solid rgba(255,255,255,0.08);cursor:pointer;';
+    t.style.left = (curCol*tileSize)+'%';
+    t.style.top = (curRow*tileSize)+'%';
+    t.style.background = 'linear-gradient(150deg,'+c1+' 0%,'+c2+' 100%)';
+    
+    // Tile number overlay (subtle)
+    const num = document.createElement('div');
+    num.style.cssText = 'position:absolute;top:2px;left:3px;font-size:9px;color:rgba(255,255,255,0.35);font-weight:700;';
+    num.textContent = (tileId+1);
+    t.appendChild(num);
+    
+    // Glass shine
+    const shine = document.createElement('div');
+    shine.style.cssText='position:absolute;top:0;left:0;width:100%;height:40%;background:linear-gradient(180deg,rgba(255,255,255,0.12),transparent);pointer-events:none;';
+    t.appendChild(shine);
+    
+    gridWrap.appendChild(t);
+    tiles.push({el:t, id:tileId, pos:pos});
+  }
+  scene.appendChild(gridWrap);
+  
+  // Goal preview (küçük hedef resim)
+  const goalWrap = document.createElement('div');
+  goalWrap.style.cssText='display:flex;align-items:center;gap:8px;width:100%;margin-top:2px;';
+  const goalLabel = document.createElement('span');
+  goalLabel.style.cssText='font-size:11px;color:rgba(255,255,255,0.3);font-weight:600;';
+  goalLabel.textContent='Hedef 👑';
+  goalWrap.appendChild(goalLabel);
+  // Mini goal grid
+  const goalGrid = document.createElement('div');
+  goalGrid.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:1px;width:48px;height:48px;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);';
+  for(let r=0;r<G;r++) for(let c=0;c<G;c++){
+    const gc = document.createElement('div');
+    const c1=IMG_COLORS[r][c], c2=IMG_COLORS[Math.min(r+1,G-1)][Math.min(c+1,G-1)];
+    gc.style.cssText='background:linear-gradient(150deg,'+c1+','+c2+');';
+    goalGrid.appendChild(gc);
+  }
+  goalWrap.appendChild(goalGrid);
+  // Moves + time
+  const info = document.createElement('span');
+  info.style.cssText='font-size:11px;color:rgba(255,255,255,0.25);margin-left:auto;';
+  info.textContent='📌 Kaydır & Tamamla';
+  goalWrap.appendChild(info);
+  scene.appendChild(goalWrap);
   el.appendChild(scene);
   
-  let step=0, placed=0;
+  let step=0, moves=0, seconds=0;
+  
+  function slideTile(){
+    // Find tiles adjacent to empty
+    const eRow=Math.floor(emptyPos/G), eCol=emptyPos%G;
+    const neighbors=[];
+    if(eRow>0) neighbors.push(emptyPos-G); // up
+    if(eRow<G-1) neighbors.push(emptyPos+G); // down
+    if(eCol>0) neighbors.push(emptyPos-1); // left
+    if(eCol<G-1) neighbors.push(emptyPos+1); // right
+    
+    // Pick random neighbor
+    const fromPos = neighbors[Math.floor(Math.random()*neighbors.length)];
+    const tile = tiles.find(t=>t&&t.pos===fromPos);
+    if(!tile) return;
+    
+    // Slide tile to empty position
+    const toRow=Math.floor(emptyPos/G), toCol=emptyPos%G;
+    tile.el.style.left = (toCol*tileSize)+'%';
+    tile.el.style.top = (toRow*tileSize)+'%';
+    
+    // Update state
+    tile.pos = emptyPos;
+    emptyPos = fromPos;
+    moves++;
+    
+    // Flash green if tile is in correct position
+    if(tile.pos === tile.id){
+      tile.el.style.boxShadow='0 0 12px rgba(34,197,94,0.6),inset 0 0 8px rgba(34,197,94,0.2)';
+      setTimeout(()=>{tile.el.style.boxShadow='none';},600);
+    }
+    
+    // Update header
+    const movesEl = header.querySelector('#sl-moves') || header.children[1];
+    if(movesEl) movesEl.textContent='Hamle: '+moves;
+  }
+  
   function drawFn(){
     step++;
-    // Reveal hidden card every ~2.5s
-    if(step%75===0){
-      const hdn=cards.filter(c=>c.dataset.hidden==='1');
-      if(hdn.length>0){
-        const c=hdn[Math.floor(Math.random()*hdn.length)];
-        c.style.animation='_jigFlip 0.5s ease';
-        setTimeout(()=>{
-          c.textContent=c.dataset.icon;
-          c.style.background=c.dataset.bg;
-          c.style.border='1px solid rgba(255,255,255,0.1)';
-          c.dataset.hidden='0';
-          c.style.animation='_jigSnap 0.3s ease';
-          placed++;
-          header.children[1].textContent=placed+'/16 yerleşti';
-        },250);
-      }
-    }
-    // Swap two visible cards every ~3s
-    if(step%90===0){
-      const vis=cards.filter(c=>c.dataset.hidden==='0');
-      if(vis.length>=2){
-        const a=vis[Math.floor(Math.random()*vis.length)];
-        let b=vis[Math.floor(Math.random()*vis.length)];
-        if(b===a) b=vis[(vis.indexOf(a)+1)%vis.length];
-        a.style.transform='scale(0.7) rotate(5deg)';
-        b.style.transform='scale(0.7) rotate(-5deg)';
-        setTimeout(()=>{
-          const tmpT=a.textContent,tmpBg=a.style.background;
-          a.textContent=b.textContent;a.style.background=b.style.background;
-          b.textContent=tmpT;b.style.background=tmpBg;
-          a.style.transform='scale(1) rotate(0)';
-          b.style.transform='scale(1) rotate(0)';
-          a.style.animation='_jigSnap 0.3s ease';
-        },350);
-      }
-    }
-    // Reset cycle
-    if(step>600){
-      step=0;placed=0;
-      header.children[1].textContent='0/16 yerleşti';
-      cards.forEach((c,i)=>{
-        const piece=PIECES[order[i]];
-        if(Math.random()<0.35){
-          c.style.background='linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))';
-          c.style.border='1px dashed rgba(255,255,255,0.15)';
-          c.textContent='❓';c.dataset.hidden='1';c.dataset.icon=piece.icon;c.dataset.bg=piece.bg;
-        }
-      });
+    // Slide a tile every ~1.2s
+    if(step%36===0) slideTile();
+    // Update timer every ~1s
+    if(step%30===0){
+      seconds++;
+      const m=Math.floor(seconds/60), s=seconds%60;
+      header.children[2].textContent='⏱ '+m+':'+(s<10?'0':'')+s;
     }
   }
   _demoLoop(state,drawFn);
