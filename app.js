@@ -487,37 +487,48 @@ function renderDailyRewards() {
 }
 
 function renderFavorites() {
-  const container = document.getElementById('fav-games');
-  if (!container) return;
-  const favIds = typeof getFavorites === 'function' ? getFavorites() : [];
+  // Favori ID'leri al
+  let favIds = [];
+  try { favIds = JSON.parse(localStorage.getItem('gh_fav')||'[]'); } catch(e){}
   
-  // Map fav IDs to PUZZLE_GAMES
-  const favGames = PUZZLE_GAMES.filter(g => {
-    // Check if game name or ID matches a favorite
-    return favIds.some(fid => {
-      const gmap = Object.entries(typeof GAME_MAP !== 'undefined' ? GAME_MAP : {});
-      return gmap.some(([name, id]) => id === fid && name === g.name) || fid === g.name;
-    });
-  });
+  // REEL_GAMES'den bilgileri çek
+  const favGames = favIds.map(id => {
+    if (window.REEL_GAMES) {
+      const rg = REEL_GAMES.find(r => r.id === id);
+      if (rg) return { id:rg.id, name:rg.name, emoji:rg.emoji, gradient:rg.gradient };
+    }
+    return null;
+  }).filter(Boolean);
   
-  if (favGames.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center;padding:20px 16px;color:#9a9ab0;font-size:14px;">
-        <div style="font-size:32px;margin-bottom:8px;">💫</div>
-        <div>Henüz favori oyunun yok!</div>
-        <div style="margin-top:6px;color:#c084fc;font-size:13px;cursor:pointer" onclick="switchTab('discover')">
-          Keşfet'e git ve ❤️ ile favorile →
-        </div>
-      </div>`;
-    return;
-  }
+  const emptyHTML = `
+    <div style="text-align:center;padding:14px 12px;color:#9a9ab0;font-size:13px;">
+      <span style="font-size:20px;">💫</span>
+      <div style="margin-top:4px;">Henüz favori oyunun yok</div>
+      <div style="margin-top:4px;color:#c084fc;font-size:12px;cursor:pointer" onclick="switchTab('discover')">
+        Keşfet'e git ve ❤️ ile favorile →
+      </div>
+    </div>`;
   
-  container.innerHTML = favGames.map((g, i) => `
-    <div class="fav-card anim-in" style="animation-delay:${i*60}ms;background:${g.bg}" onclick="playGame('${g.name}')">
-      <span class="fav-emoji">${g.emoji}</span>
-      <span class="fav-name">${g.name}</span>
+  const badgeHTML = favGames.map((g, i) => `
+    <div class="fav-badge anim-in" style="animation-delay:${i*40}ms" onclick="switchTab('discover')">
+      <span class="fav-badge-emoji" style="background:linear-gradient(135deg,${g.gradient[0]},${g.gradient[1]})">${g.emoji}</span>
+      <span class="fav-badge-name">${g.name}</span>
     </div>
   `).join('');
+  
+  // Anasayfa container (fav-games)
+  const homeContainer = document.getElementById('fav-games');
+  if (homeContainer) {
+    homeContainer.innerHTML = favGames.length === 0 ? emptyHTML : badgeHTML;
+  }
+  
+  // Profil container (fav-games-list)
+  const profileContainer = document.getElementById('fav-games-list');
+  if (profileContainer) {
+    profileContainer.innerHTML = favGames.length === 0
+      ? '<p style="color:var(--text-muted);text-align:center;padding:12px;font-size:13px">❤️ Keşfet ekranından favorilere ekle!</p>'
+      : badgeHTML;
+  }
 }
 
 // ==================== RENDER: GÖREVLER ====================
@@ -586,35 +597,8 @@ function renderSettings() {
   `).join('');
 }
 
-function renderFavorites() {
-  const container = document.getElementById('fav-games-list');
-  if (!container) return;
-  let favIds = [];
-  try { favIds = JSON.parse(localStorage.getItem('gh_fav')||'[]'); } catch(e){}
-  if (favIds.length === 0) {
-    container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;font-size:14px">❤️ Keşfet ekranından oyunları favorilere ekle!</p>';
-    return;
-  }
-  const favGames = favIds.map(id => {
-    if (window.REEL_GAMES) {
-      const rg = REEL_GAMES.find(r => r.id === id);
-      if (rg) return { name:rg.name, emoji:rg.emoji, bg:`linear-gradient(135deg,${rg.gradient[0]},${rg.gradient[1]})`, desc:rg.desc };
-    }
-    return null;
-  }).filter(Boolean);
-  container.innerHTML = favGames.map((g,i) => `
-    <div class="game-card anim-in" style="animation-delay:${i*50}ms">
-      <div class="game-card-visual" style="background:${g.bg}">
-        <span class="game-emoji">${g.emoji}</span>
-      </div>
-      <div class="game-card-info">
-        <span class="game-card-name">${g.name}</span>
-        <span class="game-card-desc">${g.desc}</span>
-        <button class="game-play-btn" onclick="playGame('${g.name}')">▶ Oyna</button>
-      </div>
-    </div>
-  `).join('');
-}
+// renderFavorites() zaten yukarıda tek bir fonksiyon olarak tanımlandı
+// Hem anasayfa hem profil container'ı aynı anda dolduruyor
 
 // ==================== OYUN MOTORU ====================
 
