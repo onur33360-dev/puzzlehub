@@ -416,6 +416,8 @@ function switchTab(tabName) {
   const screenId = 'screen-' + tabName;
   showScreen(screenId);
   currentTab = tabName;
+  // UI ses efekti
+  if (typeof GameAudio !== 'undefined') { GameAudio.play('tab'); GameAudio.haptic('micro'); }
 
   // Tab tabanlı render
   if (tabName === 'discover') {
@@ -642,6 +644,9 @@ function playGame(name) {
   const container = document.getElementById('game-container');
   container.innerHTML = '';
   GameAudio.startMusic();
+  GameAudio.setIntensity(1); // Oyun modu — beat katmanı aktif
+  GameAudio.play('bloom');
+  GameAudio.haptic('soft');
   // Ses buton durumları
   const btnS = document.getElementById('btn-sound');
   const btnM = document.getElementById('btn-music');
@@ -713,6 +718,7 @@ function exitGame() {
     PuzzleGames[_currentGameId].cleanup();
   }
   GameAudio.stopMusic();
+  GameAudio.play('transition');
   _currentGameId = null;
 
   document.getElementById('game-container').innerHTML = '';
@@ -754,6 +760,7 @@ function showToast(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
   toast.classList.add('show');
+  if (typeof GameAudio !== 'undefined') GameAudio.play('toast');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
 }
@@ -777,5 +784,14 @@ function showToast(msg) {
   // Update eco-streak
   const ecoStreak = document.getElementById('eco-streak');
   if (ecoStreak) ecoStreak.textContent = streakCount || '0';
+
+  // Uygulama açılış sesi — soft bloom
+  document.addEventListener('click', function _firstTouch() {
+    if (typeof GameAudio !== 'undefined') {
+      GameAudio.play('bloom');
+      GameAudio.startMusic();
+    }
+    document.removeEventListener('click', _firstTouch);
+  }, { once: true });
 })();
 

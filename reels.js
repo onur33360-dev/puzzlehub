@@ -1383,6 +1383,10 @@ window.ReelsEngine = (function() {
       _recordInteraction(game.id, 'fav');
       favBtn.className = 'reel-action-btn'+(isNow?' fav-active':'');
       favBtn.querySelector('.act-icon').textContent = isNow?'❤️':'🤍';
+      if (typeof GameAudio !== 'undefined') {
+        GameAudio.play(isNow ? 'favorite' : 'unfavorite');
+        GameAudio.haptic(isNow ? 'favorite' : 'micro');
+      }
       if(typeof showToast==='function') showToast(isNow?'❤️ Favorilere eklendi':'💔 Favorilerden çıkarıldı');
     });
     actions.appendChild(favBtn);
@@ -1501,6 +1505,8 @@ window.ReelsEngine = (function() {
             item.active = true;
             card.style.willChange = 'transform';
             _startDemo(item);
+            // Reels kaydırma sesi
+            if (typeof GameAudio !== 'undefined') { GameAudio.play('swipe'); GameAudio.haptic('swipe'); }
           }
         } else {
           if (item.active) {

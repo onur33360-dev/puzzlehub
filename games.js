@@ -5,161 +5,648 @@
 
 const PuzzleGames = {};
 
-// ═══════════════════════════════════════════
-//  GLOBAL SES & TİTREŞİM SİSTEMİ
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  GAMEHUP AUDIO ENGINE v2.0 — Premium Ses & Geri Bildirim
+//  Lo-fi Ambient Synth + 30+ SFX + Adaptif Müzik + Haptic
+// ═══════════════════════════════════════════════════════════════
 const GameAudio = (() => {
   let ctx = null;
+  let masterGain = null;
+  let sfxGain = null;
   let musicGain = null;
-  let musicOscs = [];
+  let reverbNode = null;
+  let reverbGain = null;
+  let noiseBuffer = null;
+
+  // Müzik katmanları
+  let musicLayers = { pad:null, beat:null, arp:null, melody:null };
   let musicPlaying = false;
+  let musicIntensity = 0; // 0=ambient, 1=+beat, 2=+arp, 3=+melody
+  let beatInterval = null;
+  let arpInterval = null;
+  let melodyInterval = null;
+
+  // Ayarlar
   let muted = JSON.parse(localStorage.getItem('gh_muted') || 'false');
   let musicMuted = JSON.parse(localStorage.getItem('gh_music_muted') || 'false');
 
+  // ───── CORE: AudioContext ─────
   function getCtx() {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Master chain: sfx/music → master → destination
+      masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.8, ctx.currentTime);
+      masterGain.connect(ctx.destination);
+
+      sfxGain = ctx.createGain();
+      sfxGain.gain.setValueAtTime(0.7, ctx.currentTime);
+      sfxGain.connect(masterGain);
+
+      musicGain = ctx.createGain();
+      musicGain.gain.setValueAtTime(0, ctx.currentTime);
+      musicGain.connect(masterGain);
+
+      // Reverb send
+      reverbGain = ctx.createGain();
+      reverbGain.gain.setValueAtTime(0.15, ctx.currentTime);
+      _createReverb();
+      reverbGain.connect(masterGain);
+
+      // Noise buffer (1s white noise)
+      _createNoiseBuffer();
+    }
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;
   }
 
-  // ───── HAFİF TİTREŞİM ─────
-  function haptic(ms) {
-    if (muted) return;
-    try { navigator.vibrate && navigator.vibrate(ms || 8); } catch(e) {}
+  // ───── REVERB: Sentetik impulse response ─────
+  function _createReverb() {
+    const c = getCtx();
+    const len = c.sampleRate * 1.5; // 1.5s reverb
+    const buf = c.createBuffer(2, len, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+      }
+    }
+    reverbNode = c.createConvolver();
+    reverbNode.buffer = buf;
+    reverbNode.connect(reverbGain);
   }
 
-  // ───── SES EFEKTLERİ ─────
+  // ───── NOISE: White noise buffer ─────
+  function _createNoiseBuffer() {
+    const c = getCtx();
+    const len = c.sampleRate * 2;
+    noiseBuffer = c.createBuffer(1, len, c.sampleRate);
+    const d = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  // ───── HELPERS ─────
+  function _osc(type, freq, dur, vol, start, dest) {
+    const c = getCtx(), t = c.currentTime + start;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.connect(g);
+    g.connect(dest || sfxGain);
+    if (typeof freq === 'number') {
+      o.frequency.setValueAtTime(freq, t);
+    } else {
+      o.frequency.setValueAtTime(freq[0], t);
+      if (freq.length === 2) o.frequency.exponentialRampToValueAtTime(Math.max(freq[1], 20), t + dur);
+      if (freq.length === 3) {
+        o.frequency.linearRampToValueAtTime(freq[1], t + dur * 0.5);
+        o.frequency.linearRampToValueAtTime(freq[2], t + dur);
+      }
+    }
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.start(t);
+    o.stop(t + dur + 0.01);
+    return { osc: o, gain: g };
+  }
+
+  function _noise(dur, vol, start, filterFreq, filterQ) {
+    const c = getCtx(), t = c.currentTime + start;
+    const src = c.createBufferSource();
+    src.buffer = noiseBuffer;
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    if (filterFreq) {
+      const f = c.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.setValueAtTime(filterFreq, t);
+      f.Q.setValueAtTime(filterQ || 1, t);
+      src.connect(f);
+      f.connect(g);
+    } else {
+      src.connect(g);
+    }
+    g.connect(sfxGain);
+    src.start(t);
+    src.stop(t + dur + 0.01);
+  }
+
+  function _chime(notes, dur, vol, gap, dest) {
+    notes.forEach((f, i) => _osc('sine', f, dur, vol * (1 - i * 0.02), i * gap, dest));
+  }
+
+  function _withReverb(fn) {
+    fn(reverbNode);
+  }
+
+  // ═══════════════════════════════════════════
+  //  SES EFEKTLERİ — 30+ Premium SFX
+  // ═══════════════════════════════════════════
+  const SFX = {
+    // ─── UI Sesleri ───
+    tab: () => {
+      _osc('sine', [420, 630], 0.06, 0.08, 0);
+      _noise(0.03, 0.02, 0, 4000, 2);
+    },
+    button: () => {
+      _osc('sine', 520, 0.025, 0.06, 0);
+      _osc('triangle', 780, 0.02, 0.03, 0.005);
+    },
+    favorite: () => {
+      _osc('sine', 880, 0.12, 0.1, 0);
+      _osc('sine', 1108, 0.12, 0.08, 0.04);
+      _osc('sine', 1318, 0.15, 0.07, 0.08);
+      _osc('triangle', [660, 1760], 0.2, 0.04, 0.02);
+    },
+    unfavorite: () => {
+      _osc('sine', [660, 380], 0.12, 0.06, 0);
+      _osc('triangle', [440, 280], 0.1, 0.04, 0.02);
+    },
+    toast: () => {
+      _osc('sine', 880, 0.18, 0.07, 0);
+      _osc('triangle', 1320, 0.12, 0.04, 0.03);
+    },
+    transition: () => {
+      _noise(0.15, 0.04, 0, 2000, 0.5);
+      _osc('sine', [300, 600], 0.12, 0.03, 0);
+    },
+    settings: () => {
+      _osc('sine', [380, 420], 0.08, 0.05, 0);
+      _osc('triangle', 560, 0.06, 0.03, 0.02);
+    },
+
+    // ─── Oyun İçi Temel ───
+    tap: () => {
+      _osc('sine', [380, 520], 0.05, 0.08, 0);
+      _osc('triangle', 760, 0.03, 0.03, 0.01);
+    },
+    place: () => {
+      _osc('sine', [280, 100], 0.1, 0.12, 0);
+      _noise(0.04, 0.06, 0, 800, 3);
+      _osc('triangle', 180, 0.06, 0.05, 0.02);
+    },
+    merge: () => {
+      _osc('sine', [400, 680], 0.12, 0.13, 0);
+      _osc('triangle', [320, 560], 0.1, 0.07, 0.015);
+      _osc('sine', 880, 0.08, 0.04, 0.06);
+    },
+    match: () => {
+      [523, 659, 784].forEach((f, i) => {
+        _osc('sine', f, 0.22, 0.12, i * 0.04);
+        _osc('triangle', f * 2, 0.15, 0.03, i * 0.04 + 0.01);
+      });
+    },
+    clear: () => {
+      [523, 659, 784, 1047].forEach((f, i) => {
+        _osc('sine', f, 0.28, 0.1, i * 0.04);
+        _osc('triangle', f * 1.5, 0.2, 0.03, i * 0.04);
+      });
+      _noise(0.15, 0.04, 0.08, 3000, 1);
+    },
+    flip: () => {
+      _osc('sine', [220, 440], 0.06, 0.07, 0);
+      _osc('triangle', [330, 550], 0.05, 0.04, 0.01);
+      _noise(0.03, 0.02, 0, 5000, 3);
+    },
+    error: () => {
+      _osc('sawtooth', [280, 160], 0.14, 0.07, 0);
+      _osc('sine', [220, 140], 0.12, 0.05, 0.02);
+    },
+    step: () => {
+      _osc('sine', 300, 0.03, 0.04, 0);
+      _osc('triangle', 450, 0.02, 0.02, 0.005);
+    },
+    unscrew: () => {
+      _osc('sine', [620, 220], 0.12, 0.12, 0);
+      _osc('triangle', [480, 180], 0.1, 0.07, 0.015);
+      _osc('square', [800, 200], 0.06, 0.02, 0.03);
+    },
+    board: () => {
+      _osc('sine', [200, 80], 0.25, 0.1, 0);
+      _osc('triangle', 110, 0.15, 0.06, 0.05);
+      _noise(0.1, 0.03, 0, 400, 2);
+    },
+    slide: () => {
+      _osc('sine', [350, 500, 350], 0.18, 0.06, 0);
+      _osc('triangle', [250, 400], 0.12, 0.03, 0.02);
+    },
+    pour: () => {
+      _osc('sine', [500, 300, 420], 0.25, 0.08, 0);
+      _osc('triangle', [400, 250, 380], 0.2, 0.04, 0.03);
+      _noise(0.15, 0.02, 0.05, 1200, 0.8);
+    },
+    snap: () => {
+      _osc('sine', [600, 800], 0.04, 0.1, 0);
+      _noise(0.02, 0.05, 0, 6000, 5);
+    },
+
+    // ─── Reels Sesleri ───
+    swipe: () => {
+      _noise(0.12, 0.03, 0, 2500, 0.8);
+      _osc('sine', [250, 500], 0.08, 0.02, 0);
+    },
+    cardFlip: () => {
+      _noise(0.06, 0.04, 0, 3000, 2);
+      _osc('triangle', [400, 600], 0.05, 0.03, 0.01);
+    },
+
+    // ─── Ödül & Başarı ───
+    combo2: () => {
+      _osc('sine', 659, 0.15, 0.1, 0);
+      _osc('sine', 784, 0.15, 0.1, 0.06);
+    },
+    combo3: () => {
+      [659, 784, 988].forEach((f, i) => _osc('sine', f, 0.18, 0.1, i * 0.05));
+      _osc('triangle', [800, 1600], 0.15, 0.03, 0.08);
+    },
+    combo5: () => {
+      [523, 659, 784, 988, 1175].forEach((f, i) => {
+        _osc('sine', f, 0.22, 0.09, i * 0.04);
+        _osc('triangle', f * 1.5, 0.15, 0.02, i * 0.04 + 0.01);
+      });
+      _noise(0.2, 0.03, 0.1, 4000, 1.5);
+    },
+    combo8: () => {
+      [523, 587, 659, 784, 880, 988, 1175, 1319].forEach((f, i) => {
+        _osc('sine', f, 0.3, 0.08, i * 0.035);
+        _osc('triangle', f * 2, 0.2, 0.025, i * 0.035);
+      });
+      _noise(0.3, 0.04, 0.05, 5000, 1);
+      _osc('sine', [1319, 2637], 0.4, 0.04, 0.2);
+    },
+    combo: () => { SFX.combo3(); }, // alias
+    win: () => {
+      // Epic victory fanfare
+      const notes = [523, 659, 784, 1047, 1319];
+      notes.forEach((f, i) => {
+        _osc('sine', f, 0.4, 0.11, i * 0.07);
+        _osc('triangle', f * 2, 0.3, 0.04, i * 0.07 + 0.02);
+      });
+      // Shimmer tail
+      _osc('sine', [1319, 2637], 0.6, 0.04, 0.3);
+      _osc('triangle', [2637, 1319], 0.5, 0.03, 0.35);
+      _noise(0.4, 0.03, 0.2, 6000, 1.5);
+    },
+    lose: () => {
+      _osc('sawtooth', [350, 60], 0.5, 0.08, 0);
+      _osc('sine', [280, 70], 0.4, 0.06, 0.08);
+      _osc('triangle', [200, 50], 0.35, 0.04, 0.12);
+    },
+    star: () => {
+      _osc('sine', 1047, 0.2, 0.1, 0);
+      _osc('triangle', 1568, 0.15, 0.06, 0.05);
+      _osc('sine', [1568, 2093], 0.25, 0.04, 0.1);
+    },
+    scoreTick: () => {
+      _osc('sine', 1200, 0.02, 0.04, 0);
+    },
+    record: () => {
+      // Epic record-breaking fanfare
+      const notes = [523, 659, 784, 988, 1175, 1319, 1568];
+      notes.forEach((f, i) => {
+        _osc('sine', f, 0.35, 0.09, i * 0.05);
+        _osc('triangle', f * 1.5, 0.25, 0.03, i * 0.05);
+      });
+      _noise(0.5, 0.04, 0.15, 5000, 1.2);
+      _osc('sine', [1568, 3136], 0.6, 0.04, 0.3);
+    },
+    mission: () => {
+      [784, 988, 1175, 1319].forEach((f, i) => _osc('sine', f, 0.25, 0.09, i * 0.06));
+      _osc('triangle', [988, 1976], 0.3, 0.04, 0.15);
+    },
+    diamond: () => {
+      // Crystal bling
+      [1568, 1976, 2349, 2637].forEach((f, i) => {
+        _osc('sine', f, 0.2, 0.07, i * 0.04);
+        _osc('triangle', f * 0.5, 0.15, 0.03, i * 0.04);
+      });
+      _noise(0.15, 0.02, 0.08, 8000, 3);
+    },
+    premium: () => {
+      // Luxury unlock cascade
+      [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
+        _osc('sine', f, 0.3, 0.08, i * 0.06);
+        _osc('triangle', f * 2, 0.2, 0.03, i * 0.06 + 0.02);
+      });
+      _osc('sine', [1568, 3136], 0.8, 0.04, 0.3);
+      _noise(0.5, 0.03, 0.2, 6000, 1.5);
+    },
+    bloom: () => {
+      // App open sound — soft magical bloom
+      _osc('sine', [220, 330], 0.4, 0.05, 0);
+      _osc('triangle', [330, 440], 0.35, 0.03, 0.1);
+      _osc('sine', [440, 523], 0.3, 0.04, 0.2);
+      _osc('sine', 659, 0.4, 0.03, 0.3);
+    },
+  };
+
+  // ═══════════════════════════════════════════
+  //  PLAY — Ses efekti çal
+  // ═══════════════════════════════════════════
   function play(type) {
     if (muted) return;
     try {
-      const c = getCtx(), t = c.currentTime;
-      const mk = (tp, freq, dur, vol, start) => {
-        const o = c.createOscillator(), g = c.createGain();
-        o.type = tp; o.connect(g); g.connect(c.destination);
-        if (typeof freq === 'number') o.frequency.setValueAtTime(freq, t + start);
-        else { o.frequency.setValueAtTime(freq[0], t + start); o.frequency.exponentialRampToValueAtTime(freq[1], t + start + dur); }
-        g.gain.setValueAtTime(vol, t + start);
-        g.gain.exponentialRampToValueAtTime(0.001, t + start + dur);
-        o.start(t + start); o.stop(t + start + dur);
-      };
-      switch (type) {
-        case 'tap':
-          mk('sine', [300, 500], 0.06, 0.1, 0);
-          break;
-        case 'merge':
-          mk('sine', [400, 600], 0.1, 0.15, 0);
-          mk('triangle', [300, 500], 0.08, 0.08, 0.02);
-          break;
-        case 'match':
-          [523, 659, 784].forEach((f, i) => mk('sine', f, 0.2, 0.14, i * 0.04));
-          break;
-        case 'clear':
-          [523, 659, 784, 1047].forEach((f, i) => mk('sine', f, 0.25, 0.12, i * 0.04));
-          mk('triangle', [200, 800], 0.2, 0.06, 0.05);
-          break;
-        case 'place':
-          mk('sine', [350, 120], 0.1, 0.12, 0);
-          break;
-        case 'flip':
-          mk('sine', [200, 400], 0.06, 0.08, 0);
-          break;
-        case 'error':
-          mk('sawtooth', [300, 150], 0.15, 0.1, 0);
-          break;
-        case 'step':
-          mk('sine', 280, 0.03, 0.05, 0);
-          break;
-        case 'win':
-          [523, 659, 784, 1047, 1319].forEach((f, i) => mk('sine', f, 0.35, 0.13, i * 0.06));
-          mk('triangle', [300, 1200], 0.3, 0.06, 0.05);
-          break;
-        case 'lose':
-          mk('sawtooth', [350, 60], 0.55, 0.12, 0);
-          mk('sine', [250, 70], 0.4, 0.08, 0.1);
-          break;
-        case 'unscrew':
-          mk('sine', [600, 200], 0.12, 0.15, 0);
-          mk('triangle', [400, 150], 0.08, 0.1, 0.02);
-          break;
-        case 'board':
-          mk('sine', [200, 80], 0.25, 0.14, 0);
-          mk('triangle', 100, 0.12, 0.08, 0.08);
-          break;
-        case 'combo':
-          [523, 659, 784, 988, 1175].forEach((f, i) => mk('sine', f, 0.35, 0.1, i * 0.03));
-          break;
-      }
+      getCtx();
+      if (SFX[type]) SFX[type]();
     } catch (e) {}
   }
 
-  // ───── ARKA PLAN MÜZİĞİ ─────
-  // Soft ambient loop — düşük volüm, rahatlatıcı
+  // ═══════════════════════════════════════════
+  //  HAPTIC — Pattern-based titreşim
+  // ═══════════════════════════════════════════
+  const HAPTIC_PATTERNS = {
+    micro:     [5],
+    tap:       [5],
+    soft:      [8],
+    match:     [5, 30, 12],
+    combo3:    [5, 20, 5, 20, 8],
+    combo5:    [3, 15, 3, 15, 3, 15, 5, 15, 10],
+    win:       [10, 50, 15, 50, 20],
+    error:     [3, 80, 3],
+    swipe:     [3],
+    favorite:  [5, 30, 8],
+    star:      [8, 40, 5, 40, 12],
+    record:    [10, 30, 10, 30, 10, 30, 20],
+    diamond:   [5, 20, 5, 20, 12],
+  };
+
+  function haptic(patternOrMs) {
+    if (muted) return;
+    try {
+      if (!navigator.vibrate) return;
+      if (typeof patternOrMs === 'string') {
+        navigator.vibrate(HAPTIC_PATTERNS[patternOrMs] || [5]);
+      } else if (Array.isArray(patternOrMs)) {
+        navigator.vibrate(patternOrMs);
+      } else {
+        navigator.vibrate(patternOrMs || 5);
+      }
+    } catch(e) {}
+  }
+
+  // ═══════════════════════════════════════════
+  //  MÜZİK SİSTEMİ — Adaptif Katmanlı Lo-fi
+  // ═══════════════════════════════════════════
+
+  // Lo-fi pad: Detuned sine akorları + LFO
+  function _startPad() {
+    const c = getCtx();
+    const padGain = c.createGain();
+    padGain.gain.setValueAtTime(0.3, c.currentTime);
+    padGain.connect(musicGain);
+
+    // Cmaj9 → Am11 → Fmaj9 → Gsus4 — daha zengin akorlar
+    const chords = [
+      [130.81, 164.81, 196.00, 246.94, 293.66],  // Cmaj9
+      [110.00, 130.81, 164.81, 196.00, 246.94],  // Am11
+      [87.31, 110.00, 130.81, 164.81, 220.00],   // Fmaj9
+      [98.00, 130.81, 146.83, 196.00, 261.63],   // Gsus4
+    ];
+
+    let chordIdx = 0;
+    const oscs = [];
+
+    for (let i = 0; i < 5; i++) {
+      const o = c.createOscillator();
+      const g = c.createGain();
+      // Alternate sine/triangle for warmth
+      o.type = i % 2 === 0 ? 'sine' : 'triangle';
+      o.frequency.setValueAtTime(chords[0][i], c.currentTime);
+      // Slight detune for lo-fi width
+      o.detune.setValueAtTime((i - 2) * 6, c.currentTime);
+      g.gain.setValueAtTime(i < 3 ? 0.2 : 0.1, c.currentTime);
+      o.connect(g);
+      g.connect(padGain);
+      // Send to reverb too
+      const revSend = c.createGain();
+      revSend.gain.setValueAtTime(0.08, c.currentTime);
+      o.connect(revSend);
+      if (reverbNode) revSend.connect(reverbNode);
+      o.start();
+      oscs.push({ osc: o, gain: g });
+    }
+
+    // LFO for subtle volume movement
+    const lfo = c.createOscillator();
+    const lfoG = c.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(0.12, c.currentTime);
+    lfoG.gain.setValueAtTime(0.015, c.currentTime);
+    lfo.connect(lfoG);
+    lfoG.connect(padGain.gain);
+    lfo.start();
+
+    // Chord change every 5s
+    const chordTimer = setInterval(() => {
+      if (!musicPlaying) return;
+      chordIdx = (chordIdx + 1) % chords.length;
+      const t = c.currentTime;
+      oscs.forEach((o, i) => {
+        o.osc.frequency.linearRampToValueAtTime(chords[chordIdx][i], t + 2);
+      });
+    }, 5000);
+
+    musicLayers.pad = { oscs: oscs.map(o => o.osc).concat([lfo]), gain: padGain, timer: chordTimer };
+  }
+
+  // Lo-fi beat: Kick + Hihat sentez
+  function _startBeat() {
+    const c = getCtx();
+    const beatGain = c.createGain();
+    beatGain.gain.setValueAtTime(0, c.currentTime);
+    beatGain.connect(musicGain);
+
+    const bpm = 82;
+    const stepMs = (60 / bpm / 2) * 1000; // 8th note
+
+    let beatStep = 0;
+    const timer = setInterval(() => {
+      if (!musicPlaying) return;
+      const t = c.currentTime;
+      const s = beatStep % 8;
+
+      // Kick on 1 and 5
+      if (s === 0 || s === 4) {
+        const ko = c.createOscillator();
+        const kg = c.createGain();
+        ko.type = 'sine';
+        ko.frequency.setValueAtTime(150, t);
+        ko.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+        kg.gain.setValueAtTime(0.2, t);
+        kg.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        ko.connect(kg);
+        kg.connect(beatGain);
+        ko.start(t);
+        ko.stop(t + 0.25);
+      }
+
+      // Hihat on every step (softer on off-beats)
+      const hSrc = c.createBufferSource();
+      hSrc.buffer = noiseBuffer;
+      const hF = c.createBiquadFilter();
+      hF.type = 'highpass';
+      hF.frequency.setValueAtTime(8000, t);
+      const hG = c.createGain();
+      const vol = (s % 2 === 0) ? 0.06 : 0.03;
+      hG.gain.setValueAtTime(vol, t);
+      hG.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+      hSrc.connect(hF);
+      hF.connect(hG);
+      hG.connect(beatGain);
+      hSrc.start(t);
+      hSrc.stop(t + 0.05);
+
+      // Snare on 3 and 7
+      if (s === 2 || s === 6) {
+        const snSrc = c.createBufferSource();
+        snSrc.buffer = noiseBuffer;
+        const snF = c.createBiquadFilter();
+        snF.type = 'bandpass';
+        snF.frequency.setValueAtTime(3000, t);
+        snF.Q.setValueAtTime(1, t);
+        const snG = c.createGain();
+        snG.gain.setValueAtTime(0.08, t);
+        snG.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        snSrc.connect(snF);
+        snF.connect(snG);
+        snG.connect(beatGain);
+        snSrc.start(t);
+        snSrc.stop(t + 0.12);
+      }
+
+      beatStep++;
+    }, stepMs);
+
+    musicLayers.beat = { gain: beatGain, timer };
+  }
+
+  // Synth arpeggio layer
+  function _startArp() {
+    const c = getCtx();
+    const arpGain = c.createGain();
+    arpGain.gain.setValueAtTime(0, c.currentTime);
+    arpGain.connect(musicGain);
+
+    // Arp reverb send
+    const arpRev = c.createGain();
+    arpRev.gain.setValueAtTime(0.1, c.currentTime);
+    arpRev.connect(reverbNode);
+
+    const notes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63]; // C E G C' G E
+    let noteIdx = 0;
+    const bpm = 82;
+    const stepMs = (60 / bpm / 4) * 1000; // 16th notes
+
+    const timer = setInterval(() => {
+      if (!musicPlaying) return;
+      const t = c.currentTime;
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(notes[noteIdx % notes.length], t);
+      o.detune.setValueAtTime(Math.random() * 8 - 4, t);
+      g.gain.setValueAtTime(0.08, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      o.connect(g);
+      g.connect(arpGain);
+      g.connect(arpRev);
+      o.start(t);
+      o.stop(t + 0.25);
+      noteIdx++;
+    }, stepMs);
+
+    musicLayers.arp = { gain: arpGain, timer };
+  }
+
+  // Melody fragments layer
+  function _startMelody() {
+    const c = getCtx();
+    const melGain = c.createGain();
+    melGain.gain.setValueAtTime(0, c.currentTime);
+    melGain.connect(musicGain);
+
+    const phrases = [
+      [523, 587, 659, 784, 659],
+      [784, 659, 587, 523, 587],
+      [659, 784, 880, 784, 659],
+      [880, 784, 659, 587, 523],
+    ];
+    let phraseIdx = 0;
+
+    const timer = setInterval(() => {
+      if (!musicPlaying) return;
+      const phrase = phrases[phraseIdx % phrases.length];
+      phrase.forEach((f, i) => {
+        const t = c.currentTime + i * 0.25;
+        const o = c.createOscillator();
+        const g = c.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.05, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        o.connect(g);
+        g.connect(melGain);
+        o.start(t);
+        o.stop(t + 0.4);
+      });
+      phraseIdx++;
+    }, 5000);
+
+    musicLayers.melody = { gain: melGain, timer };
+  }
+
+  // ───── MÜZİK KONTROL ─────
   function startMusic() {
     if (musicMuted || musicPlaying) return;
     try {
       const c = getCtx();
-      musicGain = c.createGain();
       musicGain.gain.setValueAtTime(0, c.currentTime);
-      musicGain.gain.linearRampToValueAtTime(0.04, c.currentTime + 2);
-      musicGain.connect(c.destination);
+      musicGain.gain.linearRampToValueAtTime(0.035, c.currentTime + 2.5);
 
-      // Soft pad akorları — C maj7 → Am7 → F maj7 → G döngüsü
-      const chords = [
-        [261.63, 329.63, 392.00, 493.88],  // Cmaj7
-        [220.00, 261.63, 329.63, 392.00],  // Am7
-        [174.61, 220.00, 261.63, 329.63],  // Fmaj7
-        [196.00, 246.94, 293.66, 392.00],  // G
-      ];
+      _startPad();
+      _startBeat();
+      _startArp();
+      _startMelody();
 
-      let chordIdx = 0;
-      const oscs = [];
-
-      // 4 osilator — her nota için bir tane
-      for (let i = 0; i < 4; i++) {
-        const o = c.createOscillator();
-        const g = c.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(chords[0][i], c.currentTime);
-        g.gain.setValueAtTime(0.25, c.currentTime);
-        o.connect(g);
-        g.connect(musicGain);
-        o.start();
-        oscs.push({ osc: o, gain: g });
-      }
-
-      // Akord değiştirme döngüsü
-      const changeChord = () => {
-        if (!musicPlaying) return;
-        chordIdx = (chordIdx + 1) % chords.length;
-        const t = c.currentTime;
-        oscs.forEach((o, i) => {
-          o.osc.frequency.linearRampToValueAtTime(chords[chordIdx][i], t + 1.5);
-        });
-        setTimeout(changeChord, 4000);
-      };
-      setTimeout(changeChord, 4000);
-
-      // LFO — hafif tremolo
-      const lfo = c.createOscillator();
-      const lfoGain = c.createGain();
-      lfo.type = 'sine';
-      lfo.frequency.setValueAtTime(0.15, c.currentTime);
-      lfoGain.gain.setValueAtTime(0.008, c.currentTime);
-      lfo.connect(lfoGain);
-      lfoGain.connect(musicGain.gain);
-      lfo.start();
-
-      musicOscs = [...oscs.map(o => o.osc), lfo];
       musicPlaying = true;
+      setIntensity(0); // Start ambient only
     } catch (e) {}
   }
 
   function stopMusic() {
-    musicOscs.forEach(o => { try { o.stop(); } catch(e) {} });
-    musicOscs = [];
     musicPlaying = false;
+    Object.values(musicLayers).forEach(layer => {
+      if (!layer) return;
+      if (layer.timer) clearInterval(layer.timer);
+      if (layer.oscs) layer.oscs.forEach(o => { try { o.stop(); } catch(e) {} });
+    });
+    musicLayers = { pad:null, beat:null, arp:null, melody:null };
+    beatInterval = arpInterval = melodyInterval = null;
   }
 
+  // Adaptif yoğunluk: 0=pad only, 1=+beat, 2=+arp, 3=+melody
+  function setIntensity(level) {
+    musicIntensity = Math.max(0, Math.min(3, level));
+    const c = getCtx();
+    const t = c.currentTime;
+    const fade = 1.5; // crossfade süresi
+
+    // Pad always on
+    if (musicLayers.beat && musicLayers.beat.gain) {
+      const target = musicIntensity >= 1 ? 0.18 : 0;
+      musicLayers.beat.gain.gain.linearRampToValueAtTime(target, t + fade);
+    }
+    if (musicLayers.arp && musicLayers.arp.gain) {
+      const target = musicIntensity >= 2 ? 0.12 : 0;
+      musicLayers.arp.gain.gain.linearRampToValueAtTime(target, t + fade);
+    }
+    if (musicLayers.melody && musicLayers.melody.gain) {
+      const target = musicIntensity >= 3 ? 0.08 : 0;
+      musicLayers.melody.gain.gain.linearRampToValueAtTime(target, t + fade);
+    }
+  }
+
+  // ───── TOGGLES ─────
   function toggleMute() {
     muted = !muted;
     localStorage.setItem('gh_muted', JSON.stringify(muted));
@@ -175,7 +662,14 @@ const GameAudio = (() => {
     return musicMuted;
   }
 
-  return { play, haptic, startMusic, stopMusic, toggleMute, toggleMusic, get muted() { return muted; }, get musicMuted() { return musicMuted; } };
+  // ───── PUBLIC API ─────
+  return {
+    play, haptic, startMusic, stopMusic, setIntensity,
+    toggleMute, toggleMusic,
+    get muted() { return muted; },
+    get musicMuted() { return musicMuted; },
+    get intensity() { return musicIntensity; },
+  };
 })();
 
 // ===== YARDIMCI =====
