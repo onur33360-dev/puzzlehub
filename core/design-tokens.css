@@ -45,6 +45,63 @@
   --ph-jewel-7-highlight: #fb923c; --ph-jewel-7-base: #f97316; --ph-jewel-7-shadow: #c2410c; --ph-jewel-7-glow: rgba(249,115,22,.4);
   --ph-jewel-8-highlight: #f472b6; --ph-jewel-8-base: #ec4899; --ph-jewel-8-shadow: #be185d; --ph-jewel-8-glow: rgba(236,72,153,.4);
 
+  /* ── Magic Sahne (§ ortak evren) ──
+     PuzzleHub'ın her oyunu aynı gece göğünün altında geçer. Bu renkler
+     Water Sort'un sahnesinden çıkarıldı ve paylaşıma alındı: oyuncu hangi
+     oyunu açarsa açsın aynı evrende olduğunu buradan anlıyor.
+     DİKKAT: ortak olan GÖKYÜZÜ ve MALZEME; her oyunun kendi "yeri" ve
+     enerjisi buranın ÜSTÜNE kurulur (Water Sort'un ayı/dağları, Block
+     Puzzle'ın kristal patlamaları gibi). Ortak katman asla bir oyunun
+     mekânını içermez — yoksa oyunlar birbirinin kopyası olur. */
+  --ph-night-0: #070B1E;   /* en derin gök (üst) */
+  --ph-night-1: #0E1435;   /* orta */
+  --ph-night-2: #1A1F4D;   /* ufka yakın (alt) */
+  --ph-violet-deep: #4C2A7A;
+  --ph-violet-soft: #6D45A8;
+  --ph-scene-ink: #E8ECFF; /* sahne üstündeki metin */
+
+  /* ── Stone / Engraving Materyali (§13) — ŞU AN KULLANILMIYOR ──
+     AYRILMIŞ: ileriki "Gölge Tapınak" koyu teması için saklanıyor.
+     Sudoku bu materyalle inşa edilmişti; "Ancient Arcane" temasına
+     geçişte tahtanın maddesi taştan PARŞÖMENE döndü (bkz. §13 ve
+     docs/GAMES/SUDOKU.md). Gökyüzü katmanı aynı kaldı — değişen
+     yalnızca tahtanın maddesiydi.
+     Silinmedi çünkü koyu tema varyantı geldiğinde tarif hazır olacak.
+     Bu blok bir yerde tüketilmeye başlanana kadar ölü token'dır;
+     yeni bir oyun buradan renk seçmeden önce §13'ü okumalı.
+
+     Opak, mat, dokulu taş: cam ve kristalin AKSİ — parlama değil,
+     oyulmuş DERİNLİK ve mineral dane ile premium olur. İki içerik
+     alt-biçimi vardı:
+       • engrave (intaglio)  → taşa KAZILI, soluk-serin, kalıcı (ipuçları)
+       • inscribe (ışıyan)   → sokete OTURMUŞ sıcak amber run (oyuncu)
+     UYARI: --ph-engrave-cool taş yüzeyine karşı yalnızca 1.05:1 kontrast
+     veriyordu (WCAG AA büyük metin eşiği 3.0). Bu materyal yeniden
+     kullanılırsa ipucu rengi mutlaka koyulaştırılmalı. */
+  /* Ay ışığıyla aydınlanan, hafif cilalı tapınak taşı — kasvetli kaya DEĞİL.
+     Water Sort/Block Puzzle kadar yumuşak, luminous, premium serin-menekşe. */
+  --ph-stone-lit:    #7c759e; /* sol-üst ay ışığının vurduğu aydınlık yüz */
+  --ph-stone-base:   #635b82; /* orta taş tonu */
+  --ph-stone-deep:   #4a4468; /* gölge / soket çevresi */
+  --ph-stone-groove: #322d4a; /* 3×3 blokları ayıran oyuk kanallar */
+  --ph-engrave-cool: #3f3a63; /* intaglio: açık taşa KAZILI run (ipucu) — taştan koyu, okunur */
+  --ph-inscribe-warm: #f6b45a; /* inscribed: ışıyan sıcak run (oyuncu) */
+  --ph-inscribe-glow: rgba(246,180,90,.55);
+  /* ── Yüzey Danesi — MALZEMEDEN BAĞIMSIZ, AKTİF KULLANIMDA ──
+     Adı taş bloğunda doğdu ama gri tonlamalı nötr bir gürültüdür ve
+     hangi yüzeye serilirse onun dokusu olur: taşta mineral dane,
+     parşömende kâğıt lifi. Sudoku'nun Arcane teması bunu KULLANIYOR —
+     yukarıdaki --ph-stone-* bloğunun aksine bu token ölü değildir,
+     stone bloğu bir gün silinirse bu satır KALMALIDIR.
+     Kendinden-yeterli SVG feTurbulence: görsel varlık YOK, build YOK.
+     Düz dolgu yerine gerçek bir yüzey okunmasını sağlayan tek şey budur.
+     feComponentTransfer KRİTİK: (1) alfa sabit 1'e çekilir → feTurbulence'ın
+     lekeli alfa kanalı yüzeyi kumlu/benekli göstermesin (düzgün örtü);
+     (2) RGB ~%50 griye sıkıştırılır → uygulama tarafında soft-light blend ile
+     birleşince taşı ne aydınlatır ne karartır, sadece dokuyu fısıldar.
+     Blend soft-light OLMALI (overlay griye yıkar). numOctaves 3 = organik. */
+  --ph-stone-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.5' intercept='0.25'/%3E%3CfeFuncG type='linear' slope='0.5' intercept='0.25'/%3E%3CfeFuncB type='linear' slope='0.5' intercept='0.25'/%3E%3CfeFuncA type='linear' slope='0' intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+
   /* ── Elevation — z-index (§5) ──
      Sabit tekil değerler, aralık değil. Uygulama kabuğunun
      kendi katmanları (toast:9999, ad-overlay:10000) bu
@@ -118,4 +175,79 @@
   --ph-ease-standard: cubic-bezier(.4,0,.2,1);
   --ph-ease-spring: cubic-bezier(.34,1.56,.64,1);
   --ph-ease-decel: cubic-bezier(.22,1,.36,1);
+}
+
+/* ── Paylaşımlı Keyframe'ler (§21) ──
+   Oyun-bağımsız, yeniden kullanılabilir hareketler — ph- önekiyle.
+   Bunları tüketen sınıflar core/components.css'te tanımlı
+   (core/ui-kit.js'in tetiklediği .ph-shake, .ph-particle, vb). */
+
+@keyframes ph-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@keyframes ph-pop {
+  0% { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--ph-px,0), var(--ph-py,0)) scale(.3); opacity: 0; }
+}
+
+@keyframes ph-float {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-40px); opacity: 0; }
+}
+
+@keyframes ph-transfer {
+  0% { transform: translate(0,0); opacity: 1; }
+  50% { transform: translate(calc(var(--ph-tx,0px) / 2), var(--ph-tmy,0px)); }
+  100% { transform: translate(var(--ph-tx,0px), var(--ph-ty,0px)); opacity: .9; }
+}
+
+@keyframes ph-stagger-in {
+  0% { transform: scale(.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes ph-celebrate-in {
+  0% { transform: scale(.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Can kaybı (phLives) ──
+   Kalp SÖNMEDEN ÖNCE bir kez büyür: kayıp sessizce olup bitmemeli,
+   oyuncunun gözü neyin eksildiğini yakalayabilmeli. Bitiş durumu
+   .ph-heart.lost'un kendi statik stiliyle aynı olmalı ki animasyon
+   bittiğinde sıçrama olmasın. */
+@keyframes ph-heart-loss {
+  0%   { transform: scale(1);    opacity: 1; }
+  28%  { transform: scale(1.32); opacity: 1; }
+  100% { transform: scale(1);    opacity: .3; }
+}
+
+/* Kazanılan can — ödülün geldiği yön yukarıdan aşağı. */
+@keyframes ph-heart-gain {
+  0%   { transform: scale(.4) translateY(-8px); opacity: 0; }
+  60%  { transform: scale(1.25) translateY(0);  opacity: 1; }
+  100% { transform: scale(1);                   opacity: 1; }
+}
+
+/* ── Magic Sahne atmosferi (phAtmosphere) ──
+   Üçü de yalnızca transform/opacity canlandırır: atmosfer her karede
+   ekranda olduğu için paint tetikleyen hiçbir şey barındıramaz. */
+@keyframes ph-twinkle {
+  0%, 100% { opacity: .16; transform: scale(.75); }
+  50%      { opacity: .70; transform: scale(1.1); }
+}
+@keyframes ph-beam-breathe {
+  0%, 100% { opacity: .30; }
+  50%      { opacity: .60; }
+}
+@keyframes ph-mote-drift {
+  0%   { transform: translate(0, 0);                              opacity: 0; }
+  14%  { opacity: .75; }
+  86%  { opacity: .40; }
+  100% { transform: translate(var(--ph-mote-dx, 10px), -90px);    opacity: 0; }
 }

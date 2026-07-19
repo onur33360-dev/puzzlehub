@@ -60,7 +60,7 @@ p{font-size:14px;color:#9a9ab0;text-align:center;max-width:300px;line-height:1.6
   
   // 3. Tüm dosyaları cache-bypass ile zorla indir
   addLog('📥 Dosyalar zorla yeniden indiriliyor...');
-  const files = ['index.html', 'app.js', 'games.js', 'reels.js', 'style.css', 'sw.js'];
+  const files = ['../index.html', '../core/app.js', '../games/games.js', '../reels/reels.js', '../style.css', '../sw.js'];
   for (const f of files) {
     try {
       const resp = await fetch(f + '?force=' + Date.now(), { 
@@ -91,7 +91,7 @@ p{font-size:14px;color:#9a9ab0;text-align:center;max-width:300px;line-height:1.6
   
   // 5. Ana sayfaya yönlendir — tamamen temiz URL
   setTimeout(() => {
-    window.location.replace('./index.html?updated=' + Date.now());
+    window.location.replace('../index.html?updated=' + Date.now());
   }, 3000);
 })();
 </script>

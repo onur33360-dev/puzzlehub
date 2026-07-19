@@ -1,0 +1,350 @@
+/* ============================================
+   PuzzleHub — Paylaşımlı Bileşenler (Shared Components)
+   docs/DESIGN_SYSTEM.md §12–§14 / §20.2'nin CSS karşılığı.
+   Bu dosya token'ları (design-tokens.css) tüketen hazır
+   sınıflar tanımlar.
+
+   TÜKETİCİLER: Block Puzzle (.ph-scene / .ph-dais / .ph-capsule /
+   .ph-icon-btn / atmosfer). Water Sort aynı görsel dili kullanıyor ama
+   hâlâ kendi wsrt-* kopyalarıyla — buradaki tarifler ondan ÇIKARILDI,
+   henüz ona geri BAĞLANMADI. Water Sort'u bu sınıflara taşımak ayrı ve
+   doğrulanması gereken bir değişiklik (o oyun onaylanmış durumda).
+   ============================================ */
+
+/* ── Cam (Glass) — §12 — konteynerler için: kart, panel, tepsi ── */
+.ph-glass-card {
+  background: var(--ph-bg-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--ph-radius-md);
+  box-shadow: var(--ph-shadow-1), inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* ── Soft-Solid — §14 — üstten ~%8-10 daha açık ton geçişi + basınca 0.94 küçülme ── */
+
+.ph-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ph-space-2);
+  min-height: 44px;
+  padding: var(--ph-space-3) var(--ph-space-6);
+  border: none;
+  border-radius: var(--ph-radius-full);
+  background: linear-gradient(180deg, var(--ph-accent-light) 0%, var(--ph-accent) 18%, var(--ph-accent) 100%);
+  box-shadow: var(--ph-shadow-2);
+  color: var(--ph-text-primary);
+  font: var(--ph-type-heading);
+  cursor: pointer;
+  transition: transform var(--ph-duration-micro) var(--ph-ease-standard);
+}
+.ph-btn-primary:active {
+  transform: scale(.94);
+}
+
+.ph-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ph-space-2);
+  min-height: 44px;
+  padding: var(--ph-space-3) var(--ph-space-5);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--ph-radius-sm);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,0) 20%),
+    var(--ph-bg-2);
+  box-shadow: var(--ph-shadow-2);
+  color: var(--ph-text-primary);
+  font: var(--ph-type-body);
+  cursor: pointer;
+  transition: transform var(--ph-duration-micro) var(--ph-ease-standard);
+}
+.ph-btn-secondary:active {
+  transform: scale(.94);
+}
+
+.ph-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ph-space-1);
+  padding: var(--ph-space-1) var(--ph-space-3);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--ph-radius-full);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,0) 20%),
+    var(--ph-bg-2);
+  box-shadow: var(--ph-shadow-1);
+  color: var(--ph-text-secondary);
+  font: var(--ph-type-caption);
+  letter-spacing: var(--ph-tracking-caption);
+}
+
+/* ── Modal / Overlay — §14 — cam (yoğun blur) + scrim, elevation 4 ──
+   Blur değeri §19 performans bütçesine göre ≤12px'te sabitlendi;
+   "yoğun" his, standart karttan biraz daha opak bir zemin ile
+   sağlanıyor — paylaşımlı --ph-bg-glass token'ı değiştirilmeden. */
+.ph-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ph-z-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9,4,18,.6);
+}
+
+.ph-modal {
+  background: rgba(255,255,255,.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--ph-radius-lg);
+  box-shadow: var(--ph-shadow-4), inset 0 1px 0 rgba(255,255,255,.08);
+  padding: var(--ph-space-8);
+}
+
+/* ── Sıvı Dolum (Liquid Fill) — §13/§14 — gauge/progress dolgusu ──
+   Renk, tüketen bileşen tarafından --ph-fill-* özel özellikleriyle
+   seçilir (bkz. §3.5 jewel-tone token'ları); tanımsızsa jewel-1
+   (violet) varsayılanına düşer. */
+.ph-liquid-fill {
+  height: 100%;
+  border-radius: var(--ph-radius-full);
+  background: linear-gradient(
+    180deg,
+    var(--ph-fill-highlight, var(--ph-jewel-1-highlight)) 0%,
+    var(--ph-fill-base, var(--ph-jewel-1-base)) 55%,
+    var(--ph-fill-shadow, var(--ph-jewel-1-shadow)) 100%
+  );
+  box-shadow: 0 0 var(--ph-glow-sm) var(--ph-fill-glow, var(--ph-jewel-1-glow));
+  transition: width var(--ph-duration-medium) var(--ph-ease-spring);
+}
+
+/* ============================================
+   MAGIC SAHNE — PuzzleHub'ın ortak evreni
+   ============================================
+   Water Sort'un sahnesinden çıkarılıp paylaşıma alındı. Ortak olan
+   ŞUNLAR: gökyüzü, cam malzeme, HUD dili, buton sistemi, atmosfer
+   parçacıkları. Ortak OLMAYAN: her oyunun kendi mekânı ve enerjisi
+   (Water Sort'un ayı/dağları/sisi, Block Puzzle'ın kristal patlamaları).
+   Kural: bu katman bir oyunun kimliğini taşırsa oyunlar birbirinin
+   kopyası olur. Buraya yalnızca "aynı evren" hissini veren şey girer. */
+
+/* ── Sahne zemini: tam kaplayan gece göğü ──
+   Oyun konteynerine uygulanır. Alt/üst radyal parlamalar, ufuk hissi
+   veren dikey gradyan. Oyunlar bunun üstüne kendi katmanlarını koyar. */
+.ph-scene {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--ph-radius-lg);
+  background:
+    radial-gradient(ellipse 70% 45% at 50% 104%, rgba(109,69,168,.42) 0%, transparent 70%),
+    radial-gradient(ellipse 85% 55% at 50% -8%, rgba(76,42,122,.50) 0%, transparent 65%),
+    linear-gradient(180deg, var(--ph-night-0) 0%, var(--ph-night-1) 45%, var(--ph-night-2) 100%);
+}
+
+/* ── Atmosfer katmanı — phAtmosphere() bunu doldurur ── */
+.ph-atmo { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+
+.ph-star {
+  position: absolute; border-radius: 50%; background: #F2F5FF;
+  animation: ph-twinkle ease-in-out infinite;
+}
+/* Işık huzmesi: ağır blur + düşük opaklık şart — keskin kenarlı bir koni
+   "sahne spotu" gibi okunuyor, oysa istenen uzaktan sızan yumuşak ışık. */
+.ph-beam {
+  position: absolute; top: -14%; transform-origin: top center; pointer-events: none;
+  mix-blend-mode: screen; filter: blur(34px);
+  background: linear-gradient(180deg, rgba(146,118,232,.20) 0%, rgba(118,98,218,.07) 50%, transparent 82%);
+  clip-path: polygon(38% 0%, 62% 0%, 94% 100%, 6% 100%);
+  animation: ph-beam-breathe ease-in-out infinite;
+}
+.ph-mote {
+  position: absolute; width: 3px; height: 3px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, #EAF0FF 0%, rgba(190,205,255,.7) 55%, transparent 75%);
+  box-shadow: 0 0 5px 1px rgba(165,190,255,.5);
+  animation: ph-mote-drift linear infinite;
+}
+
+/* ── Cam kaide (dais) — oyun alanının üstünde durduğu yüzey ──
+   Water Sort'ta tüpler, Block Puzzle'da tahta bunun üstünde durur.
+   İçeriğin "havada süzülmediği", bir yüzeye ait olduğu hissini veren şey. */
+.ph-dais {
+  position: relative;
+  border-radius: var(--ph-radius-lg);
+  background: linear-gradient(180deg, rgba(126,110,220,.20) 0%, rgba(34,30,80,.44) 62%, rgba(20,18,54,.52) 100%);
+  border: 1px solid rgba(180,165,255,.20);
+  box-shadow: 0 30px 60px -22px rgba(4,6,22,.92), inset 0 1px 0 rgba(205,195,255,.24);
+}
+/* Üst kenardaki tek anahtar ışık — tüm sahnenin ışık yönünü kurar.
+   Her oyunda aynı yönden gelmeli, yoksa "aynı evren" hissi dağılır. */
+.ph-dais::before {
+  content: ''; position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,180,255,.85), transparent);
+  box-shadow: 0 0 16px rgba(150,120,235,.8);
+}
+
+/* ── HUD kapsülü — seviye/skor etiketi ──
+   Üst bar "uygulama kabuğu" değil, oyunun kendi parçası gibi görünmeli. */
+.ph-capsule {
+  display: inline-flex; align-items: center; gap: var(--ph-space-2);
+  font: 600 17px/1 'Fraunces', serif;
+  color: var(--ph-scene-ink); letter-spacing: .02em;
+  padding: 9px 18px; border-radius: var(--ph-radius-full);
+  background: linear-gradient(160deg, rgba(120,100,200,.32), rgba(40,32,80,.46) 70%);
+  border: 1px solid rgba(180,165,255,.24);
+  box-shadow: 0 4px 12px -3px rgba(4,6,20,.6), inset 0 1px 0 rgba(220,215,255,.28);
+  text-shadow: 0 0 18px rgba(150,120,235,.55);
+}
+.ph-capsule .ph-capsule-num {
+  font-variant-numeric: var(--ph-variant-numeral);
+  font-weight: 700;
+}
+
+/* ── Yuvarlak cam ikon butonu — §22 dokunma hedefi korunur ── */
+.ph-icon-btn {
+  width: 36px; height: 36px; min-width: 36px; border-radius: var(--ph-radius-full);
+  display: flex; align-items: center; justify-content: center; font-size: 15px;
+  background: linear-gradient(160deg, rgba(120,100,200,.35), rgba(40,32,80,.5) 70%);
+  border: 1px solid rgba(180,165,255,.22);
+  color: var(--ph-scene-ink); cursor: pointer;
+  box-shadow: 0 3px 10px -2px rgba(4,6,20,.6), inset 0 1px 0 rgba(220,215,255,.28);
+  transition: transform var(--ph-duration-micro) var(--ph-ease-standard);
+}
+.ph-icon-btn:active { transform: scale(.9); }
+.ph-icon-btn:focus { outline: none; }
+.ph-icon-btn:focus-visible { outline: 2px solid var(--ph-violet-soft); outline-offset: 2px; }
+.ph-icon-btn.off { opacity: .28; pointer-events: none; }
+
+/* ── DÜNYANIN TEPKİSİ (phAtmosphereFlare) ──
+   Büyük bir olay olduğunda sahne SEYİRCİ kalmamalı. Atmosfer katmanı bir
+   an için itilir ve aydınlanır: yıldızlar, huzmeler, zerreler hep birlikte.
+   Efektin tahtayla sınırlı kalması ile dünyaya yayılması arasındaki fark,
+   "güzel animasyon" ile "olay oldu" arasındaki farktır.
+   Katmanın TAMAMINA uygulanır — tek tek elemanların kendi sonsuz
+   animasyonlarına dokunmaz, o yüzden çakışma olmaz ve bittiğinde ambiyans
+   kaldığı yerden devam eder. */
+.ph-atmo.ph-flare { animation: ph-atmo-flare var(--ph-flare-dur, 520ms) cubic-bezier(.12,.72,.3,1); }
+@keyframes ph-atmo-flare {
+  0%   { transform: scale(1);     filter: brightness(1); }
+  10%  { transform: scale(1.045); filter: brightness(var(--ph-flare-b, 2.4)) saturate(1.3); }
+  100% { transform: scale(1);     filter: brightness(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-star   { animation: none; opacity: .5; }
+  .ph-beam   { animation: none; opacity: .45; }
+  .ph-mote   { display: none; }
+  .ph-atmo.ph-flare { animation: none; }
+}
+
+/* ── core/ui-kit.js Tetikleyici Sınıfları — §15/§16/§20.3 ──
+   Bu sınıflar JS tarafından oluşturulan/eklenen elemanlara
+   uygulanır; kendi başlarına bir şey render etmezler. */
+
+/* §15 Denied/invalid — phShake() */
+.ph-shake {
+  animation: ph-shake var(--ph-duration-fast) var(--ph-ease-standard);
+  box-shadow: 0 0 var(--ph-glow-sm) var(--ph-error-glow);
+}
+
+/* §16/§17 Başarı partikülü — phParticleBurst() */
+.ph-particle {
+  position: fixed;
+  pointer-events: none;
+  z-index: var(--ph-z-floating);
+  animation: ph-pop var(--ph-duration-medium) cubic-bezier(.2,.8,.3,1) forwards;
+}
+
+/* §16 Uçan skor/metin — phFloatText() */
+.ph-float-text {
+  position: fixed;
+  pointer-events: none;
+  z-index: var(--ph-z-floating);
+  font-family: var(--ph-font-numeral);
+  font-weight: var(--ph-weight-numeral);
+  font-variant-numeric: var(--ph-variant-numeral);
+  font-size: 22px;
+  white-space: nowrap;
+  animation: ph-float 1s ease-out forwards;
+}
+
+/* §11 (WATER_SORT.md) A→B transfer noktası — phTransfer() */
+.ph-transfer-dot {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: var(--ph-z-floating);
+  animation: ph-transfer var(--ph-duration-medium) var(--ph-ease-standard) forwards;
+}
+
+/* Izgara/liste giriş animasyonu — phStaggerIn() */
+.ph-stagger-item {
+  animation: ph-stagger-in var(--ph-duration-medium) var(--ph-ease-spring) backwards;
+}
+
+/* §16 Kutlama paneli girişi — phShowCelebration() */
+.ph-modal-enter {
+  animation: ph-celebrate-in var(--ph-duration-celebratory) var(--ph-ease-spring);
+}
+.ph-celebrate-title {
+  font: var(--ph-type-display);
+  color: var(--ph-text-primary);
+  text-align: center;
+}
+.ph-celebrate-subtitle {
+  font: var(--ph-type-title);
+  font-variant-numeric: var(--ph-variant-numeral);
+  color: var(--ph-success);
+  text-align: center;
+  margin-top: var(--ph-space-2);
+}
+
+/* ── Can Göstergesi (phLives) ──
+   Oyun-bağımsız: can sistemi olan HER oyun bunu kullanır, kendi
+   kalbini çizmez. Renkler --ph-heart-on/--ph-heart-off ile tüketen
+   sahne tarafından ezilebilir — kalpler hem gece göğü üstünde hem
+   parşömen üstünde okunmak zorunda, tek sabit renk ikisini birden
+   tutturamaz. Varsayılanlar koyu zemine göre. */
+.ph-lives {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+}
+.ph-heart {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ph-heart-on, var(--ph-error));
+  /* Kalp bir "kaynak" göstergesi; parlaması onu HUD'un geri kalanından
+     ayırır ve gözün ilk gittiği yer yapar. */
+  text-shadow: 0 0 8px var(--ph-heart-glow, var(--ph-error-glow));
+  transition: color var(--ph-duration-fast) var(--ph-ease-standard);
+}
+/* Kaybedilmiş can: silinmez, SÖNER — kaç canın olduğu kadar kaçını
+   kaybettiğin de bilgidir. Yeri korunduğu için gösterge zıplamaz. */
+.ph-heart.lost {
+  color: var(--ph-heart-off, rgba(255,255,255,.22));
+  opacity: .3;
+  text-shadow: none;
+}
+.ph-heart.losing { animation: ph-heart-loss var(--ph-duration-medium) var(--ph-ease-standard); }
+.ph-heart.gaining { animation: ph-heart-gain var(--ph-duration-medium) var(--ph-ease-spring); }
+
+/* ── §22 prefers-reduced-motion — dekoratif hareket kapanır,
+   işlevsel geri bildirim (shake, float) kısalır ama kalır. ── */
+@media (prefers-reduced-motion: reduce) {
+  .ph-particle, .ph-stagger-item, .ph-modal-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .ph-shake { animation-duration: var(--ph-duration-micro); }
+  .ph-float-text { animation-duration: var(--ph-duration-fast); }
+  .ph-transfer-dot { animation-duration: var(--ph-duration-fast); }
+  /* Can kaybı animasyonu kapanır ama .lost'un statik hâli kalır:
+     kaç can kaldığı bilgidir, hareket değil — kaybolmamalı. */
+  .ph-heart.losing, .ph-heart.gaining { animation: none; }
+}

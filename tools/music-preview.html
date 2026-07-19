@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌙 İksir Sıralama — Müzik Dinletme</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Segoe UI',system-ui,sans-serif;color:#E8ECFF;min-height:100vh;
+    padding:24px 18px 60px;
+    background:
+      radial-gradient(ellipse 70% 45% at 50% 104%, rgba(109,69,168,.42) 0%, transparent 70%),
+      radial-gradient(ellipse 85% 55% at 50% -8%, rgba(76,42,122,.5) 0%, transparent 65%),
+      linear-gradient(180deg,#070B1E 0%,#0E1435 45%,#1A1F4D 100%);
+  }
+  .wrap{max-width:460px;margin:0 auto}
+  h1{font-size:22px;font-weight:700;text-align:center;letter-spacing:.01em}
+  .sub{text-align:center;color:rgba(200,205,255,.55);font-size:13px;margin:6px 0 22px;line-height:1.5}
+  .big{
+    display:block;width:100%;padding:16px;border:none;border-radius:16px;cursor:pointer;
+    font-size:17px;font-weight:700;color:#fff;margin-bottom:22px;
+    background:linear-gradient(160deg,#6D45A8,#4C2A7A);
+    box-shadow:0 10px 26px -8px rgba(76,42,122,.9),inset 0 1px 0 rgba(220,215,255,.3);
+    transition:transform .12s;
+  }
+  .big:active{transform:scale(.98)}
+  .big.on{background:linear-gradient(160deg,#B4423C,#7A2420)}
+  .card{
+    background:linear-gradient(180deg,rgba(126,110,220,.12),rgba(30,26,70,.34));
+    border:1px solid rgba(175,160,255,.16);border-radius:16px;padding:14px 16px;margin-bottom:12px;
+  }
+  .card.master{border-color:rgba(200,180,255,.4)}
+  .row{display:flex;align-items:center;gap:12px}
+  .name{flex:1;font-size:15px;font-weight:600}
+  .desc{font-size:11.5px;color:rgba(200,205,255,.5);margin-top:3px;line-height:1.45}
+  .toggle{
+    width:46px;height:26px;border-radius:999px;border:none;cursor:pointer;position:relative;flex-shrink:0;
+    background:rgba(120,110,180,.3);transition:background .2s;
+  }
+  .toggle.on{background:#6D45A8}
+  .toggle::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s}
+  .toggle.on::after{left:23px}
+  input[type=range]{width:100%;margin-top:10px;accent-color:#8B6FE8;height:4px}
+  .val{font-variant-numeric:tabular-nums;font-size:12px;color:rgba(200,205,255,.65);min-width:38px;text-align:right}
+  .beat-ind{display:inline-block;width:9px;height:9px;border-radius:50%;background:#6D45A8;margin-left:8px;opacity:.25;transition:opacity .1s,transform .1s}
+  .beat-ind.pulse{opacity:1;transform:scale(1.5);box-shadow:0 0 12px #8B6FE8}
+  .readout{
+    margin-top:20px;padding:14px;border-radius:12px;font-family:ui-monospace,monospace;font-size:11.5px;
+    background:rgba(4,6,20,.5);border:1px solid rgba(175,160,255,.14);color:rgba(200,210,255,.85);white-space:pre;overflow-x:auto;
+  }
+  .hint{font-size:12px;color:rgba(200,205,255,.5);text-align:center;margin-top:16px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌙 Büyülü Gece</h1>
+  <p class="sub">İksir Sıralama için müzik dinletmesi.<br>Her katmanı tek tek aç/kapat, sesini ayarla. Beğendiğin değerleri bana söyle, oyuna taşıyayım.</p>
+
+  <button class="big" id="playBtn">▶ Çal</button>
+
+  <div class="card master">
+    <div class="row">
+      <div class="name">🎚️ Ana Ses (master)</div>
+      <span class="val" id="v-master">3.5%</span>
+    </div>
+    <input type="range" id="s-master" min="0" max="12" step="0.5" value="3.5">
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="name">🌫️ Pad (akorlar)<span class="beat-ind" id="ind-chord"></span></div>
+        <div class="desc">Cmaj9→Am11→Fmaj9→Gsus4, 9sn'de bir değişir. Zeminin kendisi — hep açık.</div>
+      </div>
+      <button class="toggle on" data-layer="pad"></button>
+    </div>
+    <div class="row"><input type="range" data-vol="pad" min="0" max="60" step="1" value="30"><span class="val" id="v-pad">30</span></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="name">🫧 Nefes<span class="beat-ind" id="ind-breath"></span></div>
+        <div class="desc">~40/dk yavaş alt-frekans soluğu. Vuruş değil — davulun yerini alan zemin dokusu.</div>
+      </div>
+      <button class="toggle on" data-layer="breath"></button>
+    </div>
+    <div class="row"><input type="range" data-vol="breath" min="0" max="100" step="1" value="50"><span class="val" id="v-breath">50</span></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="name">🔔 Çanlar<span class="beat-ind" id="ind-bell"></span></div>
+        <div class="desc">Seyrek, düzensiz cam/celesta notaları (2.2–5.4sn arası). Yıldızların sesi.</div>
+      </div>
+      <button class="toggle on" data-layer="bell"></button>
+    </div>
+    <div class="row"><input type="range" data-vol="bell" min="0" max="30" step="0.5" value="9"><span class="val" id="v-bell">9</span></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="name">🌊 Reverb (yankı)</div>
+        <div class="desc">Çanların kuyruğu ne kadar asılı kalsın. Yükseltince mekân genişler.</div>
+      </div>
+      <span class="val" id="v-rev">55%</span>
+    </div>
+    <input type="range" id="s-rev" min="0" max="100" step="1" value="55">
+  </div>
+
+  <div class="readout" id="readout"></div>
+  <p class="hint">Bu sayfa oyuna dokunmaz — sadece dinleme/ayar aracı.<br>Değerleri değiştirdikçe aşağıdaki kutu güncellenir.</p>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// Bu, games.js'teki "büyülü gece" müzik motorunun BİREBİR kopyası —
+// ama canlı kaydırıcılarla. Amaç: kulakla ayarlanan değerleri games.js'e
+// geri taşımak. Motor değişirse ikisi ayrışabilir; bu bilerek geçici bir
+// ayar aracı (games.js her zaman kaynak doğrudur).
+// ══════════════════════════════════════════════════════════
+let ctx, master, musicGain, reverbGain, reverbNode;
+let playing = false;
+let layers = { pad:null, breath:null, bells:null };
+let curChord = null;
+const enabled = { pad:true, breath:true, bell:true };
+const vol = { pad:0.30, breath:0.50, bell:0.09 };
+
+const chords = [
+  [130.81,164.81,196.00,246.94,293.66], // Cmaj9
+  [110.00,130.81,164.81,196.00,246.94], // Am11
+  [87.31,110.00,130.81,164.81,220.00],  // Fmaj9
+  [98.00,130.81,146.83,196.00,261.63],  // Gsus4
+];
+
+function makeReverb(){
+  const len = ctx.sampleRate * 2.6;
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for(let ch=0;ch<2;ch++){
+    const d = buf.getChannelData(ch);
+    for(let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, 2.5);
+  }
+  reverbNode = ctx.createConvolver();
+  reverbNode.buffer = buf;
+  reverbNode.connect(reverbGain);
+}
+
+function initCtx(){
+  ctx = new (window.AudioContext||window.webkitAudioContext)();
+  master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
+  musicGain = ctx.createGain(); musicGain.gain.value = parseFloat(sMaster.value)/100; musicGain.connect(master);
+  reverbGain = ctx.createGain(); reverbGain.gain.value = parseFloat(sRev.value)/100; reverbGain.connect(master);
+  makeReverb();
+}
+
+// ── PAD ──
+function startPad(){
+  const padGain = ctx.createGain();
+  padGain.gain.value = enabled.pad ? vol.pad : 0;
+  padGain.connect(musicGain);
+  let chordIdx = 0; curChord = chords[0];
+  const oscs = [];
+  for(let i=0;i<5;i++){
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = i%2===0 ? 'sine':'triangle';
+    o.frequency.value = chords[0][i];
+    o.detune.value = (i-2)*6;
+    g.gain.value = i<3 ? 0.2 : 0.1;
+    o.connect(g); g.connect(padGain);
+    const rev = ctx.createGain(); rev.gain.value = 0.08; o.connect(rev); rev.connect(reverbNode);
+    o.start(); oscs.push(o);
+  }
+  const lfo = ctx.createOscillator(), lfoG = ctx.createGain();
+  lfo.type='sine'; lfo.frequency.value=0.12; lfoG.gain.value=0.015;
+  lfo.connect(lfoG); lfoG.connect(padGain.gain); lfo.start();
+  const timer = setInterval(()=>{
+    if(!playing) return;
+    chordIdx = (chordIdx+1)%chords.length; curChord = chords[chordIdx];
+    const t = ctx.currentTime;
+    oscs.forEach((o,i)=>o.frequency.linearRampToValueAtTime(chords[chordIdx][i], t+4));
+    pulse('ind-chord');
+  }, 9000);
+  layers.pad = { gain:padGain, oscs:oscs.concat([lfo]), timer };
+}
+
+// ── NEFES ──
+function startBreath(){
+  const bGain = ctx.createGain();
+  bGain.gain.value = enabled.breath ? vol.breath : 0;
+  bGain.connect(musicGain);
+  const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=140; lp.connect(bGain);
+  const timer = setInterval(()=>{
+    if(!playing) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(58,t);
+    o.frequency.linearRampToValueAtTime(70,t+1.1);
+    o.frequency.linearRampToValueAtTime(58,t+2.2);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(0.5,t+1.1);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+2.3);
+    o.connect(g); g.connect(lp);
+    o.start(t); o.stop(t+2.4);
+    pulse('ind-breath', 1100);
+  }, 1500);
+  layers.breath = { gain:bGain, timer };
+}
+
+// ── ÇANLAR ──
+const PENT = [0,2,4,7,9];
+function startBells(){
+  const bGain = ctx.createGain();
+  bGain.gain.value = enabled.bell ? vol.bell : 0;
+  bGain.connect(musicGain);
+  const rev = ctx.createGain(); rev.gain.value=0.55; rev.connect(reverbNode);
+  let timer=null;
+  function ring(){
+    if(!playing) return;
+    const t = ctx.currentTime;
+    const root = (curChord && curChord[0]) || 130.81;
+    const semi = PENT[Math.floor(Math.random()*PENT.length)];
+    const oct = 2 + Math.floor(Math.random()*2);
+    const freq = root * Math.pow(2, oct + semi/12);
+    [[freq,0.09,2.6],[freq*2,0.025,1.6]].forEach(([f,peak,decay])=>{
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.linearRampToValueAtTime(peak,t+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+decay);
+      o.connect(g); g.connect(bGain); g.connect(rev);
+      o.start(t); o.stop(t+decay+0.1);
+    });
+    pulse('ind-bell');
+    timer = setTimeout(ring, 2200 + Math.random()*3200);
+  }
+  timer = setTimeout(ring, 800);
+  layers.bells = { gain:bGain, get timer(){return timer;} };
+}
+
+function play(){
+  if(!ctx) initCtx();
+  if(ctx.state==='suspended') ctx.resume();
+  playing = true;
+  musicGain.gain.value = parseFloat(sMaster.value)/100;
+  startPad(); startBreath(); startBells();
+  playBtn.textContent='■ Durdur'; playBtn.classList.add('on');
+}
+function stop(){
+  playing = false;
+  Object.values(layers).forEach(l=>{ if(!l) return; if(l.timer){clearInterval(l.timer);clearTimeout(l.timer);} if(l.oscs)l.oscs.forEach(o=>{try{o.stop();}catch(e){}}); });
+  layers = { pad:null, breath:null, bells:null };
+  playBtn.textContent='▶ Çal'; playBtn.classList.remove('on');
+}
+
+function pulse(id, ms){
+  const el = document.getElementById(id); if(!el) return;
+  el.classList.add('pulse');
+  setTimeout(()=>el.classList.remove('pulse'), ms||140);
+}
+
+// ── UI ──
+const playBtn = document.getElementById('playBtn');
+const sMaster = document.getElementById('s-master');
+const sRev = document.getElementById('s-rev');
+playBtn.onclick = ()=> playing ? stop() : play();
+
+sMaster.oninput = ()=>{
+  document.getElementById('v-master').textContent = sMaster.value+'%';
+  if(musicGain) musicGain.gain.value = parseFloat(sMaster.value)/100;
+  updateReadout();
+};
+sRev.oninput = ()=>{
+  document.getElementById('v-rev').textContent = sRev.value+'%';
+  if(reverbGain) reverbGain.gain.value = parseFloat(sRev.value)/100;
+  updateReadout();
+};
+document.querySelectorAll('.toggle').forEach(btn=>{
+  btn.onclick = ()=>{
+    const L = btn.dataset.layer;
+    const key = L==='breath'?'breath':(L==='bell'?'bell':'pad');
+    enabled[key] = !enabled[key];
+    btn.classList.toggle('on', enabled[key]);
+    const layerObj = L==='breath'?layers.breath:(L==='bell'?layers.bells:layers.pad);
+    if(layerObj) layerObj.gain.gain.linearRampToValueAtTime(enabled[key]?vol[key]:0, (ctx?ctx.currentTime:0)+0.4);
+    updateReadout();
+  };
+});
+document.querySelectorAll('input[data-vol]').forEach(sl=>{
+  sl.oninput = ()=>{
+    const L = sl.dataset.vol;
+    const key = L==='breath'?'breath':(L==='bell'?'bell':'pad');
+    vol[key] = parseFloat(sl.value)/100;
+    document.getElementById('v-'+L).textContent = sl.value;
+    const layerObj = L==='breath'?layers.breath:(L==='bell'?layers.bells:layers.pad);
+    if(layerObj && enabled[key]) layerObj.gain.gain.linearRampToValueAtTime(vol[key], (ctx?ctx.currentTime:0)+0.1);
+    updateReadout();
+  };
+});
+
+function updateReadout(){
+  document.getElementById('readout').textContent =
+`AYARLAR (bana bunları söyle):
+  master   : ${sMaster.value}%     ${enabled.pad?'':'(pad kapalı) '}
+  pad gain : ${(vol.pad).toFixed(2)}   ${enabled.pad?'açık':'KAPALI'}
+  nefes    : ${(vol.breath).toFixed(2)}   ${enabled.breath?'açık':'KAPALI'}
+  çanlar   : ${(vol.bell).toFixed(2)}   ${enabled.bell?'açık':'KAPALI'}
+  reverb   : ${sRev.value}%`;
+}
+updateReadout();
+</script>
+</body>
+</html>

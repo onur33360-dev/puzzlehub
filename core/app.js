@@ -612,6 +612,7 @@ const GAME_MAP = {
   'Sudoku': 'sudoku',
   'Bulmaca Blokları': 'blockPuzzle',
   'Labirent': 'mazeGame',
+  'İksir Sıralama': 'waterSort',
 };
 
 let _currentGameId = null;
@@ -643,8 +644,10 @@ function playGame(name) {
   // Oyunu başlat
   const container = document.getElementById('game-container');
   container.innerHTML = '';
-  GameAudio.startMusic();
-  GameAudio.setIntensity(1); // Oyun modu — beat katmanı aktif
+  // Arka plan müziği geçici olarak kapalı — mevcut kompozisyon oyunun
+  // atmosferine uymuyor. Profesyonel ses tasarımıyla yeniden eklenene kadar
+  // sessizlik + oyun içi SFX hiyerarşisi kullanılıyor.
+  GameAudio.setIntensity(1); // Oyun modu — beat katmanı aktif (müzik başladığında)
   GameAudio.play('bloom');
   GameAudio.haptic('soft');
   // Ses buton durumları
@@ -659,35 +662,53 @@ function updateGameScore(score) {
   document.getElementById('game-score').textContent = score.toLocaleString();
 }
 
-function showGameOver(win, title, message) {
+// "Devam et" akışının oyun tarafındaki karşılığı.
+// Reklam/elmas akışı modalı kapatmayı bilir ama oyunun devam etmek için
+// NEYE ihtiyacı olduğunu bilemez (Sudoku'da can, başka oyunda başka şey).
+// Oyun showGameOver'a bir onContinue verirse, ödeme tamamlandığında o
+// çağrılır ve oyun kendini toparlar. Vermezse eski davranış aynen sürer —
+// mevcut oyunların hiçbiri etkilenmez.
+let _gameOverContinuation = null;
+
+function showGameOver(win, title, message, opts) {
+  _gameOverContinuation = (opts && typeof opts.onContinue === 'function') ? opts.onContinue : null;
+
   document.getElementById('go-emoji').textContent = win ? '🎉' : '😔';
   document.getElementById('go-title').textContent = title;
   document.getElementById('go-msg').textContent = message;
-  
+
   // Show/hide continue button (only on loss)
   const continueBtn = document.getElementById('go-continue');
   const doubleBtn = document.getElementById('go-double');
   if (continueBtn) continueBtn.style.display = win ? 'none' : 'flex';
   if (doubleBtn) doubleBtn.style.display = win ? 'flex' : 'none';
-  
+
   // Level complete reward
   if (win) DiamondSystem.add(3, 'Level tamamlandı!');
-  
+
   document.getElementById('game-over').style.display = 'flex';
+}
+
+// Kanca tek kullanımlıktır: alınıp temizlendikten SONRA çağrılır, böylece
+// oyun devam ederken tekrar tetiklenemez (aynı canı iki kez veremez).
+function _runGameOverContinuation(source) {
+  document.getElementById('game-over').style.display = 'none';
+  if (!_gameOverContinuation) return false;
+  const fn = _gameOverContinuation;
+  _gameOverContinuation = null;
+  fn(source);
+  return true;
 }
 
 function continueWithAd() {
   RewardedAd.showForContinue(() => {
-    document.getElementById('game-over').style.display = 'none';
-    showToast('🔄 Devam ediyorsun!');
-    // Game continues from where it left off
+    if (!_runGameOverContinuation('ad')) showToast('🔄 Devam ediyorsun!');
   });
 }
 
 function continueWithDiamonds() {
   if (DiamondSystem.spend(30)) {
-    document.getElementById('game-over').style.display = 'none';
-    showToast('💎 30 elmas harcandı — devam!');
+    if (!_runGameOverContinuation('diamond')) showToast('💎 30 elmas harcandı — devam!');
   }
 }
 
@@ -705,6 +726,7 @@ function doubleScoreWithAd() {
 
 function restartCurrentGame() {
   if (!_currentGameId || !PuzzleGames[_currentGameId]) return;
+  _gameOverContinuation = null;   // yeni oyun — eski kanca geçersiz
   document.getElementById('game-over').style.display = 'none';
   document.getElementById('game-score').textContent = '0';
   const container = document.getElementById('game-container');
@@ -717,6 +739,7 @@ function exitGame() {
   if (_currentGameId && PuzzleGames[_currentGameId]) {
     PuzzleGames[_currentGameId].cleanup();
   }
+  _gameOverContinuation = null;   // oyundan çıkıldı — eski kanca geçersiz
   GameAudio.stopMusic();
   GameAudio.play('transition');
   _currentGameId = null;
@@ -785,11 +808,10 @@ function showToast(msg) {
   const ecoStreak = document.getElementById('eco-streak');
   if (ecoStreak) ecoStreak.textContent = streakCount || '0';
 
-  // Uygulama açılış sesi — soft bloom
+  // Uygulama açılış sesi — soft bloom (müzik geçici olarak kapalı, bkz. playGame())
   document.addEventListener('click', function _firstTouch() {
     if (typeof GameAudio !== 'undefined') {
       GameAudio.play('bloom');
-      GameAudio.startMusic();
     }
     document.removeEventListener('click', _firstTouch);
   }, { once: true });
