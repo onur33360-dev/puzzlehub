@@ -333,6 +333,47 @@
 .ph-heart.losing { animation: ph-heart-loss var(--ph-duration-medium) var(--ph-ease-standard); }
 .ph-heart.gaining { animation: ph-heart-gain var(--ph-duration-medium) var(--ph-ease-spring); }
 
+/* ── Enerji halkası (phPulseRing) ── */
+.ph-pulse-ring {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: var(--ph-z-floating);
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--ph-pulse-color, rgba(255,255,255,.8));
+  box-shadow: 0 0 16px -2px var(--ph-pulse-color, rgba(255,255,255,.6));
+  animation: ph-pulse-ring var(--ph-pulse-dur, 420ms) cubic-bezier(.16,.72,.3,1) forwards;
+}
+
+/* ── Parlama süpürmesi (phGleam) ──
+   Tüketen elemana uygulanır; kendi köşe yarıçapını devralır.
+   overflow:hidden yalnızca İÇERİĞİ kırpar — kutu gölgesi (karonun
+   dışa taşan ışıması) etkilenmez, o yüzden güvenli. */
+.ph-gleam { position: relative; overflow: hidden; }
+.ph-gleam::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+              transparent 32%,
+              rgba(255,255,255,var(--ph-gleam-strength, .5)) 48%,
+              transparent 64%);
+  animation: ph-gleam var(--ph-gleam-dur, 620ms) var(--ph-ease-decel);
+}
+
+/* ── Hareket izi (phTrail) ──
+   Konumu/boyutu tüketen oyun verir; buradaki tek iş sönme davranışı.
+   Kayan nesnenin ARKASINDA kalmalı, bu yüzden z-index düşük. */
+.ph-trail {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: var(--ph-radius-sm);
+  animation: ph-trail-fade var(--ph-trail-dur, 200ms) var(--ph-ease-decel) forwards;
+}
+
 /* ── Günlük Meydan Okuma kartı (core/daily.js) ──
    Oyun-bağımsız: günlüğe katılan her oyun aynı kartla listelenir.
    Tamamlanmış hâli SÖNMEZ, yeşile döner — "bugünü halletmiş olmak"
@@ -473,6 +514,10 @@
   .ph-shake { animation-duration: var(--ph-duration-micro); }
   .ph-float-text { animation-duration: var(--ph-duration-fast); }
   .ph-transfer-dot { animation-duration: var(--ph-duration-fast); }
+  /* Hız/parlaklık efektleri tamamen kapanır — bunlar tümüyle
+     dekoratif, hiçbiri oyun durumu taşımıyor. */
+  .ph-pulse-ring, .ph-trail { display: none; }
+  .ph-gleam::after { animation: none; opacity: 0; }
   /* Can kaybı animasyonu kapanır ama .lost'un statik hâli kalır:
      kaç can kaldığı bilgidir, hareket değil — kaybolmamalı. */
   .ph-heart.losing, .ph-heart.gaining { animation: none; }

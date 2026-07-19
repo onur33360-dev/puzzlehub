@@ -216,6 +216,33 @@
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* ── Enerji halkası (phPulseRing) ──
+   Bir birleşme/çarpışma anında merkezden yayılan tek halka. Parçacık
+   patlamasından farkı: parçacık "kutlama", halka "enerji açığa çıktı"
+   der. Sessiz ama olayın büyüklüğünü taşır. */
+@keyframes ph-pulse-ring {
+  0%   { width: 0; height: 0; opacity: .8; border-width: 3px; }
+  100% { width: var(--ph-pulse-size, 120px); height: var(--ph-pulse-size, 120px);
+         opacity: 0; border-width: .5px; }
+}
+
+/* ── Parlama süpürmesi (phGleam) ──
+   Yüzeyin üzerinden bir kez geçen ışık. Kalıcı bir süs değil, "bu şey
+   az önce var oldu" bildirimi — büyüyle çağrılma hissi buradan gelir. */
+@keyframes ph-gleam {
+  0%   { transform: translateX(-130%) skewX(-12deg); }
+  100% { transform: translateX(130%) skewX(-12deg); }
+}
+
+/* ── Hareket izi (phTrail tüketicileri) ──
+   Hızlı giden bir nesnenin arkasında kalan ışık. Hız hissinin tek en
+   büyük kaynağı; kısa ve düşük opaklıkta tutulmalı, yoksa bulanıklık
+   olarak okunur. */
+@keyframes ph-trail-fade {
+  0%   { opacity: .5; }
+  100% { opacity: 0; }
+}
+
 /* ── Can kaybı (phLives) ──
    Kalp SÖNMEDEN ÖNCE bir kez büyür: kayıp sessizce olup bitmemeli,
    oyuncunun gözü neyin eksildiğini yakalayabilmeli. Bitiş durumu

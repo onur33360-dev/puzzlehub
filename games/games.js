@@ -802,10 +802,17 @@ PuzzleGames.game2048 = (() => {
   const WIN_TILE = 2048;
   const GAP = 8;                    // hücreler arası boşluk (px)
 
-  // Faz zamanlamaları. Toplam ~320ms: hamlenin oturması bir karede
-  // bitmiş gibi hissetmeli ama gözün takip edebileceği kadar sürmeli.
-  const SLIDE_MS = 140;
-  const POP_MS = 180;
+  // Faz zamanlamaları. Kayma 140→115ms'e çekildi: oyunun "durgun"
+  // hissetmesinin en doğrudan sebebi buydu. Commit kaymanın SONUNDAN
+  // biraz önce çalışıyor (SLIDE_MS - COMMIT_LEAD), böylece birleşme
+  // "pop"u kaymanın kuyruğuyla örtüşüyor ve hamle tek bir hareket gibi
+  // okunuyor — arka arkaya iki ayrı animasyon gibi değil.
+  const SLIDE_MS = 115;
+  const POP_MS = 170;
+  const COMMIT_LEAD = 25;
+  // İz yalnızca UZUN hareketlerde: her kayan karo iz bırakırsa tahta
+  // bulanır ve hız hissi yerine kirlilik oluşur.
+  const TRAIL_MIN_CELLS = 2;
 
   // Bir bedava geri alma. Sonrası reklam veya elmas — böylece geri alma
   // "hata yapmanın bedeli yok" demeye dönüşmüyor, bir kaynak oluyor.
@@ -1302,7 +1309,8 @@ PuzzleGames.game2048 = (() => {
     // atılır, yoksa geçmiş "hiçbir şey yapmayan" adımlarla dolar.
     const before = snapshot();
 
-    tiles.forEach(t => { t.mergedThisTurn = false; });
+    // px/py: hamleden ÖNCEKİ konum — iz bunu kullanıyor.
+    tiles.forEach(t => { t.mergedThisTurn = false; t.px = t.x; t.py = t.y; });
 
     xs.forEach(x => ys.forEach(y => {
       const tile = cellAt(x, y);
@@ -1330,6 +1338,14 @@ PuzzleGames.game2048 = (() => {
 
     if (!moved) { nudge(v); return; }
 
+    // Işık izleri kayma BAŞLAMADAN önce kurulur: iz, karonun geldiği
+    // yolu gösterir, gittiği yeri değil.
+    tiles.forEach(t => {
+      if (t.px == null) return;
+      const dc = Math.abs(t.x - t.px) + Math.abs(t.y - t.py);
+      if (dc >= TRAIL_MIN_CELLS) layTrail(t.px, t.py, t.x, t.y);
+    });
+
     history.push(before);
     if (history.length > HISTORY_MAX) history.shift();
     refreshUndo();
@@ -1343,7 +1359,9 @@ PuzzleGames.game2048 = (() => {
   // güncelle, yeni karo doğur, oyun durumunu kontrol et.
   function scheduleCommit(merges) {
     pendingCommit = () => applyCommit(merges);
-    commitTimer = setTimeout(flushCommit, SLIDE_MS);
+    // Kaymanın bitişinden biraz ÖNCE: pop kaymanın kuyruğuyla örtüşür
+    // ve hamle tek bir hareket gibi okunur.
+    commitTimer = setTimeout(flushCommit, Math.max(SLIDE_MS - COMMIT_LEAD, 40));
   }
 
   function flushCommit() {
@@ -1371,6 +1389,20 @@ PuzzleGames.game2048 = (() => {
       void survivor.el.offsetWidth;
       survivor.el.classList.add('pop');
       setTimeout(() => survivor.el.classList.remove('pop'), POP_MS + 40);
+
+      // Enerji halkası: birleşmenin "açığa çıkan güç" tarafı. Halkanın
+      // boyu ve parlaklığı kademeyle büyür, böylece 4 birleşmesiyle
+      // 512 birleşmesi aynı şeyi söylemez.
+      const r = survivor.el.getBoundingClientRect();
+      const tier = tierIndex(survivor.value);
+      phPulseRing(r.left + r.width / 2, r.top + r.height / 2, {
+        color: 'rgba(198,180,255,' + Math.min(0.35 + tier * 0.05, 0.8) + ')',
+        size: cellPx * (1.5 + Math.min(tier, 8) * 0.16),
+        duration: 380,
+      });
+      // Parlama süpürmesi yalnızca ANLAMLI kademelerde (128+): her
+      // birleşmede parlarsa "özel" olmaktan çıkar ve süse dönüşür.
+      if (survivor.value >= 128) phGleam(survivor.el, { duration: 560, strength: 0.42 });
     });
 
     if (merges.length) {
@@ -1412,6 +1444,24 @@ PuzzleGames.game2048 = (() => {
         onContinue: history.length ? () => { doUndo(); refreshUndo(); } : undefined,
       });
     }
+  }
+
+  // Kayan karonun arkasında kalan ışık. Eski ve yeni konumun kapsayıcı
+  // kutusunu kaplar; gradyan KUYRUKTAN başa doğru açılır, yani izin
+  // parlak ucu karonun gittiği yöndedir.
+  function layTrail(px, py, x, y) {
+    const step = cellPx + GAP;
+    const left = Math.min(px, x) * step;
+    const top = Math.min(py, y) * step;
+    const w = Math.abs(x - px) * step + cellPx;
+    const h = Math.abs(y - py) * step + cellPx;
+    // Gradyan yönü hareket yönüne göre: kuyruk şeffaf, baş ışıklı.
+    let deg = 90;
+    if (x < px) deg = 270; else if (y > py) deg = 180; else if (y < py) deg = 0;
+    phTrail(tilesEl, { left, top, width: w, height: h }, {
+      background: 'linear-gradient(' + deg + 'deg, transparent 8%, rgba(198,188,255,.34) 92%)',
+      duration: 210,
+    });
   }
 
   // Geçersiz hamlenin karşılığı: tahta o yöne 6px zorlanıp geri döner,

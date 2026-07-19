@@ -192,6 +192,72 @@ function phAtmosphereFlare(layer, b, durMs) {
   setTimeout(() => layer.classList.remove('ph-flare'), (durMs || 520) + 40);
 }
 
+// ═══════════ HIZ VE IŞIK EFEKTLERİ ═══════════
+// Referans olarak incelenen arcade 2048'lerin "canlı/hızlı" hissini
+// PuzzleHub'ın diline çeviren üç yapı taşı. Ortak nokta: hepsi KISA,
+// DÜŞÜK OPAKLIKLI ve tek seferlik. Amaç dikkat çekmek değil, olayın
+// enerjisini taşımak — parlak sarı bloom ve kalıcı kıvılcımlar bilerek
+// alınmadı, onlar gece/menekşe evrenini bozardı.
+// Üçü de oyun-bağımsızdır; sonraki oyunlar aynı sözlüğü kullanır.
+
+// ───────── Enerji halkası ─────────
+// Bir birleşme/çarpışma noktasından yayılan tek halka.
+// phParticleBurst "kutlama" der, bu "enerji açığa çıktı" der — ikisi
+// farklı anlar içindir ve aynı anda kullanılırsa gürültü olur.
+function phPulseRing(x, y, opts) {
+  opts = opts || {};
+  const ring = document.createElement('div');
+  ring.className = 'ph-pulse-ring';
+  ring.style.left = x + 'px';
+  ring.style.top = y + 'px';
+  ring.style.setProperty('--ph-pulse-color', opts.color || 'rgba(255,255,255,.8)');
+  ring.style.setProperty('--ph-pulse-size', (opts.size || 120) + 'px');
+  const dur = opts.duration || 420;
+  ring.style.setProperty('--ph-pulse-dur', dur + 'ms');
+  document.body.appendChild(ring);
+  setTimeout(() => ring.remove(), dur + 60);
+  return ring;
+}
+
+// ───────── Parlama süpürmesi ─────────
+// Yüzeyin üzerinden bir kez geçen ışık: "bu şey az önce var oldu".
+// Sınıf yeniden eklenmeden önce kaldırılıp reflow zorlanır, yoksa aynı
+// eleman için ikinci çağrı hiçbir şey yapmaz (CSS animasyonları
+// kendiliğinden yeniden başlamaz).
+function phGleam(el, opts) {
+  if (!el) return;
+  opts = opts || {};
+  const dur = opts.duration || 620;
+  el.style.setProperty('--ph-gleam-dur', dur + 'ms');
+  if (opts.strength != null) el.style.setProperty('--ph-gleam-strength', opts.strength);
+  el.classList.remove('ph-gleam');
+  void el.offsetWidth;
+  el.classList.add('ph-gleam');
+  setTimeout(() => el.classList.remove('ph-gleam'), dur + 60);
+}
+
+// ───────── Hareket izi ─────────
+// Hızlı giden bir nesnenin arkasında kalan ışık — hız hissinin tek en
+// büyük kaynağı. Konum/boyut çağıran tarafından verilir çünkü her oyunun
+// koordinat sistemi farklı; buradaki iş yalnızca izi kurup söndürmek.
+// KISA mesafelerde çağrılmamalı: her hareket iz bırakırsa tahta bulanır.
+function phTrail(parent, rect, opts) {
+  if (!parent) return;
+  opts = opts || {};
+  const dur = opts.duration || 200;
+  const t = document.createElement('div');
+  t.className = 'ph-trail';
+  t.style.left = rect.left + 'px';
+  t.style.top = rect.top + 'px';
+  t.style.width = rect.width + 'px';
+  t.style.height = rect.height + 'px';
+  t.style.background = opts.background || 'rgba(200,190,255,.35)';
+  t.style.setProperty('--ph-trail-dur', dur + 'ms');
+  parent.appendChild(t);
+  setTimeout(() => t.remove(), dur + 60);
+  return t;
+}
+
 // ───────── Yüksek Skor ─────────
 // Platform çapında bir boşluğu kapatıyor: reels.js Keşfet kartlarında
 // `gh_hi_<id>` anahtarından yüksek skor OKUYORDU ama bu anahtarı hiçbir
