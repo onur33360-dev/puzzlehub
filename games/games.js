@@ -5938,3 +5938,257 @@ PuzzleGames.waterSort = (() => {
   return { init, cleanup };
 })();
 
+
+// ╔══════════════════════════════════════╗
+// ║       ARROW  (Faz 1: yalnizca motor) ║
+// ╚══════════════════════════════════════╝
+// Bu modul su an KABUGA BAGLI DEGIL: GAME_MAP'e eklenmedi ve
+// REEL_GAMES'te playable:false. Faz 2 render + girdi getirecek.
+// Motor burada duruyor cunku Node ile dogrulanabilir olmasi gerekiyordu
+// (bkz. docs/GAMES/ARROW.md dogrulama bolumu).
+PuzzleGames.arrowPuzzle = (() => {
+  // ═══════════════════════════════════════════════════════════════
+  //  ARROW — MOTOR (Faz 1)
+  // ═══════════════════════════════════════════════════════════════
+  // Render YOK. Bu bölüm bilerek tarayıcıdan bağımsız: çarpışma ve
+  // üretim doğruluğu bu oyunun riskli kısmı ve Node'da kaba kuvvet
+  // referansla sınanabilmeli (Sudoku üretecinde işe yarayan yaklaşım).
+  //
+  // MODEL SEÇİMİ — "hep ya da hiç" (B modeli):
+  // Ok ya tamamen tahtadan çıkar ya da hiç kıpırdamaz. Referans setinde
+  // iki farklı kural tarif ediliyordu (bkz. plan §1); B seçildi çünkü
+  // can cezası onu ima ediyor ve bu modelde ÇIKARMA MONOTONDUR:
+  // bir ok gidince doluluk yalnızca azalır, dolayısıyla serbest bir ok
+  // asla bloke hâle gelemez. Sonuç: seviye çözülebilirse "her adımda
+  // serbest herhangi bir oku çıkar" stratejisi HER ZAMAN çözer.
+  // Bu, çözülebilirlik testini aramadan düz bir döngüye indiriyor.
+
+  // Yön sırası: 0=yukarı 1=sağ 2=aşağı 3=sol
+  const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
+  // Şekiller KANONİK yönde (uç yukarı bakar) tanımlı; gövde aşağı uzanır.
+  // Uç daima (0,0). Şekil kütüphanesi VERİDİR — düz/kıvrımlı kararı
+  // koda gömülmedi, parametreyle seçilir (bkz. generate opts.shapes).
+  const SHAPES = [
+    { id: 'i2', offsets: [[0, 0], [0, 1]] },
+    { id: 'i3', offsets: [[0, 0], [0, 1], [0, 2]] },
+    { id: 'i4', offsets: [[0, 0], [0, 1], [0, 2], [0, 3]] },
+    { id: 'l3', offsets: [[0, 0], [0, 1], [1, 1]] },
+    { id: 'l3b', offsets: [[0, 0], [0, 1], [-1, 1]] },
+    { id: 'l4', offsets: [[0, 0], [0, 1], [0, 2], [1, 2]] },
+    { id: 's4', offsets: [[0, 0], [0, 1], [1, 1], [1, 2]] },
+    { id: 'u5', offsets: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 0]] },
+  ];
+  const STRAIGHT_IDS = ['i2', 'i3', 'i4'];
+  const SHAPE_BY_ID = SHAPES.reduce((m, s) => { m[s.id] = s; return m; }, {});
+
+  // Kanonik (uç yukarı) ofseti verilen yöne döndürür.
+  // up:(dc,dr) right:(-dr,dc) down:(-dc,-dr) left:(dr,-dc)
+  function rotate(dc, dr, dir) {
+    if (dir === 0) return [dc, dr];
+    if (dir === 1) return [-dr, dc];
+    if (dir === 2) return [-dc, -dr];
+    return [dr, -dc];
+  }
+
+  function cellsOf(arrow) {
+    const s = SHAPE_BY_ID[arrow.shapeId];
+    const out = new Array(s.offsets.length);
+    for (let i = 0; i < s.offsets.length; i++) {
+      const r = rotate(s.offsets[i][0], s.offsets[i][1], arrow.dir);
+      out[i] = [arrow.anchor[0] + r[0], arrow.anchor[1] + r[1]];
+    }
+    return out;
+  }
+
+  // ───────── Tahta ─────────
+  // occupancy bitişik Int16Array: O(1) erişim, önbellek dostu, GC yükü
+  // yok. 0 = boş, aksi hâlde arrowId+1 (0'ı boş için ayırdığımızdan).
+  function makeBoard(cols, rows) {
+    return { cols, rows, occ: new Int16Array(cols * rows), arrows: new Map() };
+  }
+  function idx(b, c, r) { return r * b.cols + c; }
+  function onBoard(b, c, r) { return c >= 0 && c < b.cols && r >= 0 && r < b.rows; }
+
+  function cellsFree(b, cells, ignoreId) {
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i][0], r = cells[i][1];
+      if (!onBoard(b, c, r)) return false;
+      const v = b.occ[idx(b, c, r)];
+      if (v !== 0 && v !== ignoreId + 1) return false;
+    }
+    return true;
+  }
+
+  function placeArrow(b, arrow) {
+    const cells = cellsOf(arrow);
+    for (let i = 0; i < cells.length; i++) b.occ[idx(b, cells[i][0], cells[i][1])] = arrow.id + 1;
+    b.arrows.set(arrow.id, arrow);
+  }
+  function removeArrow(b, arrow) {
+    const cells = cellsOf(arrow);
+    for (let i = 0; i < cells.length; i++) b.occ[idx(b, cells[i][0], cells[i][1])] = 0;
+    b.arrows.delete(arrow.id);
+  }
+
+  // ───────── Çıkış testi ─────────
+  // Ok yönü boyunca adım adım ötelenir. Herhangi bir adımda ötelenmiş
+  // bir hücre tahtadaysa VE başka bir okla doluysa → bloke.
+  // Tüm hücreler tahtayı terk ettiyse → çıkabilir.
+  // Maliyet: O(hücre × en büyük boyut).
+  function canExit(b, arrow) {
+    const cells = cellsOf(arrow);
+    const dx = DIRS[arrow.dir][0], dy = DIRS[arrow.dir][1];
+    const maxK = b.cols + b.rows + 2;
+    for (let k = 1; k <= maxK; k++) {
+      let allOff = true;
+      for (let i = 0; i < cells.length; i++) {
+        const c = cells[i][0] + dx * k, r = cells[i][1] + dy * k;
+        if (!onBoard(b, c, r)) continue;
+        allOff = false;
+        const v = b.occ[idx(b, c, r)];
+        if (v !== 0 && v !== arrow.id + 1) return false;
+      }
+      if (allOff) return true;
+    }
+    return true;
+  }
+
+  function freeArrows(b) {
+    const out = [];
+    b.arrows.forEach(a => { if (canExit(b, a)) out.push(a); });
+    return out;
+  }
+
+  // ───────── Çözülebilirlik ─────────
+  // Monotonluk sayesinde arama GEREKMEZ: serbest olan herhangi bir oku
+  // çıkarmak asla çözümü bozamaz. Tahtanın kopyası üzerinde çalışır.
+  function cloneBoard(b) {
+    const n = makeBoard(b.cols, b.rows);
+    n.occ.set(b.occ);
+    b.arrows.forEach((a, id) => n.arrows.set(id, a));
+    return n;
+  }
+  function solveOrder(b) {
+    const work = cloneBoard(b);
+    const order = [];
+    let guard = work.arrows.size + 5;
+    while (work.arrows.size > 0 && guard-- > 0) {
+      const free = freeArrows(work);
+      if (!free.length) return null;          // kilitlendi
+      order.push(free[0].id);
+      removeArrow(work, free[0]);
+    }
+    return work.arrows.size === 0 ? order : null;
+  }
+  function isSolvable(b) { return solveOrder(b) !== null; }
+
+  // ───────── Ölçümler ─────────
+  // Zorluk EĞRİSİ burada tanımlanmıyor (o bir tasarım kararı); yalnızca
+  // eğrinin ifade edilebileceği kadranlar ölçülüyor.
+  function metrics(b) {
+    let filled = 0;
+    for (let i = 0; i < b.occ.length; i++) if (b.occ[i]) filled++;
+    let sweepSum = 0, onlyOneBlocker = 0;
+    b.arrows.forEach(a => {
+      const cells = cellsOf(a);
+      const dx = DIRS[a.dir][0], dy = DIRS[a.dir][1];
+      let steps = 0;
+      for (let k = 1; k <= b.cols + b.rows + 2; k++) {
+        let allOff = true;
+        for (let i = 0; i < cells.length; i++) {
+          if (onBoard(b, cells[i][0] + dx * k, cells[i][1] + dy * k)) { allOff = false; break; }
+        }
+        if (allOff) break;
+        steps = k;
+      }
+      sweepSum += steps;
+      // "Tek engelli" ok: görsel olarak en aldatıcı durum.
+      const blockers = new Set();
+      for (let k = 1; k <= b.cols + b.rows + 2; k++) {
+        for (let i = 0; i < cells.length; i++) {
+          const c = cells[i][0] + dx * k, r = cells[i][1] + dy * k;
+          if (!onBoard(b, c, r)) continue;
+          const v = b.occ[idx(b, c, r)];
+          if (v !== 0 && v !== a.id + 1) blockers.add(v - 1);
+        }
+      }
+      if (blockers.size === 1) onlyOneBlocker++;
+    });
+    const n = b.arrows.size || 1;
+    return {
+      arrows: b.arrows.size,
+      free: freeArrows(b).length,
+      density: +(filled / (b.cols * b.rows)).toFixed(3),
+      avgSweep: +(sweepSum / n).toFixed(2),
+      singleBlocker: onlyOneBlocker,
+    };
+  }
+
+  // ───────── Üreteç A: ileri yerleştirme + doğrulama ─────────
+  // Rastgele yerleştir, sonra çözülebilirliği sına. Doğrulama monotonluk
+  // sayesinde ucuz olduğu için bu pratikte uygulanabilir.
+  // Dağılımı doğaldır (ters inşa gibi yerleştirme sırasına yanlı değil).
+  function generateForward(opts, seed) {
+    const cols = opts.cols, rows = opts.rows, target = opts.arrows;
+    const pool = (opts.shapes || STRAIGHT_IDS);
+    const rng = phRng(seed >>> 0 || 1);
+    const maxTries = opts.maxTries || 40;
+
+    for (let attempt = 0; attempt < maxTries; attempt++) {
+      const b = makeBoard(cols, rows);
+      let id = 0, placeFails = 0;
+      while (b.arrows.size < target && placeFails < 400) {
+        const shapeId = pool[phRngInt(rng, pool.length)];
+        const dir = phRngInt(rng, 4);
+        const anchor = [phRngInt(rng, cols), phRngInt(rng, rows)];
+        const cand = { id, shapeId, dir, anchor };
+        if (!cellsFree(b, cellsOf(cand), -1)) { placeFails++; continue; }
+        placeArrow(b, cand); id++; placeFails = 0;
+      }
+      if (b.arrows.size < target) continue;
+      if (isSolvable(b)) return { board: b, seed: seed >>> 0, attempts: attempt + 1, method: 'forward' };
+    }
+    return null;
+  }
+
+  // ───────── Üreteç B: ters inşa ─────────
+  // Çözüm sırasının TERSİNE yerleştirir: her yeni ok, o an tahtada
+  // bulunanlara göre çıkış yolu AÇIK olacak şekilde konur. Çözülemeyen
+  // bir seviye üretilemez — inşa gereği. Doğrulama gerektirmez.
+  function generateReverse(opts, seed) {
+    const cols = opts.cols, rows = opts.rows, target = opts.arrows;
+    const pool = (opts.shapes || STRAIGHT_IDS);
+    const rng = phRng(seed >>> 0 || 1);
+    const b = makeBoard(cols, rows);
+    let id = 0, fails = 0;
+    while (b.arrows.size < target && fails < 3000) {
+      const shapeId = pool[phRngInt(rng, pool.length)];
+      const dir = phRngInt(rng, 4);
+      const anchor = [phRngInt(rng, cols), phRngInt(rng, rows)];
+      const cand = { id, shapeId, dir, anchor };
+      if (!cellsFree(b, cellsOf(cand), -1)) { fails++; continue; }
+      placeArrow(b, cand);
+      // Yerleştirdikten SONRA kendi çıkış yolu açık olmalı; değilse geri al.
+      if (!canExit(b, cand)) { removeArrow(b, cand); fails++; continue; }
+      id++; fails = 0;
+    }
+    if (b.arrows.size < target) return null;
+    return { board: b, seed: seed >>> 0, attempts: 1, method: 'reverse' };
+  }
+
+
+  // ───────── Disa acilan API ─────────
+  // Faz 2 render bunlari tuketecek; Node testleri de ayni yuzeyi kullanir.
+  function init() { /* Faz 2 */ }
+  function cleanup() { /* Faz 2 */ }
+  return {
+    init, cleanup,
+    engine: {
+      SHAPES, STRAIGHT_IDS, DIRS,
+      cellsOf, makeBoard, cellsFree, placeArrow, removeArrow,
+      canExit, freeArrows, solveOrder, isSolvable, metrics,
+      generateForward, generateReverse,
+    },
+  };
+})();
