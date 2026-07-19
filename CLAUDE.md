@@ -106,10 +106,25 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   why there is no erase key and no undo, and it makes **unique-solution puzzles a functional
   requirement** (a multi-solution puzzle would punish a valid alternative answer). The
   generator enforces this structurally. Full rationale: `docs/GAMES/SUDOKU.md`.
-- **Deterministic seeds live in `core/rng.js`** and are game-agnostic on purpose. Daily
-  Challenge for any game is `phDailySeed('<game>')` → generator, no server needed. It uses
+- **Deterministic seeds live in `core/rng.js`** and are game-agnostic on purpose. It uses
   the **local** date; switching it to UTC would make the daily puzzle change mid-day for
   some regions. `rng.js` must load before `games.js` (the Sudoku generator depends on it).
+- **Daily Challenge (`core/daily.js`) is a PLATFORM feature, not a Sudoku feature.** A game
+  joins with two things: `supportsDaily: true` on its module, and an `init(container, opts)`
+  that honors `opts.seed` deterministically. Optionally `dailyDifficulty` (the daily must be
+  the same for everyone, or "same puzzle for all" is false). `daily.js` knows nothing about
+  any game's rules — adding a new daily game should not require editing it. Its streak is
+  **separate from `StreakSystem`** (`ph_streak`): that one rewards *opening* the app, this
+  one rewards *solving* the daily.
+- **`playGame(name, opts)` options are retained and reused by `restartCurrentGame()`.** This
+  is what makes "Tekrar Oyna" on a daily puzzle reproduce the same board instead of dropping
+  the player onto a random one. Don't drop the argument.
+- **Discover difficulty badges can be dynamic.** `reels.js` uses a game's
+  `difficultyLabel` getter when present, else the static `REEL_GAMES` string. Sudoku's card
+  used to advertise "Zor" while the game started on Easy — if you add player-selectable
+  difficulty to a game, expose `difficultyLabel` or the card will lie.
+- **Sudoku is feature-complete.** Bug fixes, performance, and small polish only — see
+  `docs/GAMES/SUDOKU.md` §9 for what was deliberately not built and why.
 - **`--ph-stone-*` tokens are intentionally unused.** Reserved for the planned "Gölge
   Tapınak" dark theme; Sudoku moved from stone to parchment. Not dead code to clean up —
   but also don't pick colors from it without reading `DESIGN_SYSTEM.md` §13 first (its

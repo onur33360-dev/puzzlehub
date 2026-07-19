@@ -450,6 +450,7 @@ function goBack() {
 // ==================== RENDER: ANA SAYFA ====================
 
 function renderHome() {
+  if (typeof renderDailyChallenge === 'function') renderDailyChallenge();
   renderDailyRewards();
   renderFavorites();
   renderMissions();
@@ -616,9 +617,25 @@ const GAME_MAP = {
 };
 
 let _currentGameId = null;
+let _currentGameOpts = null;
 let _beforeGameScreen = null;
 
-function playGame(name) {
+// id → görünen ad (GAME_MAP'in tersi). Günlük Meydan Okuma oyunları
+// id ile başlatıyor; başlık için ada ihtiyaç var.
+const GAME_NAME_BY_ID = Object.keys(GAME_MAP).reduce((acc, n) => {
+  acc[GAME_MAP[n]] = n; return acc;
+}, {});
+
+function playGameById(gameId, opts) {
+  const name = GAME_NAME_BY_ID[gameId];
+  if (!name) { showToast('🎮 Oyun bulunamadı'); return; }
+  playGame(name, opts);
+}
+
+// opts oyuna AYNEN geçer (örn. { daily, seed, difficulty }).
+// Yeniden başlatmada da korunur — aksi hâlde günlük bulmacada "Tekrar
+// Oyna" oyuncuyu rastgele bir tahtaya düşürürdü.
+function playGame(name, opts) {
   const gameId = GAME_MAP[name];
   if (!gameId || typeof PuzzleGames === 'undefined' || !PuzzleGames[gameId]) {
     showToast(`🎮 ${name} — yakında!`);
@@ -626,6 +643,7 @@ function playGame(name) {
   }
 
   _currentGameId = gameId;
+  _currentGameOpts = opts || null;
   _beforeGameScreen = currentScreen;
 
   // Tab bar gizle
@@ -655,7 +673,7 @@ function playGame(name) {
   const btnM = document.getElementById('btn-music');
   if (btnS) btnS.textContent = GameAudio.muted ? '🔇' : '🔊';
   if (btnM) btnM.textContent = GameAudio.musicMuted ? '🎵' : '🎶';
-  PuzzleGames[gameId].init(container);
+  PuzzleGames[gameId].init(container, _currentGameOpts || undefined);
 }
 
 function updateGameScore(score) {
@@ -732,7 +750,9 @@ function restartCurrentGame() {
   const container = document.getElementById('game-container');
   PuzzleGames[_currentGameId].cleanup();
   container.innerHTML = '';
-  PuzzleGames[_currentGameId].init(container);
+  // Aynı opts ile: günlük bulmacada "Tekrar Oyna" AYNI günün tahtasını
+  // vermeli, rastgele yeni bir tahta değil.
+  PuzzleGames[_currentGameId].init(container, _currentGameOpts || undefined);
 }
 
 function exitGame() {
@@ -740,6 +760,7 @@ function exitGame() {
     PuzzleGames[_currentGameId].cleanup();
   }
   _gameOverContinuation = null;   // oyundan çıkıldı — eski kanca geçersiz
+  _currentGameOpts = null;
   GameAudio.stopMusic();
   GameAudio.play('transition');
   _currentGameId = null;

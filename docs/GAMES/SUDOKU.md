@@ -288,14 +288,64 @@ zero width collapses the height too and the whole row folds.
 
 ---
 
-## 9. Deferred (in the reference design, not built)
+## 8a. Difficulty selection
 
-Timer · difficulty selection · pause · hints (×3) · notes/pencil mode · how-to-play
-onboarding · theme selector (Arcane / Gölge Tapınak / Altın Işık).
+Five chips above the board (Kolay / Orta / Zor / Uzman / Usta). Selecting one saves the
+preference to `ph_sudoku_difficulty` and starts a fresh puzzle — consistent with the fact
+that Sudoku has no saved-game concept (restart already discards the board).
 
-Notes mode is the one that would **reopen a closed decision**: pencil marks need an erase
-affordance, which this design removed on purpose. Design it as its own mode rather than
-adding a global erase key back.
+The selected chip is rendered in the **same parchment material as the board**, so the
+current difficulty is legible from the material, not just from a color.
+
+`PuzzleGames.sudoku.difficultyLabel` exposes the saved choice. Discover reads it through a
+generic hook (`_liveDifficulty` in `reels.js`): a card uses the game's own label when the
+module provides one, otherwise it falls back to the static `REEL_GAMES` string. This fixed a
+real lie — the Sudoku card advertised **"Zor"** while the game always started on Easy. Any
+future game with player-selectable difficulty participates the same way, with no
+Sudoku-specific knowledge in `reels.js`.
+
+---
+
+## 8b. Daily Challenge
+
+Sudoku is the first consumer of the **platform** daily framework (`core/daily.js`), not the
+owner of it. Its entire opt-in is three lines:
+
+```js
+supportsDaily: true,
+dailyDifficulty: 'medium',
+// plus: init() already honors opts.seed
+```
+
+Daily mode differences: the difficulty chips are replaced by a badge (everyone must play the
+same board, so difficulty is imposed by the caller), and winning calls
+`DailyChallenge.complete('sudoku')`, which updates the streak and re-renders the home card.
+
+`dailyDifficulty` is **Orta** on purpose: Kolay finishes too fast to feel like a daily ritual,
+and Uzman is too punishing for something you're asked to do every day.
+
+Restarting a daily reproduces the *same* board — `playGame`'s options are retained by
+`restartCurrentGame`, otherwise "Tekrar Oyna" would drop the player onto a random puzzle.
+
+---
+
+## 9. Sudoku is feature-complete
+
+Beyond this point: bug fixes, performance, and small polish only.
+
+Deliberately **not** built (present in the reference design): timer · pause · hints (×3) ·
+notes/pencil mode · how-to-play onboarding · theme selector (Arcane / Gölge Tapınak /
+Altın Işık).
+
+Two of these carry warnings for whoever picks them up:
+
+- **Notes mode reopens a closed decision.** Pencil marks need an erase affordance, which this
+  design removed on purpose (§2). Build it as its own mode rather than restoring a global
+  erase key.
+- **A visible timer conflicts with a platform principle** — tempo is meant to come from
+  sound, animation, and atmosphere, never a stopwatch; the player may think as long as they
+  like. Elapsed time is already used for scoring without being displayed. Showing it would
+  be a platform-level decision, not a Sudoku one.
 
 ---
 
@@ -340,3 +390,20 @@ written independently of the generator's own solver:
   Uzman 150/150 → 3 · Usta 150/150 → 3.
 - In-browser: 12 consecutive restarts produced 12 distinct seeds; a generated puzzle was
   solved end-to-end with 0 unexpected rejections and 0 lives lost.
+
+Difficulty selection & Daily Challenge (§8a/§8b):
+
+- Selecting Uzman produced a 26-clue board, persisted to `ph_sudoku_difficulty`, and
+  survived leaving and re-entering the game.
+- Daily mode used exactly `phDailySeed('sudoku')`, forced Orta, hid the chips, showed the
+  badge; **restart reproduced the identical board** and kept the badge.
+- Streak logic: first completion → 1 · same day again → unchanged (idempotent) · yesterday
+  4 → 5 · two days ago 7 → reset to 1 with best preserved · best 11 → 12 · corrupt
+  localStorage → safe defaults, no throw.
+- End-to-end daily: solved → "Günlük Tamamlandı", streak 1, home card switched to
+  "Bugün tamamlandı ✓ 🔥 1", and completing again did not double-count.
+- Discover hook: overriding `difficultyLabel` on every module changed every badge whose game
+  has a `PuzzleGames` module; the three unbuilt games (`arrowPuzzle`, `flowConnect`,
+  `jigsawCard`) correctly fell back to their static labels.
+- Regression: all 8 games still init/cleanup after the `init(container, opts)` signature
+  change; 250 randomized rule trials on Zor → 0 failures.

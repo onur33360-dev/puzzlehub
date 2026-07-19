@@ -83,6 +83,13 @@
           <div class="daily-rewards" id="daily-rewards"></div>
         </div>
 
+        <!-- Günlük Meydan Okuma — core/daily.js dolduruyor.
+             Katılan oyun yoksa bölüm tamamen gizlenir. -->
+        <div class="section" id="daily-challenge-section" style="display:none">
+          <h3 class="section-title">🗓️ GÜNLÜK MEYDAN OKUMA</h3>
+          <div id="daily-challenge-list"></div>
+        </div>
+
         <!-- Favori Oyunlar -->
         <div class="section">
           <h3 class="section-title">⭐ FAVORİ OYUNLARIN</h3>
@@ -329,7 +336,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.1.1';
+    const APP_VERSION = '1.2.1';
 
     // Sıralı yükleme: games.js → ui-kit.js → reels.js → app.js
     // (app.js, games.js'teki PuzzleGames/GameAudio ve reels.js'teki
@@ -349,7 +356,11 @@
       loadScript('games/games.js', function(){
         loadScript('core/ui-kit.js', function(){
           loadScript('reels/reels.js', function(){
-            loadScript('core/app.js');
+            // daily.js app.js'ten ÖNCE: app.js ilk render'da
+            // renderDailyChallenge()'ı çağırıyor.
+            loadScript('core/daily.js', function(){
+              loadScript('core/app.js');
+            });
           });
         });
       });

@@ -333,6 +333,43 @@
 .ph-heart.losing { animation: ph-heart-loss var(--ph-duration-medium) var(--ph-ease-standard); }
 .ph-heart.gaining { animation: ph-heart-gain var(--ph-duration-medium) var(--ph-ease-spring); }
 
+/* ── Günlük Meydan Okuma kartı (core/daily.js) ──
+   Oyun-bağımsız: günlüğe katılan her oyun aynı kartla listelenir.
+   Tamamlanmış hâli SÖNMEZ, yeşile döner — "bugünü halletmiş olmak"
+   bir başarı göstergesi, devre dışı bir satır değil. */
+.daily-card {
+  display: flex; align-items: center; gap: var(--ph-space-3);
+  width: 100%; padding: var(--ph-space-3) var(--ph-space-4);
+  margin-bottom: var(--ph-space-2);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--ph-radius-md);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,0) 22%),
+    var(--ph-bg-2);
+  box-shadow: var(--ph-shadow-2);
+  color: var(--ph-text-primary);
+  cursor: pointer; text-align: left;
+  transition: transform var(--ph-duration-micro) var(--ph-ease-standard);
+}
+.daily-card:active { transform: scale(.97); }
+.daily-card.done { border-color: rgba(34,197,94,.35); }
+.daily-emoji { font-size: 26px; line-height: 1; }
+.daily-info { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.daily-name { font: var(--ph-type-heading); color: var(--ph-text-primary); }
+.daily-sub { font: var(--ph-type-caption); color: var(--ph-text-secondary); }
+.daily-right { display: flex; align-items: center; gap: var(--ph-space-2); }
+.daily-check { color: var(--ph-success); font-size: 18px; font-weight: 900; }
+/* Seri sayacı: oyuncunun korumak isteyeceği tek sayı — en görünür öğe. */
+.daily-streak {
+  font: 800 13px/1 var(--ph-font-display);
+  font-variant-numeric: var(--ph-variant-numeral);
+  color: #fb923c;
+  padding: 5px 10px; border-radius: var(--ph-radius-full);
+  background: rgba(251,146,60,.14);
+  border: 1px solid rgba(251,146,60,.3);
+  white-space: nowrap;
+}
+
 /* ── §22 prefers-reduced-motion — dekoratif hareket kapanır,
    işlevsel geri bildirim (shake, float) kısalır ama kalır. ── */
 @media (prefers-reduced-motion: reduce) {

@@ -1295,6 +1295,20 @@ window.ReelsEngine = (function() {
     return 'hard';
   }
 
+  // Zorluğu oyunun KENDİSİ bildirebilir. Sudoku'da zorluk oyuncu
+  // tarafından seçiliyor; sabit etiket "Zor" yazıp Kolay bulmaca vermek
+  // kartın yalan söylemesi demekti. Oyun `difficultyLabel` gösterirse o
+  // kullanılır, yoksa REEL_GAMES'teki statik etikete düşülür.
+  // Genel bir mekanizma: seçilebilir zorluğu olan her oyun aynı şekilde
+  // katılır, reels.js'in o oyunu tanımasına gerek kalmadan.
+  function _liveDifficulty(game) {
+    try {
+      const g = (typeof PuzzleGames !== 'undefined') ? PuzzleGames[game.id] : null;
+      if (g && typeof g.difficultyLabel === 'string') return g.difficultyLabel;
+    } catch(e) {}
+    return game.difficulty;
+  }
+
   function _buildCard(game, idx) {
     const card = document.createElement('div');
     card.className = 'reel-card';
@@ -1341,7 +1355,7 @@ window.ReelsEngine = (function() {
     stats.innerHTML =
       '<div class="reel-stat">⭐ <span class="reel-stat-val">'+rating+'</span></div>'+
       '<div class="reel-stat">🎮 <span class="reel-stat-val">'+getPlayCount(game.id)+'</span></div>'+
-      '<span class="reel-diff-badge '+_diffClass(game.difficulty)+'">'+game.difficulty+'</span>';
+      '<span class="reel-diff-badge '+_diffClass(_liveDifficulty(game))+'">'+_liveDifficulty(game)+'</span>';
     info.appendChild(stats);
 
     // High score

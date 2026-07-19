@@ -980,10 +980,26 @@ PuzzleGames.sudoku = (() => {
   // olsaydı bulmacanın gerilimi kaçardı (bkz. docs/GAMES/SUDOKU.md).
   const MAX_LIVES = 3;
   const DEFAULT_DIFFICULTY = 'easy';
+  // Oyuncunun seçimi hatırlanır. gh_ ESKİ önek (bkz. CLAUDE.md §6);
+  // yeni anahtarlar ph_ altında.
+  const DIFF_KEY = 'ph_sudoku_difficulty';
+  // Günlük herkes için AYNI zorlukta olmalı.
+  const DAILY_DIFFICULTY = 'medium';
 
   let board, initial, solution, selected, container, startTime, wrapEl;
   let tabletEl, mistakesEl, atmoEl, placeEl, lives, dead;
-  let currentSeed, currentDifficulty;
+  let currentSeed, currentDifficulty, isDaily;
+
+  function savedDifficulty() {
+    try {
+      const v = localStorage.getItem(DIFF_KEY);
+      if (v && DIFFICULTIES[v]) return v;
+    } catch (e) {}
+    return DEFAULT_DIFFICULTY;
+  }
+  function saveDifficulty(d) {
+    try { if (DIFFICULTIES[d]) localStorage.setItem(DIFF_KEY, d); } catch (e) {}
+  }
 
   // ═══════════════════════════════════════════════════════════════
   //  BULMACA ÜRETİCİ
@@ -1303,13 +1319,15 @@ PuzzleGames.sudoku = (() => {
          bir gradyan olduğu için "gök rengi" tek bir değer değil — düz renkli
          bir kesme dairesi ayın yanında koyu bir leke olarak görünüyordu.
          Mask zemini gerçekten şeffaf bırakır, yıldızlar hilalin içinden geçer. */
-      .sdk-moon{position:absolute;top:5%;right:11%;width:38px;height:38px;border-radius:50%;
+      /* Köşeye çekildi: zorluk seçici çipleri üst-ortayı kapladığı için
+         eski konumunda "Usta" çipiyle çakışıyordu. */
+      .sdk-moon{position:absolute;top:2.5%;right:5%;width:34px;height:34px;border-radius:50%;
         background:radial-gradient(circle at 36% 32%, #FFF8E2, #F1E1B0 56%, #D8C085 100%);
         -webkit-mask-image:radial-gradient(circle at 132% 2%, transparent 52%, #000 53%);
         mask-image:radial-gradient(circle at 132% 2%, transparent 52%, #000 53%)}
       /* Parıltı ayrı katmanda: mask ışımayı da keserdi. */
-      .sdk-moon-glow{position:absolute;top:5%;right:11%;width:38px;height:38px;border-radius:50%;
-        box-shadow:0 0 40px 12px rgba(246,228,172,.2)}
+      .sdk-moon-glow{position:absolute;top:2.5%;right:5%;width:34px;height:34px;border-radius:50%;
+        box-shadow:0 0 36px 11px rgba(246,228,172,.2)}
       /* Kalıntılar: EKRANIN KENARLARINDA. Ortası bilerek boş — tahta ve sayı
          tuşları oraya oturuyor, arkalarında siluet olursa okunurluk düşer. */
       .sdk-ruins{position:absolute;left:0;right:0;bottom:0;height:132px;opacity:.5}
@@ -1336,6 +1354,40 @@ PuzzleGames.sudoku = (() => {
         text-transform:uppercase;color:#7A6642}
       .sdk-cartouche-val{font:600 13px/1 'Fraunces',serif;
         font-variant-numeric:var(--ph-variant-numeral);color:var(--sdk-ink)}
+
+      /* ── ZORLUK SEÇİCİ ──
+         Tahtanın ÜSTÜNDE, oynamadan önce görülecek yerde. Seçim yeni bir
+         bulmaca başlatır; Sudoku'da kaydedilmiş oyun kavramı olmadığı
+         için (yeniden başlatma da tahtayı atar) bu davranış tutarlı. */
+      .sdk-diffs{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;max-width:430px}
+      .sdk-diff{
+        padding:5px 11px;border-radius:var(--ph-radius-full);cursor:pointer;
+        font:600 11px/1 'Fraunces',serif;letter-spacing:.06em;
+        color:#7A6642;background:rgba(243,234,212,.14);
+        border:1px solid rgba(184,151,79,.32);
+        transition:transform var(--ph-duration-micro) var(--ph-ease-standard),
+                   background var(--ph-duration-fast) var(--ph-ease-standard);
+      }
+      .sdk-diff:active{transform:scale(.92)}
+      /* Seçili olan parşömenle AYNI malzemede: hangi zorlukta olduğun
+         tahtayla aynı maddeden okunuyor. */
+      .sdk-diff.on{
+        color:var(--sdk-ink);
+        background:linear-gradient(180deg, var(--sdk-paper-hi), var(--sdk-paper));
+        border-color:var(--sdk-gold);
+        box-shadow:0 3px 10px -4px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.7);
+      }
+
+      /* Günlük modda zorluk seçilemez (herkes aynı tahtayı görmeli),
+         onun yerine rozet gösterilir. */
+      .sdk-daily-badge{
+        display:inline-flex;align-items:center;gap:6px;
+        padding:6px 14px;border-radius:var(--ph-radius-full);
+        font:600 11px/1 'Fraunces',serif;letter-spacing:.1em;text-transform:uppercase;
+        color:#F3EAD4;background:linear-gradient(160deg, rgba(139,92,246,.5), rgba(76,42,122,.6));
+        border:1px solid rgba(167,139,250,.5);
+        box-shadow:0 4px 14px -5px rgba(139,92,246,.7), inset 0 1px 0 rgba(220,215,255,.3);
+      }
 
       /* ── PARŞÖMEN TABLET ──
          Tek parça levha. Sol-üst anahtar ışığı (§4) + sağ-alt gölge + kâğıt
@@ -1510,7 +1562,11 @@ PuzzleGames.sudoku = (() => {
     // hücre çıkarımında doğruluyor). Bu bir estetik tercih değil: can
     // sistemi her hamleyi çözüme karşı sınıyor, çok çözümlü bir tahtada
     // oyuncu geçerli bir alternatifi girdiği için can kaybederdi.
-    const gen = generate(opts.difficulty || DEFAULT_DIFFICULTY, opts.seed);
+    // Günlük modda zorluk ÇAĞIRAN tarafından dayatılır (herkes aynı
+    // tahtayı görmeli); normal modda oyuncunun kayıtlı tercihi kullanılır.
+    isDaily = !!opts.daily;
+    const wanted = opts.difficulty || (isDaily ? DAILY_DIFFICULTY : savedDifficulty());
+    const gen = generate(wanted, opts.seed);
     currentSeed = gen.seed;
     currentDifficulty = gen.difficulty;
     initial = gen.puzzle;
@@ -1525,7 +1581,15 @@ PuzzleGames.sudoku = (() => {
     buildPlace();
 
     wrapEl = document.createElement('div'); wrapEl.className = 'sdk-wrap';
+    const topRow = isDaily
+      ? `<div class="sdk-daily-badge">🗓️ Günlük · ${DIFFICULTIES[currentDifficulty].label}</div>`
+      : `<div class="sdk-diffs" data-role="diffs">` +
+          Object.keys(DIFFICULTIES).map(k =>
+            `<div class="sdk-diff${k === currentDifficulty ? ' on' : ''}" data-d="${k}">${DIFFICULTIES[k].label}</div>`
+          ).join('') +
+        `</div>`;
     wrapEl.innerHTML =
+      topRow +
       `<div class="sdk-cartouche">` +
         `<span class="sdk-cartouche-lbl">Hatalar</span>` +
         `<span class="sdk-cartouche-val" data-role="mistakes">0/${MAX_LIVES}</span>` +
@@ -1561,6 +1625,23 @@ PuzzleGames.sudoku = (() => {
       const btn = e.target.closest('.sdk-num');
       if (btn) placeNum(+btn.dataset.n);
     });
+
+    // Zorluk seçimi → tercih kaydedilir ve yeni bulmaca başlar.
+    // restartCurrentGame yerine doğrudan yeniden init: uygulama
+    // kabuğunun sakladığı opts günlük moda ait olabilir, onu taşımak
+    // istemiyoruz.
+    const diffsEl = wrapEl.querySelector('[data-role="diffs"]');
+    if (diffsEl) {
+      addEv(diffsEl, 'click', (e) => {
+        const btn = e.target.closest('.sdk-diff');
+        if (!btn || btn.dataset.d === currentDifficulty) return;
+        saveDifficulty(btn.dataset.d);
+        GameAudio.play('button'); GameAudio.haptic('tap');
+        const c = container;
+        cleanup(); c.innerHTML = '';
+        init(c, { difficulty: btn.dataset.d });
+      });
+    }
 
     render();
   }
@@ -1785,7 +1866,18 @@ PuzzleGames.sudoku = (() => {
       updateGameScore(Math.max(5000 - secs*10, 500));
       GameAudio.play('win'); GameAudio.haptic('win');
       phAtmosphereFlare(atmoEl, 2.2, 620);
-      showGameOver(true, 'Sudoku Çözüldü! 🧩', `${secs} saniyede tamamladın!`);
+
+      let title = 'Sudoku Çözüldü! 🧩';
+      let msg = `${secs} saniyede tamamladın!`;
+      if (isDaily && typeof DailyChallenge !== 'undefined') {
+        // complete() aynı gün içinde idempotent — günlüğü tekrar
+        // çözmek seriyi ikiye katlamaz.
+        const st = DailyChallenge.complete('sudoku');
+        title = 'Günlük Tamamlandı! 🗓️';
+        msg = `${secs} saniye · 🔥 ${st.streak} günlük seri`;
+        if (typeof renderDailyChallenge === 'function') renderDailyChallenge();
+      }
+      showGameOver(true, title, msg);
     }
   }
 
@@ -1804,8 +1896,18 @@ PuzzleGames.sudoku = (() => {
   return {
     init, cleanup, generate,
     DIFFICULTIES,
+    // ── Günlük Meydan Okuma sözleşmesi (core/daily.js) ──
+    // supportsDaily: bu oyun günlüğe katılabilir.
+    // dailyDifficulty: günlük HERKES için aynı zorlukta olmalı, yoksa
+    // "aynı bulmaca" iddiası bozulur. Orta seçildi: kolay çok hızlı
+    // biter, uzman günlük bir alışkanlık için fazla cezalandırıcı.
+    // init() zaten opts.seed'i onurlandırıyor — sözleşmenin diğer yarısı.
+    supportsDaily: true,
+    dailyDifficulty: DAILY_DIFFICULTY,
     get seed() { return currentSeed; },
     get difficulty() { return currentDifficulty; },
+    // Keşfet kartının gerçeği söylemesi için: oyuncunun kayıtlı seçimi.
+    get difficultyLabel() { return DIFFICULTIES[savedDifficulty()].label; },
   };
 })();
 

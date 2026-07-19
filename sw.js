@@ -47,6 +47,7 @@ const SHELL_ASSETS = [
   './core/rng.js',
   './games/games.js',
   './core/ui-kit.js',
+  './core/daily.js',
   './reels/reels.js',
   './core/app.js',
   './assets/icons/icon-192.png',
