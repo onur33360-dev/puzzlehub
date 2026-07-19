@@ -100,7 +100,20 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; PuzzleHub is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked.
-- **Three Discover-feed games** (`arrowPuzzle`, `flowConnect`, `jigsawCard`) have polished demo animations but no real game behind them. They're marked `playable:false` on purpose — this is a backlog item, not an oversight to quietly complete. (`waterSort` was the fourth; it is now a fully built, `playable:true` game.)
+- **Two Discover-feed games** (`flowConnect`, `jigsawCard`) have polished demo animations but no real game behind them. They're marked `playable:false` on purpose — this is a backlog item, not an oversight to quietly complete. (`waterSort` and `arrowPuzzle` were the other two; both are now built and `playable:true`.)
+- **Ok Bulmaca (`arrowPuzzle`) deliberately has NO input lock during exit animations.**
+  Taps may overlap and several arrows can fly off at once. This is safe because arrow
+  removal is **monotonic** — a departing arrow only frees cells, so a free arrow can never
+  become blocked by another arrow's exit. Proven in Phase 1 and re-verified (30,880 checks,
+  zero violations). A lock would silently swallow taps for ~280 ms each and make the game
+  feel dead. Don't add one back. Its corollary: `onCleared` **must** stay guarded by
+  `!cleared`, or concurrent exits fire the level-complete path more than once.
+- **Arrow level params are capped by board CAPACITY, not just a curve.** `paramsFor` derives
+  a ceiling from `cols * rows * MAX_FILL / AVG_CELLS_PER_ARROW`, and `startLevel` retries
+  with one fewer arrow on generator failure. Both are load-bearing: the original raw curve
+  asked for 32 arrows on an 80-cell board (~112 cells needed), the generator returned
+  `null`, and the game **crashed at level 19**. Never write `res.board` without the retry
+  guard. The numbers (`MAX_FILL` 0.85, avg 3.5 cells/arrow) are measured, not guessed.
 - **Sudoku validates against the SOLUTION, not against Sudoku's rules.** A wrong digit is
   refused and costs one of 3 lives; it never lands on the board. This is deliberate — it is
   why there is no erase key and no undo, and it makes **unique-solution puzzles a functional

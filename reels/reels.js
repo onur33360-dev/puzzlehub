@@ -14,7 +14,7 @@ const REEL_GAMES = [
   { id:'sudoku', name:'Sudoku', emoji:'#️⃣', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
   { id:'mazeGame', name:'Labirent', emoji:'🌀', category:'puzzle', desc:'Çıkışı bul, zamana karşı yarış!', difficulty:'Orta', gradient:['#059669','#065f46'], playable:true },
   { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#8b5cf6','#4c1d95'], playable:true },
-  { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🏹', category:'puzzle', desc:'Okları doğru sırayla çıkar!', difficulty:'Kolay', gradient:['#0ea5e9','#0c4a6e'], playable:false },
+  { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🏹', category:'puzzle', desc:'Okları doğru sırayla çıkar!', difficulty:'Kolay', gradient:['#0ea5e9','#0c4a6e'], playable:true },
   { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Zor', gradient:['#e11d48','#881337'], playable:false },
   { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#d97706','#78350f'], playable:false },
 ];

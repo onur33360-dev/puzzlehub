@@ -614,6 +614,7 @@ const GAME_MAP = {
   'Bulmaca Blokları': 'blockPuzzle',
   'Labirent': 'mazeGame',
   'İksir Sıralama': 'waterSort',
+  'Ok Bulmaca': 'arrowPuzzle',
 };
 
 let _currentGameId = null;

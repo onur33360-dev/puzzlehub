@@ -6060,6 +6060,31 @@ PuzzleGames.arrowPuzzle = (() => {
     return out;
   }
 
+  // Bloke bir okun ÖNÜNDEKİ ilk engelleri döndürür.
+  // Ceza vermek yeterli değil; oyuncu NEDEN olmadığını görmeli. Bu
+  // fonksiyon "öğreten geri bildirim"in veri tarafı.
+  // Yalnızca ilk çarpışma adımındakiler döner — arkadaki okları da
+  // işaretlemek gürültü olurdu, suçlu en öndekidir.
+  function blockersOf(b, arrow) {
+    const cells = cellsOf(arrow);
+    const dx = DIRS[arrow.dir][0], dy = DIRS[arrow.dir][1];
+    const maxK = b.cols + b.rows + 2;
+    for (let k = 1; k <= maxK; k++) {
+      const hit = new Set();
+      let allOff = true;
+      for (let i = 0; i < cells.length; i++) {
+        const c = cells[i][0] + dx * k, r = cells[i][1] + dy * k;
+        if (!onBoard(b, c, r)) continue;
+        allOff = false;
+        const v = b.occ[idx(b, c, r)];
+        if (v !== 0 && v !== arrow.id + 1) hit.add(v - 1);
+      }
+      if (hit.size) return [...hit];
+      if (allOff) return [];
+    }
+    return [];
+  }
+
   // ───────── Çözülebilirlik ─────────
   // Monotonluk sayesinde arama GEREKMEZ: serbest olan herhangi bir oku
   // çıkarmak asla çözümü bozamaz. Tahtanın kopyası üzerinde çalışır.
@@ -6178,16 +6203,380 @@ PuzzleGames.arrowPuzzle = (() => {
   }
 
 
-  // ───────── Disa acilan API ─────────
-  // Faz 2 render bunlari tuketecek; Node testleri de ayni yuzeyi kullanir.
-  function init() { /* Faz 2 */ }
-  function cleanup() { /* Faz 2 */ }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  ARROW — RENDER + GİRDİ (Faz 2)
+  // ═══════════════════════════════════════════════════════════════
+  // OKUNABİLİRLİK BU OYUNUN ÇEKİRDEĞİ.
+  // Faz 1'de kanıtlandı ki bu modelde sıralama tuzağı yok: zorluk
+  // tamamen ALGISAL — hangi okun serbest olduğunu görebilmek. Dolayısıyla
+  // render bir sunum katmanı değil, oyunun kendisidir.
+  //
+  // İki şeyi birbirinden ayırıyorum:
+  //   • Tahtayı OKUNABİLİR kılmak  → yapılıyor (yön ve yol net)
+  //   • Serbest okları İŞARETLEMEK → YAPILMIYOR; bulmacayı yok ederdi
+  //
+  // Ayrışmanın tekniği: her ok İKİ kez çizilir — altta geniş koyu bir
+  // "kılıf", üstte dar açık bir "çekirdek". Kılıf komşu okların arasına
+  // koyu bir sınır koyar, böylece yan yana duran oklar tek bir lekeye
+  // dönüşmez. Referansta bu yok ve yoğun tahtalar okunmuyor.
+
+  const CELL = 1;              // SVG kullanıcı birimi = 1 hücre
+  const CASING_W = 0.30;   // koyu kilif — komsu oklar arasindaki sinir       // koyu kılıf kalınlığı (hücre oranı)
+  const CORE_W = 0.17;     // ince cekirdek: boru hissi, tikanik degil         // açık çekirdek
+  const HIT_W = 0.86;      // dokunma hedefi cizgiden BAGIMSIZ kalin          // görünmez dokunma hedefi
+  const EXIT_MS = 260;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl;
+  let board, level, cleared, levelTotal, advanceT;
+
+  function injectCSS() {
+    injectStyle('css-arrow', `
+      #game-container.ar-scene{ --ar-ink:#E8ECFF; }
+
+      .ar-wrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;gap:var(--ph-space-4);width:100%;max-width:430px;min-height:100%;
+        margin:0 auto;padding:var(--ph-space-4) var(--ph-space-3)}
+      .ar-wrap *{box-sizing:border-box}
+
+      .ar-hud{display:flex;align-items:center;gap:var(--ph-space-3);
+        font:600 12px/1 'Fraunces',serif;letter-spacing:.1em;text-transform:uppercase;
+        color:rgba(210,200,255,.7)}
+      .ar-hud b{font:800 15px/1 var(--ph-font-display);
+        font-variant-numeric:var(--ph-variant-numeral);color:var(--ar-ink)}
+
+      /* Tahta: cam kaide. Hücre ızgarası ÇOK kısık — okların altında
+         referans noktası olsun ama onlarla yarışmasın. */
+      .ar-board{position:relative;width:100%;max-width:400px;
+        border-radius:var(--ph-radius-lg);padding:10px;
+        background:linear-gradient(180deg, rgba(126,110,220,.16) 0%, rgba(28,24,68,.5) 62%, rgba(16,14,46,.6) 100%);
+        border:1px solid rgba(180,165,255,.16);
+        box-shadow:0 26px 54px -20px rgba(4,6,22,.92), inset 0 1px 0 rgba(205,195,255,.2);
+        touch-action:manipulation}
+      .ar-svg{display:block;width:100%;height:auto;overflow:visible}
+      .ar-grid{stroke:rgba(180,170,255,.07);stroke-width:.02;fill:none}
+
+      /* ── OK ──
+         Kılıf koyu ve GENİŞ: komşu okların arasındaki sınır bu.
+         Çekirdek açık ve DAR: okun kendisi bu.
+         Uç ayrı ve EN PARLAK: yön buradan okunur. */
+      .ar-arrow{cursor:pointer}
+      .ar-casing{fill:none;stroke:#171233;stroke-width:${CASING_W};
+        stroke-linecap:round;stroke-linejoin:round}
+      .ar-core{fill:none;stroke:#9E8CE8;stroke-width:${CORE_W};
+        stroke-linecap:round;stroke-linejoin:round;
+        transition:stroke var(--ph-duration-fast) var(--ph-ease-standard)}
+      .ar-head{fill:#D8CCFF;stroke:#171233;stroke-width:.1;stroke-linejoin:round;
+        transition:fill var(--ph-duration-fast) var(--ph-ease-standard)}
+      /* Görünmez ve kalın dokunma hedefi: ince çizgiye dokunmak zordur.
+         pointer-events:stroke ile yalnızca çizgi boyunca yakalar. */
+      .ar-hit{fill:none;stroke:transparent;stroke-width:${HIT_W};
+        stroke-linecap:round;stroke-linejoin:round;pointer-events:stroke}
+
+      /* Basılı tutma/dokunma anı — dokunuşun algılandığı belli olmalı */
+      .ar-arrow:active .ar-core{stroke:#C4B5FF}
+
+      /* ── ÇIKIŞ ──
+         Grup yön boyunca ötelenir; SVG'de CSS transform kullanıcı
+         birimleriyle çalışır, viewBox sayesinde ölçekten bağımsızdır. */
+      .ar-arrow.exiting{transition:transform ${EXIT_MS}ms var(--ph-ease-decel),
+                                   opacity ${EXIT_MS}ms var(--ph-ease-standard);
+        opacity:.15;pointer-events:none}
+
+      /* ── BLOKE ──
+         Dokunulan ok sarsılır VE yolu kızıl çizilir VE engelleyen ok
+         parlar. Üçü birlikte "neden olmadığını" anlatır; yalnızca
+         sarsıntı "olmadı" der, sebebini söylemez. */
+      @keyframes arNudge{
+        0%,100%{transform:translate(0,0)}
+        25%{transform:translate(var(--anx,0),var(--any,0))}
+        60%{transform:translate(calc(var(--anx,0)*-.5),calc(var(--any,0)*-.5))}
+      }
+      .ar-arrow.blocked{animation:arNudge 320ms var(--ph-ease-standard)}
+      .ar-arrow.blocked .ar-core{stroke:#E0574A}
+      .ar-arrow.blocked .ar-head{fill:#F2897C}
+
+      @keyframes arCulprit{
+        0%,100%{stroke:#9E8CE8}
+        30%,60%{stroke:#F0A08F}
+      }
+      .ar-arrow.culprit .ar-core{animation:arCulprit 620ms var(--ph-ease-standard)}
+
+      /* Engellenen yol: dokunulan oktan ilk engele kadar kızıl şerit */
+      .ar-blockpath{fill:none;stroke:rgba(224,87,74,.5);stroke-width:${CORE_W * 0.7};
+        stroke-linecap:round;stroke-dasharray:.28 .22;pointer-events:none;
+        animation:arBlockFade 620ms var(--ph-ease-standard) forwards}
+      @keyframes arBlockFade{0%{opacity:.95}100%{opacity:0}}
+
+      @media (prefers-reduced-motion: reduce){
+        .ar-arrow.exiting{transition-duration:var(--ph-duration-micro)}
+        .ar-arrow.blocked,.ar-arrow.culprit .ar-core{animation:none}
+        .ar-blockpath{animation-duration:var(--ph-duration-fast)}
+      }
+    `);
+  }
+
+  // ───────── SVG yardımcıları ─────────
+  function el(name, attrs) {
+    const n = document.createElementNS(SVG_NS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  // Okun gövde yolu: hücre merkezlerinden geçen polyline.
+  // Şekil hücreleri komşuluk sırasına göre zaten sıralı tanımlandığı
+  // için (uçtan kuyruğa) doğrudan kullanılabiliyor.
+  function bodyPath(arrow) {
+    const cells = cellsOf(arrow);
+    return cells.map((c, i) => (i ? 'L' : 'M') + (c[0] + .5) + ' ' + (c[1] + .5)).join(' ');
+  }
+
+  // Uç üçgeni: uç hücrenin merkezinden yöne doğru.
+  function headPath(arrow) {
+    const c = cellsOf(arrow)[0];
+    const d = DIRS[arrow.dir];
+    const cx = c[0] + .5, cy = c[1] + .5;
+    // Taban gövdenin İÇİNDE başlar (negatif b) ki uç ile gövde tek parça
+    // okunsun; önceki değerlerde üçgen gövdeden kopuk duruyordu.
+    const t = .42, b = -.10, w = .19;
+    const px = -d[1], py = d[0];            // dike vektör
+    return 'M' + (cx + d[0] * t) + ' ' + (cy + d[1] * t) +
+           'L' + (cx + px * w + d[0] * b) + ' ' + (cy + py * w + d[1] * b) +
+           'L' + (cx - px * w + d[0] * b) + ' ' + (cy - py * w + d[1] * b) + 'Z';
+  }
+
+  function drawArrow(arrow) {
+    const g = el('g', { class: 'ar-arrow', 'data-id': arrow.id });
+    const d = bodyPath(arrow);
+    g.appendChild(el('path', { class: 'ar-casing', d }));
+    g.appendChild(el('path', { class: 'ar-core', d }));
+    g.appendChild(el('path', { class: 'ar-head', d: headPath(arrow) }));
+    g.appendChild(el('path', { class: 'ar-hit', d }));
+    return g;
+  }
+
+  function buildBoard() {
+    svgEl.innerHTML = '';
+    svgEl.setAttribute('viewBox', '0 0 ' + board.cols + ' ' + board.rows);
+    // Izgara: yalnızca hafif bir referans
+    const grid = el('g', { class: 'ar-grid' });
+    for (let c = 0; c <= board.cols; c++) {
+      grid.appendChild(el('line', { x1: c, y1: 0, x2: c, y2: board.rows }));
+    }
+    for (let r = 0; r <= board.rows; r++) {
+      grid.appendChild(el('line', { x1: 0, y1: r, x2: board.cols, y2: r }));
+    }
+    svgEl.appendChild(grid);
+    arrowsEl = el('g', { class: 'ar-arrows' });
+    svgEl.appendChild(arrowsEl);
+    board.arrows.forEach(a => arrowsEl.appendChild(drawArrow(a)));
+    updateHud();
+  }
+
+  function updateHud() {
+    if (hudEl) {
+      hudEl.innerHTML = 'Seviye <b>' + level + '</b>' +
+                        '<span style="opacity:.5">·</span>' +
+                        'Kalan <b>' + board.arrows.size + '</b>';
+    }
+  }
+
+  // ───────── Etkileşim ─────────
+  // ÇIKIŞ SIRASINDA GİRDİ KİLİDİ YOK — bilinçli.
+  // Oyuncu arka arkaya birkaç serbest oka basabilir; çıkış animasyonları
+  // üst üste binebilir. Bu güvenli, çünkü Faz 1'de kanıtlanan MONOTONLUK
+  // tam olarak bunu garanti ediyor: bir ok gidince doluluk yalnızca azalır,
+  // dolayısıyla serbest bir ok başka bir okun çıkışıyla asla bloke hale
+  // gelemez. Kilit koymak dokunuşları sessizce yutar (ok başına 280ms) ve
+  // oyun tepkisiz hissettirir. Buraya tekrar kilit EKLEME.
+  function onBoardTap(e) {
+    if (cleared) return;
+    const g = e.target.closest('.ar-arrow');
+    if (!g) return;
+    // Zaten çıkmakta olan ok Map'ten silinmiştir → ikinci dokunuş düşer.
+    const arrow = board.arrows.get(+g.dataset.id);
+    if (!arrow) return;
+    if (canExit(board, arrow)) doExit(arrow, g);
+    else doBlocked(arrow, g);
+  }
+
+  function doExit(arrow, g) {
+    const d = DIRS[arrow.dir];
+    // Tahtayı tamamen terk edecek kadar ötele
+    const dist = board.cols + board.rows;
+    removeArrow(board, arrow);
+    // Sayaç animasyonu değil MODELİ takip eder: dokunuş anında düşer.
+    updateHud();
+
+    // Işık izi: hızlı hareketin arkasında kalan ışık (paylaşımlı phTrail
+    // DOM tabanlı; SVG'de aynı işi yapan hafif bir şerit kullanıyoruz)
+    const trail = el('path', {
+      class: 'ar-core', d: bodyPath(arrow),
+      style: 'stroke:rgba(198,188,255,.3);transition:opacity 260ms;opacity:.5;pointer-events:none',
+    });
+    arrowsEl.insertBefore(trail, arrowsEl.firstChild);
+    setTimeout(() => { trail.style.opacity = '0'; }, 20);
+    setTimeout(() => trail.remove(), EXIT_MS + 80);
+
+    g.classList.add('exiting');
+    g.style.transform = 'translate(' + (d[0] * dist) + 'px,' + (d[1] * dist) + 'px)';
+
+    // Perde kalan ok azaldıkça yükselir: bulmaca çözüldükçe SESLE de
+    // ilerleme duyulur. Sentezle bedava (2048'in birleşme rampasıyla
+    // aynı mantık).
+    // Ilerleme seviye BASINDAKI ok sayisina gore: tahta bosaldikca perde yukselir
+    const progress = levelTotal ? 1 - board.arrows.size / levelTotal : 0;
+    GameAudio.play('swipe', { pitch: 1 + progress * 0.5 });
+    GameAudio.haptic('micro');
+
+    setTimeout(() => {
+      g.remove();
+      // !cleared ŞART: eşzamanlı çıkışlarda birden fazla zamanlayıcı
+      // tahtayı boş görebilir; guard olmadan onCleared iki kez çalışır.
+      if (!cleared && board.arrows.size === 0) onCleared();
+    }, EXIT_MS + 20);
+  }
+
+  function doBlocked(arrow, g) {
+    const d = DIRS[arrow.dir];
+    g.style.setProperty('--anx', (d[0] * 0.22) + 'px');
+    g.style.setProperty('--any', (d[1] * 0.22) + 'px');
+    g.classList.remove('blocked'); void g.getBBox();
+    g.classList.add('blocked');
+    setTimeout(() => g.classList.remove('blocked'), 360);
+
+    // ENGELLEYENİ göster — cezanın öğretici olmasını sağlayan şey bu
+    const culprits = blockersOf(board, arrow);
+    culprits.forEach(id => {
+      const cg = arrowsEl.querySelector('.ar-arrow[data-id="' + id + '"]');
+      if (!cg) return;
+      cg.classList.remove('culprit'); void cg.getBBox();
+      cg.classList.add('culprit');
+      setTimeout(() => cg.classList.remove('culprit'), 660);
+    });
+
+    // Dokunulan oktan ilk engele kadar kızıl şerit
+    const cells = cellsOf(arrow);
+    const head = cells[0];
+    let k = 1;
+    for (; k <= board.cols + board.rows; k++) {
+      const c = head[0] + d[0] * k, r = head[1] + d[1] * k;
+      if (!onBoard(board, c, r)) break;
+      if (board.occ[r * board.cols + c] !== 0) break;
+    }
+    const bp = el('path', {
+      class: 'ar-blockpath',
+      d: 'M' + (head[0] + .5) + ' ' + (head[1] + .5) +
+         'L' + (head[0] + .5 + d[0] * k) + ' ' + (head[1] + .5 + d[1] * k),
+    });
+    arrowsEl.appendChild(bp);
+    setTimeout(() => bp.remove(), 660);
+
+    GameAudio.play('error');
+    GameAudio.haptic('error');
+  }
+
+  function onCleared() {
+    cleared = true;
+    GameAudio.play('premium');
+    GameAudio.haptic('win');
+    phAtmosphereFlare(atmoEl, 2.2, 700);
+    const r = svgEl.getBoundingClientRect();
+    phParticleBurst(document.body, r.left + r.width / 2, r.top + r.height / 2,
+      'var(--ph-accent)', 14);
+    // Faz 3: seviye ilerleyişi, can, reklam akışı.
+    advanceT = setTimeout(() => { advanceT = null; level++; startLevel(); }, 900);
+  }
+
+  // ───────── Seviye ─────────
+  // GEÇİCİ eğri: zorluk değerleri henüz karara bağlanmadı (bkz. plan).
+  // Buradaki sayılar Faz 3'te tasarım kararıyla değişecek.
+  //
+  // AMA bir şey karara bağlı: ok sayısı tahtanın KAPASİTESİNİ aşamaz.
+  // Eski eğri ham sayı istiyordu (t=40'ta 32 ok) ve tahtayı aşıyordu:
+  // 8x10 = 80 hücre, ok başına ortalama 3.5 hücre → ~112 hücre gerekir.
+  // Üreteç null dönüyor, startLevel null.board'da çakılıyordu — oyun
+  // 19. seviyede çöküyor, 30'dan sonra hiç açılmıyordu.
+  // Ölçüm (24 deneme/kademe): %75 doluluğa kadar üretim 22-24/24,
+  // %85'te 18-20/24. Tavan .85 — kalan başarısızlıkları startLevel'ın
+  // yeniden deneme döngüsü topluyor.
+  const AVG_CELLS_PER_ARROW = 3.5;   // olculdu: SHAPES ortalamasi (duz-only 3.0)
+  const MAX_FILL = 0.85;             // olculdu: pratik uretim siniri
+
+  function paramsFor(n) {
+    const t = Math.min(n, 40);
+    const cols = 5 + Math.min(Math.floor(t / 8), 3);
+    const rows = 6 + Math.min(Math.floor(t / 6), 4);
+    const straight = n <= 3;
+    const avg = straight ? 3.0 : AVG_CELLS_PER_ARROW;
+    const capacity = Math.floor(cols * rows * MAX_FILL / avg);
+    return {
+      cols, rows,
+      arrows: Math.max(3, Math.min(4 + Math.floor(t * 0.7), capacity)),
+      shapes: straight ? STRAIGHT_IDS : SHAPES.map(s => s.id),
+    };
+  }
+
+  function startLevel() {
+    cleared = false;
+    const p = paramsFor(level);
+    const seed = phHashSeed('arrow-' + level);
+    // Yoğunluğun ölçülmüş sınırına yakın oynuyoruz, o yüzden tek deneme
+    // yeterli değil. Her tur bir ok azaltıp yeniden dener; seyrek tahta
+    // her zaman üretilebildiği için bu döngü kesin sonlanır.
+    // BURAYA KORUMASIZ res.board YAZMA — çökmenin kaynağı oydu.
+    let res = null;
+    for (let give = 0; give < 6 && !res; give++) {
+      const q = { ...p, arrows: Math.max(3, p.arrows - give) };
+      res = generateReverse(q, seed + give) || generateForward(q, seed + give);
+    }
+    if (!res) {   // olmamalı, ama oyun asla açılmamaktansa kolay tahta versin
+      res = generateReverse({ ...p, arrows: 3, shapes: STRAIGHT_IDS }, seed);
+    }
+    board = res.board;
+    levelTotal = board.arrows.size;
+    buildBoard();
+  }
+
+  // ───────── Yaşam döngüsü ─────────
+  function init(c) {
+    container = c;
+    level = 1; cleared = false;
+    container.classList.add('ph-scene', 'ar-scene');
+    injectCSS();
+    // Atmosfer kısık: göz sürekli tahtayı tarıyor, arka planda hareket
+    // eden her şey o taramaya rakip oluyor.
+    atmoEl = phAtmosphere(container, { stars: 13, beams: 1, motes: 4, skyPct: 32 });
+    wrapEl = document.createElement('div');
+    wrapEl.className = 'ar-wrap';
+    wrapEl.innerHTML =
+      '<div class="ar-hud" data-role="hud"></div>' +
+      '<div class="ar-board">' +
+        '<svg class="ar-svg" data-role="svg"></svg>' +
+      '</div>';
+    container.appendChild(wrapEl);
+    hudEl = wrapEl.querySelector('[data-role="hud"]');
+    svgEl = wrapEl.querySelector('[data-role="svg"]');
+    addEv(svgEl, 'click', onBoardTap);
+    startLevel();
+  }
+
+  function cleanup() {
+    clearEvs();
+    // Seviye geçiş zamanlayıcısı: oyundan çıkılırsa tetiklenmemeli,
+    // yoksa kopmuş DOM üzerine yeni bir tahta kurar.
+    if (advanceT) { clearTimeout(advanceT); advanceT = null; }
+    if (atmoEl) { atmoEl.remove(); atmoEl = null; }
+    if (container) container.classList.remove('ph-scene', 'ar-scene');
+  }
+
   return {
     init, cleanup,
     engine: {
       SHAPES, STRAIGHT_IDS, DIRS,
       cellsOf, makeBoard, cellsFree, placeArrow, removeArrow,
-      canExit, freeArrows, solveOrder, isSolvable, metrics,
+      canExit, blockersOf, freeArrows, solveOrder, isSolvable, metrics,
       generateForward, generateReverse,
     },
   };
