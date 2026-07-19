@@ -192,6 +192,33 @@ function phAtmosphereFlare(layer, b, durMs) {
   setTimeout(() => layer.classList.remove('ph-flare'), (durMs || 520) + 40);
 }
 
+// ───────── Yüksek Skor ─────────
+// Platform çapında bir boşluğu kapatıyor: reels.js Keşfet kartlarında
+// `gh_hi_<id>` anahtarından yüksek skor OKUYORDU ama bu anahtarı hiçbir
+// oyun YAZMIYORDU. Yalnızca Block Puzzle kendi `bp_hi`'sını yazıyordu,
+// yani yedi oyunun kartında "En Yüksek" sonsuza kadar 0 görünüyordu.
+//
+// Anahtar isimleri BİLEREK korundu. `gh_` eski önek (bkz. CLAUDE.md §6)
+// ve yenisi tercih ediliyor, ama bu anahtarları yeniden adlandırmak
+// oyuncuların mevcut rekorlarını siler; migration planı olmadan anahtar
+// değiştirmek yasak. Burada yapılan, zaten okunan sözleşmeyi
+// TAMAMLAMAK — yeni bir anahtar ailesi eklemek değil.
+//
+//   phHighScore(id)         → mevcut rekoru okur
+//   phHighScore(id, değer)  → yalnızca DAHA YÜKSEKSE yazar, güncelini döner
+function phHighScore(gameId, value) {
+  // Block Puzzle tarihsel olarak kendi anahtarını kullanıyor.
+  const key = gameId === 'blockPuzzle' ? 'bp_hi' : 'gh_hi_' + gameId;
+  let current = 0;
+  try { current = parseInt(localStorage.getItem(key) || '0', 10) || 0; } catch (e) {}
+  if (value == null) return current;
+  if (value > current) {
+    try { localStorage.setItem(key, String(value)); } catch (e) {}
+    return value;
+  }
+  return current;
+}
+
 // ───────── Kaydırma (Swipe) ─────────
 // Oyun-bağımsız yön algılama. 2048 ve Labirent bunu ayrı ayrı, ham
 // biçimde yazıyordu (sabit 30px eşik, eksen kilidi yok); ortak hâle

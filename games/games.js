@@ -807,14 +807,23 @@ PuzzleGames.game2048 = (() => {
   const SLIDE_MS = 140;
   const POP_MS = 180;
 
+  // Bir bedava geri alma. Sonrası reklam veya elmas — böylece geri alma
+  // "hata yapmanın bedeli yok" demeye dönüşmüyor, bir kaynak oluyor.
+  const FREE_UNDOS = 1;
+  const UNDO_DIAMONDS = 15;
+  const HISTORY_MAX = 8;
+  const MILESTONES = [512, 1024, 2048];
+
   let container, wrapEl, boardEl, cellsEl, tilesEl, atmoEl, placeEl;
-  let scoreEl, bestEl;
+  let scoreEl, bestEl, undoBtn;
   let grid;            // grid[y][x] → tile | null
   let tiles;           // aktif tile nesneleri
   let nextId, score, best, won, dead;
   let cellPx = 0;
   let commitTimer = null, pendingCommit = null;
   let resizeObs = null;
+  let history, undosLeft, seenMilestones;
+  let scoreShown, scoreRaf = null, scoreSafety = null;
 
   // ── Renk rampası ──
   // Klasik 2048 ilerlemesinin YAPISI korundu (açık → sıcak → altın →
@@ -966,10 +975,60 @@ PuzzleGames.game2048 = (() => {
                    inset 0 1px 0 rgba(255,255,255,.4);
       }
 
+      /* ── Kontroller — TEK buton ──
+         Mock'ta üç yuvarlak buton vardı (geri al / ipucu / duraklat).
+         İpucu çıkarıldı (2048'de ipucu = oyunu oyuncu yerine oynamak),
+         duraklat gereksiz (zamana karşı yarış yok). Geriye tahtadan
+         dikkat çalmayan tek bir kontrol kaldı. */
+      .g2-controls{display:flex;gap:var(--ph-space-3);justify-content:center;align-items:center}
+      .g2-undo{position:relative;width:46px;height:46px;border-radius:var(--ph-radius-full);
+        display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;
+        background:linear-gradient(160deg, rgba(120,100,200,.34), rgba(40,32,80,.5) 70%);
+        border:1px solid rgba(180,165,255,.22);color:var(--ph-scene-ink);
+        box-shadow:0 4px 12px -3px rgba(4,6,20,.7), inset 0 1px 0 rgba(220,215,255,.28);
+        transition:transform var(--ph-duration-micro) var(--ph-ease-standard),opacity var(--ph-duration-fast) var(--ph-ease-standard)}
+      .g2-undo:active{transform:scale(.9)}
+      .g2-undo.spent{opacity:.55}
+      .g2-undo[disabled]{opacity:.25;pointer-events:none}
+      /* Rozet: kalan bedava hak, ya da bitince maliyet. */
+      .g2-undo-badge{position:absolute;bottom:-3px;right:-5px;min-width:19px;height:19px;padding:0 5px;
+        border-radius:var(--ph-radius-full);display:flex;align-items:center;justify-content:center;
+        font:800 10px/1 var(--ph-font-display);font-variant-numeric:var(--ph-variant-numeral);
+        background:linear-gradient(180deg,#a78bfa,#7c3aed);color:#fff;
+        border:1px solid rgba(220,215,255,.4);box-shadow:0 2px 6px -1px rgba(0,0,0,.6);white-space:nowrap}
+
+      /* Geri alma satın alma seçenekleri — paylaşımlı modal kabuğu. */
+      .g2-buy{display:flex;flex-direction:column;gap:var(--ph-space-3);min-width:240px}
+      .g2-buy-title{font:var(--ph-type-title);color:var(--ph-text-primary);text-align:center;
+        margin-bottom:var(--ph-space-2)}
+      .g2-buy-btn{display:flex;align-items:center;justify-content:center;gap:var(--ph-space-2);
+        min-height:46px;padding:0 var(--ph-space-5);border-radius:var(--ph-radius-sm);cursor:pointer;
+        font:var(--ph-type-body);color:var(--ph-text-primary);border:1px solid rgba(255,255,255,.1);
+        background:linear-gradient(180deg, rgba(255,255,255,.07) 0%, rgba(255,255,255,0) 22%), var(--ph-bg-2)}
+      .g2-buy-btn.primary{background:linear-gradient(180deg,var(--ph-accent-light),var(--ph-accent) 20%);border-color:transparent}
+      .g2-buy-btn:active{transform:scale(.96)}
+
+      /* Dönüm noktası: tahtanın üstünde beliren kısa bir mühür.
+         Bilerek küçük ve kısa — tahtanın önüne geçmemeli. */
+      @keyframes g2Milestone{
+        0%  {opacity:0;transform:translate(-50%,-50%) scale(.6)}
+        22% {opacity:1;transform:translate(-50%,-50%) scale(1.05)}
+        72% {opacity:1;transform:translate(-50%,-50%) scale(1)}
+        100%{opacity:0;transform:translate(-50%,-58%) scale(1)}
+      }
+      .g2-milestone{position:absolute;top:50%;left:50%;pointer-events:none;z-index:5;
+        padding:10px 22px;border-radius:var(--ph-radius-full);white-space:nowrap;
+        font:800 21px/1 var(--ph-font-display);font-variant-numeric:var(--ph-variant-numeral);
+        color:#F8F4FF;background:linear-gradient(160deg, rgba(155,114,240,.92), rgba(113,69,212,.92));
+        border:1px solid rgba(200,175,255,.55);
+        box-shadow:0 10px 30px -8px rgba(139,92,246,.85), inset 0 1px 0 rgba(255,255,255,.35);
+        animation:g2Milestone 1.4s var(--ph-ease-standard) forwards}
+
       @media (prefers-reduced-motion: reduce){
         .g2-tile{transition-duration:var(--ph-duration-micro)}
         .g2-tile.spawn,.g2-tile.pop{animation:none}
         .g2-glimmer{animation:none}
+        .g2-milestone{animation-duration:var(--ph-duration-medium)}
       }
     `);
   }
@@ -1070,6 +1129,106 @@ PuzzleGames.game2048 = (() => {
     return { fx: px, fy: py, nx: x, ny: y };
   }
 
+  // ───────── Geçmiş / Geri alma ─────────
+  // Anlık görüntü sade tutuldu: değerler + skor. Karo KİMLİKLERİ
+  // saklanmıyor çünkü geri alma sonrası kayma animasyonu yok — tahta
+  // yeniden kuruluyor. Kimlikleri saklamak çok daha karmaşık olurdu ve
+  // nadiren kullanılan bir eylem için değmez.
+  function snapshot() {
+    return {
+      values: grid.map(row => row.map(t => (t ? t.value : 0))),
+      score: score,
+    };
+  }
+  function pushHistory() {
+    history.push(snapshot());
+    if (history.length > HISTORY_MAX) history.shift();
+  }
+
+  function restore(snap) {
+    tiles.forEach(t => t.el.remove());
+    tiles = [];
+    grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+      const v = snap.values[y][x];
+      if (!v) continue;
+      const t = makeTile(x, y, v);
+      t.el.style.width = cellPx + 'px';
+      t.el.style.height = cellPx + 'px';
+      t.el.classList.add('spawn');
+      setTimeout(() => t.el.classList.remove('spawn'), POP_MS + 40);
+    }
+    score = snap.score;
+    scoreShown = score;
+    if (scoreEl) scoreEl.textContent = score.toLocaleString();
+    updateGameScore(score);
+    dead = false;
+  }
+
+  function doUndo() {
+    if (!history.length) return;
+    flushCommit();
+    restore(history.pop());
+    undosLeft--;
+    GameAudio.play('slide'); GameAudio.haptic('tap');
+    refreshUndo();
+  }
+
+  function refreshUndo() {
+    if (!undoBtn) return;
+    const badge = undoBtn.querySelector('.g2-undo-badge');
+    undoBtn.disabled = history.length === 0;
+    if (undosLeft > 0) {
+      undoBtn.classList.remove('spent');
+      badge.textContent = undosLeft;
+    } else {
+      // Bedava hak bitti — buton maliyeti gösteriyor, gizlenmiyor.
+      undoBtn.classList.add('spent');
+      badge.textContent = '💎' + UNDO_DIAMONDS;
+    }
+  }
+
+  // Bedava hak bittiğinde: reklam veya elmas. Paylaşımlı modal kabuğu
+  // kullanılıyor, oyuna özel bir pencere dili icat edilmiyor.
+  function offerUndo() {
+    const scrim = document.createElement('div');
+    scrim.className = 'ph-modal-scrim';
+    const panel = document.createElement('div');
+    panel.className = 'ph-modal ph-modal-enter';
+    panel.innerHTML =
+      '<div class="g2-buy">' +
+        '<div class="g2-buy-title">Geri Alma</div>' +
+        '<button class="g2-buy-btn primary" data-a="ad">📺 Reklam İzle → +1</button>' +
+        '<button class="g2-buy-btn" data-a="gem">💎 ' + UNDO_DIAMONDS + ' → +1</button>' +
+        '<button class="g2-buy-btn" data-a="no">Vazgeç</button>' +
+      '</div>';
+    scrim.appendChild(panel);
+    document.body.appendChild(scrim);
+
+    const close = () => scrim.remove();
+    panel.addEventListener('click', (e) => {
+      const b = e.target.closest('.g2-buy-btn');
+      if (!b) return;
+      const a = b.dataset.a;
+      if (a === 'no') { close(); return; }
+      if (a === 'gem') {
+        if (DiamondSystem.spend(UNDO_DIAMONDS)) { close(); undosLeft++; refreshUndo(); doUndo(); }
+        return;
+      }
+      close();
+      RewardedAd.show({ icon: '↺', text: '+1 Geri Alma' }, () => {
+        undosLeft++; refreshUndo(); doUndo();
+      });
+    });
+    scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
+  }
+
+  function onUndoTap() {
+    if (!history.length) return;
+    if (undosLeft > 0) doUndo();
+    else offerUndo();
+  }
+
   function move(dir) {
     if (dead) return;
     // Animasyon sürerken yeni hamle gelirse bekleyen işlem ANINDA
@@ -1081,6 +1240,9 @@ PuzzleGames.game2048 = (() => {
     const { xs, ys } = buildTraversals(v);
     const merges = [];
     let moved = false;
+    // Anlık görüntü hamleden ÖNCE alınır; geçerli bir hamle çıkmazsa
+    // atılır, yoksa geçmiş "hiçbir şey yapmayan" adımlarla dolar.
+    const before = snapshot();
 
     tiles.forEach(t => { t.mergedThisTurn = false; });
 
@@ -1109,6 +1271,10 @@ PuzzleGames.game2048 = (() => {
     }));
 
     if (!moved) return;
+
+    history.push(before);
+    if (history.length > HISTORY_MAX) history.shift();
+    refreshUndo();
 
     GameAudio.play('swipe');
     tiles.forEach(positionTile);            // kayma başlar (CSS transition)
@@ -1160,24 +1326,44 @@ PuzzleGames.game2048 = (() => {
       // karolarında güçlü. Fark hissedilir olmalı, yoksa ikisi de
       // "titreşim" olarak algılanır.
       GameAudio.haptic(highestMerge >= 512 ? 'star' : 'micro');
-      if (highestMerge >= 512) phAtmosphereFlare(atmoEl, 1.6, 480);
     }
 
     spawnTile(true);
 
-    if (!won && highestMerge >= WIN_TILE) {
-      won = true;
-      // 2048 bir DÖNÜM NOKTASI, oyunun sonu değil — oyun sürüyor.
-      GameAudio.play('premium'); GameAudio.haptic('win');
-      phAtmosphereFlare(atmoEl, 2.4, 700);
-      phShowCelebration({ title: '2048! ✨', subtitle: 'Devam edebilirsin', sfx: 'star' });
+    // Dönüm noktaları — HER kademede bir kez. 2048'in orta oyunu uzun ve
+    // düzdür; ödülü yalnızca sona saklamak "akış" ilkesine aykırı.
+    if (MILESTONES.indexOf(highestMerge) !== -1 && seenMilestones.indexOf(highestMerge) === -1) {
+      seenMilestones.push(highestMerge);
+      celebrateMilestone(highestMerge);
     }
 
     if (!hasMoves()) {
       dead = true;
       GameAudio.play('lose');
-      showGameOver(false, 'Hamle Kalmadı', 'Skor: ' + score.toLocaleString());
+      // "Devam et" = ölümcül hamleyi geri al. 2048'de anlamlı olan tek
+      // devam biçimi bu; rastgele karo silmek tahtayı oyuncunun
+      // kurmadığı bir duruma sokardı.
+      showGameOver(false, 'Hamle Kalmadı', 'Skor: ' + score.toLocaleString(),
+        history.length ? { onContinue: () => { doUndo(); refreshUndo(); } } : undefined);
     }
+  }
+
+  function celebrateMilestone(value) {
+    const isWin = value >= WIN_TILE;
+    if (isWin) won = true;
+
+    const seal = document.createElement('div');
+    seal.className = 'g2-milestone';
+    seal.textContent = isWin ? '2048! ✨' : value;
+    boardEl.appendChild(seal);
+    setTimeout(() => seal.remove(), 1500);
+
+    const r = boardEl.getBoundingClientRect();
+    phParticleBurst(document.body, r.left + r.width / 2, r.top + r.height / 2,
+      'var(--ph-accent)', isWin ? 16 : 10);
+    phAtmosphereFlare(atmoEl, isWin ? 2.4 : 1.7, isWin ? 700 : 500);
+    GameAudio.play(isWin ? 'premium' : 'star');
+    GameAudio.haptic(isWin ? 'win' : 'star');
   }
 
   function hasMoves() {
@@ -1192,14 +1378,15 @@ PuzzleGames.game2048 = (() => {
 
   // ───────── Skor ─────────
   function updateScore() {
-    if (scoreEl) scoreEl.textContent = score.toLocaleString();
+    tweenScore();
     updateGameScore(score);
     if (score > best) {
       const wasBehind = best > 0;
-      best = score;
+      best = phHighScore('game2048', score);
       if (bestEl) bestEl.textContent = best.toLocaleString();
-      writeBest();
       // Rekorun geçildiği AN belli olmalı, oyun sonunda değil.
+      // wasBehind koşulu: ilk oyunda skor sıfırdan büyüdüğü an sürekli
+      // parlamasın, yalnızca GERÇEK bir rekor kırıldığında parlasın.
       if (wasBehind && bestEl) {
         const card = bestEl.closest('.g2-score');
         card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
@@ -1207,12 +1394,43 @@ PuzzleGames.game2048 = (() => {
     }
   }
 
-  function readBest() {
-    try { return parseInt(localStorage.getItem('gh_hi_game2048') || '0', 10) || 0; }
-    catch (e) { return 0; }
-  }
-  function writeBest() {
-    try { localStorage.setItem('gh_hi_game2048', String(best)); } catch (e) {}
+  // Skor zıplamaz, SAYAR. Puanın kazanıldığı hissi rakamın yolculuğunda.
+  // Gizli sekmede rAF çalışmaz; o durumda değer doğrudan oturur — bu
+  // kabul edilebilir, çünkü kimse bakmıyor.
+  function tweenScore() {
+    if (!scoreEl) return;
+    // ÖNCEKİ tween'in hem karesi hem güvenlik zamanlayıcısı iptal edilir.
+    // Zamanlayıcıyı iptal etmemek kalıcı bir hataya yol açıyordu: eski
+    // zamanlayıcı, yeni tween çalışırken ateşleyip onun karesini iptal
+    // ediyor ve skoru ESKİ hedefe yazıyordu; ardından yeni zamanlayıcı
+    // "kare yok" diye erken çıkıyor ve gösterge kalıcı olarak geride
+    // kalıyordu. (Ölçüldü: başlık 308 iken kapsül 284'te takılı kaldı.)
+    if (scoreRaf) { cancelAnimationFrame(scoreRaf); scoreRaf = null; }
+    if (scoreSafety) { clearTimeout(scoreSafety); scoreSafety = null; }
+
+    const from = scoreShown, to = score, t0 = performance.now(), dur = 320;
+    if (from === to) { scoreEl.textContent = to.toLocaleString(); return; }
+
+    // Bitiş DAİMA güncel `score`'u yazar, bu çağrının yakaladığı `to`'yu
+    // değil — böylece arada yeni puan gelse bile gösterge doğruya oturur.
+    const finish = () => {
+      if (scoreRaf) { cancelAnimationFrame(scoreRaf); scoreRaf = null; }
+      scoreSafety = null;
+      scoreShown = score;
+      scoreEl.textContent = score.toLocaleString();
+    };
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur);
+      // Hızlı başlayıp yavaşlayan: son rakamlar okunabilsin.
+      const eased = 1 - Math.pow(1 - k, 3);
+      scoreShown = Math.round(from + (to - from) * eased);
+      scoreEl.textContent = scoreShown.toLocaleString();
+      if (k < 1) scoreRaf = requestAnimationFrame(step);
+      else { scoreRaf = null; finish(); }
+    };
+    scoreRaf = requestAnimationFrame(step);
+    // Güvenlik ağı: rAF hiç çalışmazsa (gizli sekme) değer yine de otursun.
+    scoreSafety = setTimeout(finish, dur + 120);
   }
 
   // ───────── Sahne ─────────
@@ -1228,10 +1446,11 @@ PuzzleGames.game2048 = (() => {
   // ───────── Yaşam döngüsü ─────────
   function init(c) {
     container = c;
-    score = 0; won = false; dead = false; nextId = 1;
-    tiles = [];
+    score = 0; scoreShown = 0; won = false; dead = false; nextId = 1;
+    tiles = []; history = []; seenMilestones = [];
+    undosLeft = FREE_UNDOS;
     grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
-    best = readBest();
+    best = phHighScore('game2048');
 
     container.classList.add('ph-scene', 'g2-arcane');
     injectCSS();
@@ -1253,6 +1472,10 @@ PuzzleGames.game2048 = (() => {
       '<div class="g2-board" data-role="board">' +
         '<div class="g2-cells" data-role="cells"></div>' +
         '<div class="g2-tiles" data-role="tiles"></div>' +
+      '</div>' +
+      '<div class="g2-controls">' +
+        '<button class="g2-undo" data-role="undo" title="Geri al">↺' +
+          '<span class="g2-undo-badge"></span></button>' +
       '</div>';
     container.appendChild(wrapEl);
 
@@ -1261,7 +1484,10 @@ PuzzleGames.game2048 = (() => {
     tilesEl = wrapEl.querySelector('[data-role="tiles"]');
     scoreEl = wrapEl.querySelector('[data-role="score"]');
     bestEl = wrapEl.querySelector('[data-role="best"]');
+    undoBtn = wrapEl.querySelector('[data-role="undo"]');
     bestEl.textContent = best.toLocaleString();
+    addEv(undoBtn, 'click', onUndoTap);
+    refreshUndo();
 
     for (let i = 0; i < SIZE * SIZE; i++) {
       const d = document.createElement('div'); d.className = 'g2-cell'; cellsEl.appendChild(d);
@@ -1296,6 +1522,9 @@ PuzzleGames.game2048 = (() => {
   function cleanup() {
     clearEvs();
     flushCommit();
+    if (scoreRaf) { cancelAnimationFrame(scoreRaf); scoreRaf = null; }
+    if (scoreSafety) { clearTimeout(scoreSafety); scoreSafety = null; }
+    document.querySelectorAll('.ph-modal-scrim').forEach(s => s.remove());
     if (resizeObs) { resizeObs.disconnect(); resizeObs = null; }
     if (placeEl) { placeEl.remove(); placeEl = null; }
     if (atmoEl) { atmoEl.remove(); atmoEl = null; }

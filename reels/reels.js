@@ -39,7 +39,11 @@ const GAME_NAME_MAP = {
 
 function getPlayCount(id) { return parseInt(localStorage.getItem('gh_plays_'+id)||'0',10); }
 function incPlayCount(id) { localStorage.setItem('gh_plays_'+id, (getPlayCount(id)+1).toString()); }
+// Paylaşımlı API'ye devredildi (core/ui-kit.js). Anahtar mantığı tek
+// yerde yaşasın diye: burada okuyup oyunda başka bir anahtara yazmak
+// tam olarak "En Yüksek hep 0" hatasını doğuran şeydi.
 function getHighScore(id) {
+  if (typeof phHighScore === 'function') return phHighScore(id);
   if (id==='blockPuzzle') return parseInt(localStorage.getItem('bp_hi')||'0',10);
   return parseInt(localStorage.getItem('gh_hi_'+id)||'0',10);
 }
