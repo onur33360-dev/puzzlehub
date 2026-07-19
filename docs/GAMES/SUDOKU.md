@@ -149,12 +149,64 @@ can't grant a second life.
 
 ---
 
-## 8. Small affordances (present, and why)
+## 8. Scanning aids & rhythm
 
-- **Peer highlight** — the selected cell's row, column, and box warm slightly. Gives away
-  nothing; it only makes scanning cheaper, which protects flow.
-- **Exhausted digit keys dim** — a digit placed 9 times disables its key, so the player
-  never has to count occurrences manually.
+### Three-tier highlighting
+
+Filled cells **are selectable** — this is load-bearing, not cosmetic. Tapping any cell
+showing a 9 highlights every other 9 on the board, which is the core scanning technique of
+modern mobile Sudoku ("where can this digit still go?"). Without selectable filled cells
+that technique is impossible, and the board can only be read one cell at a time.
+
+The tiers are deliberately different in both strength *and* hue so they never blur together:
+
+| Tier | Look | Meaning |
+|---|---|---|
+| `peer` | lightest, warm gold | row / column / box of the selection |
+| `samenum` | darker, neutral | every other cell holding the same digit |
+| `sel` | strongest, gold ring | the selected cell |
+
+CSS source order encodes the priority — all three have equal specificity.
+
+Selecting a filled cell never lets it be overwritten (`placeNum` returns early on a
+non-empty cell) and never costs a life. Verified by regression test.
+
+After a correct placement the selection **stays on the placed cell**, so the digit's
+siblings light up immediately — "where else is this digit?" gets answered for free, without
+a second tap.
+
+### Region completion — "a stone thrown into water"
+
+Completing a row, column, or box fires a violet ripple. This is where the game's *rhythm*
+lives: without it, a correct placement and a puzzle-advancing placement feel identical.
+
+- Three concentric rings expand from the placed cell, staggered 140ms apart. One ring reads
+  as "a circle grew"; three read as a water surface.
+- The region's cells then pulse in sequence, delayed by **Chebyshev distance** from the
+  origin, so the wave travels outward as a ring rather than sweeping left-to-right.
+- Sound and haptics scale with the event: one region → `combo2`/`match`, two or more
+  simultaneously → `combo3`/`combo3`.
+- `phAtmosphereFlare()` fires **only** on multi-region completions. Triggering it on every
+  region would kill the "something happened" feeling and leave a background that just
+  flickers (see the note on that function in `ui-kit.js`).
+
+Violet is the only cool color in the game's warm palette, and it is reserved exclusively for
+this moment — spending it anywhere else would make the moment ordinary.
+
+Ripples are emitted **after** `render()`, against fresh DOM; a re-render would wipe the
+animation mid-flight.
+
+### Exhausted digits disappear
+
+A digit placed 9 times has its key **removed**, not dimmed — its absence is the signal, so
+the player never counts occurrences. The key collapses its width over `--ph-duration-medium`
+and the remaining keys expand to fill the gap; the collapse is animated because the keys
+shift position and an instant jump would break muscle memory. The row has a fixed
+`min-height` (the keys use explicit height, **not** `aspect-ratio`) — with `aspect-ratio` a
+zero width collapses the height too and the whole row folds.
+
+### Other
+
 - **Dot in empty cells** — reads as "not yet written" rather than "blank".
 
 ---
@@ -185,3 +237,13 @@ reading the code:
 - All 8 games still init/cleanup after the `showGameOver` signature change; the old
   3-argument form still works.
 - Contrast measured in-page; touch targets 43px cells / 42px keys (was 32px on stone).
+
+After the scanning-aid / rhythm pass (§8):
+
+- **300 further randomized trials** with filled cells now selectable — 0 failures. Selecting
+  a filled cell and pressing a digit neither overwrites it nor costs a life.
+- Same-digit highlighting matches the expected cell set exactly.
+- Region completion emits 3 rings (delays 0/140/280ms, growing diameters) and pulses all 9
+  cells with distance-ordered delays (0→440ms); no ripple fires on a non-completing move.
+- Exhausted key collapses 42px → 0px, `opacity` 0, unclickable; the row keeps its 46px
+  height and the remaining keys redistribute. At full solve all 9 keys are gone.

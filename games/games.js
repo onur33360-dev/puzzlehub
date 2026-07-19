@@ -1035,6 +1035,9 @@ PuzzleGames.sudoku = (() => {
         --sdk-ink:#382F20;                      /* verilen ipuçları */
         --sdk-ink-user:#8A5A16;                 /* oyuncunun yazdıkları */
         --sdk-err:#B3402E;
+        /* Mor: sayfanın sıcak paletindeki TEK soğuk renk. Bölge tamamlanma
+           anına saklanıyor — her yerde kullanılsaydı o an sıradanlaşırdı. */
+        --sdk-magic:#8B5CF6;
         --ph-heart-on:#C0453A; --ph-heart-off:rgba(90,70,40,.3);
         --ph-heart-glow:rgba(192,69,58,.4);
       }
@@ -1135,16 +1138,49 @@ PuzzleGames.sudoku = (() => {
       }
       .sdk-glyph.fresh{animation:sdkInk var(--ph-duration-medium) var(--ph-ease-spring)}
 
-      /* ── SEÇİM + AKRABA HÜCRELER ──
-         Seçili hücrenin satır/sütun/kutusu hafifçe ısınır: oyuncunun gözü
-         ilgili bölgeyi taramak zorunda kalmaz. Modern mobil sudokunun
-         standart yardımı — ipucu vermez, sadece taramayı ucuzlatır. */
+      /* ── ÜÇ KADEMELİ VURGU ──
+         Modern mobil sudokunun temel tarama aracı. Kademeler bilerek
+         farklı GÜÇTE ve farklı RENKTE:
+           peer    (en açık, altın) → seçilinin satır/sütun/kutusu
+           samenum (koyu, nötr)     → tahtadaki AYNI rakamlar
+           sel     (en güçlü)       → seçili hücre
+         Aynı rakamların vurgusu en çok işe yarayan katman: "9 nereye
+         gider?" diye ararken herhangi bir 9'a dokunup hepsini görmek,
+         tahtayı tek tek taramanın yerine geçiyor.
+         CSS sırası = öncelik sırası (hepsi aynı özgüllükte). */
       .sdk-cell.peer{background:rgba(184,151,79,.13)}
+      .sdk-cell.samenum{background:rgba(74,58,34,.2)}
       .sdk-cell.sel{
         background:radial-gradient(ellipse 86% 78% at 50% 45%, rgba(214,170,74,.34), rgba(214,170,74,.16));
         box-shadow:inset 0 0 0 2px var(--sdk-gold), inset 0 0 12px rgba(184,151,79,.4);
         border-radius:3px;
       }
+
+      /* ── BÖLGE TAMAMLANDI — "denize atılan taş" ──
+         Ritim buradan geliyor. Bir satır/sütun/kutu dolduğunda hamlenin
+         yapıldığı hücreden mor halkalar yayılıyor, ardından bölgenin
+         hücreleri o merkeze olan UZAKLIKLARINA göre sırayla parlıyor:
+         önce taş düşüyor, sonra dalga yayılıyor.
+         Halkalar tabletin içine, hücrelerin üstüne çiziliyor. */
+      .sdk-ripple{
+        position:absolute;border-radius:50%;pointer-events:none;z-index:4;
+        transform:translate(-50%,-50%);
+        border:2px solid rgba(139,92,246,.75);
+        box-shadow:0 0 20px rgba(139,92,246,.45), inset 0 0 16px rgba(139,92,246,.3);
+        animation:sdkRipple 1.1s cubic-bezier(.16,.72,.3,1) forwards;
+      }
+      @keyframes sdkRipple{
+        0%  {width:0;height:0;opacity:.9;border-width:3px}
+        100%{width:var(--sdk-r,320px);height:var(--sdk-r,320px);opacity:0;border-width:.5px}
+      }
+      /* Dalganın hücrelere çarpması. scale için z-index şart, yoksa
+         büyüyen hücre komşularının ALTINDA kalıyor ve dalga kaybolur. */
+      @keyframes sdkWave{
+        0%  {background-color:transparent;transform:scale(1)}
+        34% {background-color:rgba(139,92,246,.4);transform:scale(1.14)}
+        100%{background-color:transparent;transform:scale(1)}
+      }
+      .sdk-cell.sdk-wave{animation:sdkWave .6s var(--ph-ease-standard) both;z-index:3}
 
       /* ── REDDEDİLEN HAMLE — "büyü tutmadı" ──
          Rakam bir an sayfada BELİRİR, sonra kızıl bir korla yanıp yok olur.
@@ -1170,10 +1206,15 @@ PuzzleGames.sudoku = (() => {
          ✕ (temizle) YOK: yanlış sayı hiç yerleşmediği için silinecek bir şey
          kalmıyor. 9 tuş tek sıraya sığıyor — §22'nin 44px dokunma hedefi
          korunuyor. */
-      .sdk-nums{display:flex;gap:5px;justify-content:center;width:100%;max-width:430px}
+      /* Sabit yükseklik (aspect-ratio DEĞİL): tamamlanan tuş yatayda
+         daralarak yok olurken aspect-ratio yüksekliği de sıfırlar ve
+         bütün sıra çöker. Yükseklik sabitlenince sıra yerinde durur. */
+      .sdk-nums{display:flex;gap:5px;justify-content:center;align-items:center;
+        width:100%;max-width:430px;min-height:46px}
       .sdk-num{
-        flex:1;min-width:0;aspect-ratio:1;max-width:46px;display:flex;align-items:center;justify-content:center;
-        border-radius:var(--ph-radius-sm);cursor:pointer;
+        flex:1 1 0;min-width:0;max-width:46px;height:clamp(38px,11vw,46px);
+        display:flex;align-items:center;justify-content:center;
+        border-radius:var(--ph-radius-sm);cursor:pointer;overflow:hidden;
         font:600 20px/1 'Fraunces',serif;color:var(--sdk-ink);
         background:
           var(--ph-stone-grain),
@@ -1181,12 +1222,22 @@ PuzzleGames.sudoku = (() => {
         background-size:170px 170px, auto;background-blend-mode:soft-light, normal;
         border:1px solid var(--sdk-gold-line);
         box-shadow:0 5px 12px -5px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.75);
-        transition:transform var(--ph-duration-micro) var(--ph-ease-standard);
+        transition:transform var(--ph-duration-micro) var(--ph-ease-standard),
+                   max-width var(--ph-duration-medium) var(--ph-ease-standard),
+                   opacity var(--ph-duration-medium) var(--ph-ease-standard),
+                   margin var(--ph-duration-medium) var(--ph-ease-standard),
+                   border-width var(--ph-duration-medium) var(--ph-ease-standard);
       }
       .sdk-num:active{transform:scale(.9)}
-      /* Tahtada 9 kez kullanılmış rakam sönükleşir — hangi rakamın bittiğini
-         saymak zorunda kalmamak, akışı koruyan küçük ama gerçek bir yardım. */
-      .sdk-num.done{opacity:.32;pointer-events:none}
+      /* Tahtada 9 kez yerleşen rakamın tuşu SİLİNİR — sönükleşmez.
+         O rakamın bittiği, tuşun yokluğundan anlaşılır; oyuncunun kaç tane
+         kaldığını sayması gerekmez. Kalan tuşlar boşluğu doldurarak
+         genişler, bu yüzden daralma animasyonlu: tuşlar yer değiştirirken
+         sıçramasın, kas hafızası kopmasın. */
+      .sdk-num.done{
+        max-width:0;flex-grow:0;opacity:0;margin-left:-5px;
+        border-width:0;pointer-events:none;
+      }
 
       @media (prefers-reduced-motion: reduce){
         .sdk-glyph.fresh, .sdk-cell.sdk-reject{animation:none}
@@ -1238,9 +1289,13 @@ PuzzleGames.sudoku = (() => {
     // Olay DELEGASYONU: tahta her render'da yeniden çiziliyor, tek tek
     // hücrelere dinleyici bağlansaydı clearEvs'in listesi her render'da
     // büyürdü (ölü elemanlara referans tutarak). İki dinleyici yeter.
+    // DOLU hücreler de seçilebilir. Bu, "aynı rakamları vurgula" tarama
+    // aracının çalışabilmesi için şart: oyuncu tahtadaki bir 9'a dokunup
+    // bütün 9'ların nerede olduğunu görebilmeli. Dolu hücreye rakam
+    // basmak zaten placeNum içinde engelli, üzerine yazılamıyor.
     addEv(tabletEl, 'click', (e) => {
       const cell = e.target.closest('.sdk-cell');
-      if (!cell || !cell.classList.contains('empty')) return;
+      if (!cell) return;
       selected = +cell.dataset.i;
       GameAudio.play('tap');
       render();
@@ -1289,6 +1344,9 @@ PuzzleGames.sudoku = (() => {
     const selR = selected >= 0 ? Math.floor(selected/9) : -1;
     const selC = selected >= 0 ? selected % 9 : -1;
     const selB = selected >= 0 ? Math.floor(selR/3)*3 + Math.floor(selC/3) : -1;
+    // Seçili hücrede bir rakam varsa tahtadaki bütün eşleri işaretlenir.
+    // Boş hücre seçiliyse eşleşecek rakam yoktur (0 asla eşleşmemeli).
+    const selVal = selected >= 0 ? board[selected] : 0;
     let blocksHtml = '';
     for (let br = 0; br < 3; br++) {
       for (let bc = 0; bc < 3; bc++) {
@@ -1300,8 +1358,10 @@ PuzzleGames.sudoku = (() => {
             const fixed = initial[i] !== 0;
             const peer = selected >= 0 && i !== selected &&
                          (r === selR || c === selC || (br*3+bc) === selB);
+            const same = selVal > 0 && v === selVal && i !== selected;
             const cls = ['sdk-cell', v ? 'filled' : 'empty', fixed ? 'fixed' : '',
-                         selected === i ? 'sel' : '', peer ? 'peer' : ''].filter(Boolean).join(' ');
+                         selected === i ? 'sel' : '', same ? 'samenum' : '',
+                         peer ? 'peer' : ''].filter(Boolean).join(' ');
             const inner = v
               ? `<span class="sdk-glyph ${fixed ? 'clue' : 'user'}${i === freshIndex ? ' fresh' : ''}">${v}</span>`
               : `<span class="sdk-dot">·</span>`;
@@ -1313,6 +1373,77 @@ PuzzleGames.sudoku = (() => {
     }
     tabletEl.innerHTML = blocksHtml;
     refreshNumStates();
+  }
+
+  // ── Bölge tamamlanma ──
+  // Bir hamleden sonra hangi satır/sütun/kutu tamamen doldu?
+  // Yalnızca doğru rakam yerleştiği için "dolu" = "doğru tamamlanmış";
+  // ayrıca doğrulamaya gerek yok.
+  function completedRegions(i) {
+    const r = Math.floor(i/9), c = i % 9;
+    const br = Math.floor(r/3)*3, bc = Math.floor(c/3)*3;
+    const out = [];
+
+    const row = []; for (let k = 0; k < 9; k++) row.push(r*9+k);
+    if (row.every(j => board[j])) out.push(row);
+
+    const col = []; for (let k = 0; k < 9; k++) col.push(k*9+c);
+    if (col.every(j => board[j])) out.push(col);
+
+    const box = [];
+    for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++) box.push((br+dr)*9 + (bc+dc));
+    if (box.every(j => board[j])) out.push(box);
+
+    return out;
+  }
+
+  // "Denize atılan taş": merkeze mor halkalar, ardından bölgenin hücreleri
+  // merkeze olan uzaklıklarına göre sırayla parlar. Aynı anda birden fazla
+  // bölge tamamlanırsa (satır + kutu gibi) ödül yükselir — ritim buradan.
+  function rippleFrom(originIdx, regions) {
+    const originEl = tabletEl.querySelector(`.sdk-cell[data-i="${originIdx}"]`);
+    if (!originEl) return;
+    const tRect = tabletEl.getBoundingClientRect();
+    const oRect = originEl.getBoundingClientRect();
+    const cx = oRect.left - tRect.left + oRect.width/2;
+    const cy = oRect.top - tRect.top + oRect.height/2;
+
+    // Üç halka, kademeli gecikmeyle — tek halka "daire büyüdü" gibi
+    // duruyor, üçü birlikte su yüzeyi gibi okunuyor.
+    for (let k = 0; k < 3; k++) {
+      const ring = document.createElement('div');
+      ring.className = 'sdk-ripple';
+      ring.style.left = cx + 'px';
+      ring.style.top = cy + 'px';
+      ring.style.setProperty('--sdk-r', (tRect.width * (0.75 + k * 0.28)) + 'px');
+      ring.style.animationDelay = (k * 140) + 'ms';
+      tabletEl.appendChild(ring);
+      setTimeout(() => ring.remove(), 1120 + k * 140);
+    }
+
+    // Dalganın hücrelere ulaşması: gecikme = merkeze uzaklık.
+    const seen = new Set();
+    regions.forEach(cells => cells.forEach(j => {
+      if (seen.has(j)) return;             // kesişen hücre iki kez parlamasın
+      seen.add(j);
+      const el = tabletEl.querySelector(`.sdk-cell[data-i="${j}"]`);
+      if (!el) return;
+      const dr = Math.abs(Math.floor(j/9) - Math.floor(originIdx/9));
+      const dc = Math.abs((j % 9) - (originIdx % 9));
+      const dist = Math.max(dr, dc);       // Chebyshev: halka gibi yayılır
+      el.classList.remove('sdk-wave'); void el.offsetWidth;
+      el.style.animationDelay = (dist * 55) + 'ms';
+      el.classList.add('sdk-wave');
+      setTimeout(() => { el.classList.remove('sdk-wave'); el.style.animationDelay = ''; }, 600 + dist * 55 + 60);
+    }));
+
+    // Tek bölge / çoklu bölge ayrımı hem seste hem titreşimde: ödülün
+    // büyüklüğü olayın büyüklüğüyle ölçekleniyor.
+    GameAudio.play(regions.length > 1 ? 'combo3' : 'combo2');
+    GameAudio.haptic(regions.length > 1 ? 'combo3' : 'match');
+    // Dünyanın tepkisi yalnızca çoklu tamamlamada — her bölgede
+    // tetiklenirse "olay oldu" hissi ölür (bkz. phAtmosphereFlare notu).
+    if (regions.length > 1) phAtmosphereFlare(atmoEl, 1.8, 520);
   }
 
   // Tahtada 9 kez geçen rakamın tuşu kapanır.
@@ -1381,8 +1512,16 @@ PuzzleGames.sudoku = (() => {
     board[selected] = n;
     GameAudio.play('place'); GameAudio.haptic('tap');
     const placedAt = selected;
-    selected = -1;
+    // Seçim yerleşen hücrede KALIR: artık dolu hücreler de seçilebildiği
+    // için bu, yeni yazılan rakamın bütün eşlerini anında vurguluyor —
+    // "bu rakamdan başka nerede var?" sorusu hamlenin hemen ardından
+    // ücretsiz cevaplanmış oluyor.
     render(placedAt);
+
+    // Bölge tamamlandıysa dalga. render'dan SONRA çağrılmalı: efekt taze
+    // DOM'a uygulanıyor, aksi halde yeniden çizim animasyonu siler.
+    const regions = completedRegions(placedAt);
+    if (regions.length) rippleFrom(placedAt, regions);
 
     if (!board.includes(0)) {
       const secs = Math.floor((Date.now()-startTime)/1000);
