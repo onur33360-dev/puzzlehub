@@ -192,6 +192,55 @@ function phAtmosphereFlare(layer, b, durMs) {
   setTimeout(() => layer.classList.remove('ph-flare'), (durMs || 520) + 40);
 }
 
+// ───────── Kaydırma (Swipe) ─────────
+// Oyun-bağımsız yön algılama. 2048 ve Labirent bunu ayrı ayrı, ham
+// biçimde yazıyordu (sabit 30px eşik, eksen kilidi yok); ortak hâle
+// getirilirken üç şey düzeltildi:
+//
+//  1. EKSEN KİLİDİ — çapraz bir hareket "biraz sağa biraz aşağı"dır.
+//     Baskın eksen yeterince baskın değilse hamle ÜRETİLMEZ. Yanlış
+//     yöne giden bir 2048 hamlesi geri alınamaz, o yüzden kararsız
+//     girdiyi yok saymak yanlış tahmin etmekten iyidir.
+//  2. FİSKE (flick) — hızlı ve kısa bir hareket de niyettir. Kısa
+//     sürede yapılan kaydırmada eşik düşürülür.
+//  3. Fare desteği — masaüstü PWA ve tarayıcıda test için; hiçbir
+//     görsel ipucu göstermez, yalnızca aynı olayları üretir.
+//
+// onSwipe('left'|'right'|'up'|'down') ile çağrılır.
+function phSwipe(el, onSwipe, opts) {
+  opts = opts || {};
+  const minDist = opts.minDist != null ? opts.minDist : 24;
+  // Baskın eksene oranla izin verilen sapma. .6 = 31°'lik bir koni.
+  const maxOffAxis = opts.maxOffAxis != null ? opts.maxOffAxis : 0.6;
+  const flickMs = opts.flickMs != null ? opts.flickMs : 250;
+
+  let sx = 0, sy = 0, st = 0, active = false;
+
+  function start(e) {
+    const t = e.touches ? e.touches[0] : e;
+    sx = t.clientX; sy = t.clientY; st = Date.now(); active = true;
+  }
+  function end(e) {
+    if (!active) return;
+    active = false;
+    const t = e.changedTouches ? e.changedTouches[0] : e;
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    const dominant = Math.max(adx, ady);
+    if (dominant === 0) return;
+    // Hızlı fiskede eşik düşer.
+    const threshold = (Date.now() - st) < flickMs ? minDist * 0.6 : minDist;
+    if (dominant < threshold) return;
+    if (Math.min(adx, ady) / dominant > maxOffAxis) return;   // fazla çapraz
+    onSwipe(adx > ady ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  }
+
+  addEv(el, 'touchstart', start, { passive: true });
+  addEv(el, 'touchend', end, { passive: true });
+  addEv(el, 'mousedown', start);
+  addEv(el, 'mouseup', end);
+}
+
 // ───────── Can Sistemi ─────────
 // Oyuncunun hata bütçesi. Yanlış hamleyi ENGELLEYEN oyunlarda bu bütçe
 // olmazsa engelleme ücretsiz bir otomatik yardıma dönüşür ve bulmacanın

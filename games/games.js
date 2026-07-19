@@ -186,10 +186,16 @@ const GameAudio = (() => {
       _noise(0.04, 0.06, 0, 800, 3);
       _osc('triangle', 180, 0.06, 0.05, 0.02);
     },
-    merge: () => {
-      _osc('sine', [400, 680], 0.12, 0.13, 0);
-      _osc('triangle', [320, 560], 0.1, 0.07, 0.015);
-      _osc('sine', 880, 0.08, 0.04, 0.06);
+    // opts.pitch — perde çarpanı (varsayılan 1).
+    // 2048'de birleşme perdesi karo kademesiyle yükseliyor: sayı rampasına
+    // birebir eşlik eden bir ses rampası. Örnek dosyalarla bu 11 ayrı kayıt
+    // gerektirirdi; sentezle tek parametre. Çağıran taraf opts vermezse
+    // ses aynen eskisi gibi çalar (geriye dönük uyumlu).
+    merge: (o) => {
+      const p = (o && o.pitch) || 1;
+      _osc('sine', [400 * p, 680 * p], 0.12, 0.13, 0);
+      _osc('triangle', [320 * p, 560 * p], 0.1, 0.07, 0.015);
+      _osc('sine', 880 * p, 0.08, 0.04, 0.06);
     },
     match: () => {
       [523, 659, 784].forEach((f, i) => {
@@ -777,56 +783,526 @@ function injectStyle(id, css) {
 // ║           1. 2048                    ║
 // ╚══════════════════════════════════════╝
 PuzzleGames.game2048 = (() => {
-  let grid, score, moved, container;
-  const SIZE = 4;
-  const COLORS = {0:'rgba(255,255,255,0.04)',2:'#eee4da',4:'#ede0c8',8:'#f2b179',16:'#f59563',32:'#f67c5f',64:'#f65e3b',128:'#edcf72',256:'#edcc61',512:'#edc850',1024:'#edc53f',2048:'#edc22e'};
-  const DARK = {0:false,2:true,4:true,8:false,16:false,32:false,64:false,128:false,256:false,512:false,1024:false,2048:false};
+  // ═══════════════════════════════════════════════════════════════
+  //  2048 — "Arcane Night"
+  // ═══════════════════════════════════════════════════════════════
+  // MİMARİ NOTU (bu oyunun en önemli kararı):
+  // Eski sürüm her hamlede innerHTML'i baştan yazıyordu, bu yüzden
+  // karolar kayamıyor, ışınlanıyordu. Artık ızgara STATİK hücrelerden
+  // oluşuyor ve karolar onun ÜSTÜNDE mutlak konumlu, KİMLİĞİ OLAN
+  // elemanlar. Her karo hamleler boyunca aynı DOM elemanı kalıyor;
+  // değişen tek şey transform. Kayma animasyonunu mümkün kılan tek şey
+  // budur — kimlik olmadan tarayıcı neyin nereye gittiğini bilemez.
+  //
+  // Birleştirme matematiği ESKİ SÜRÜMDEN korundu: 1296 kombinasyonda
+  // referans uygulamayla birebir aynı sonucu verdiği doğrulanmıştı.
+  // Değişen yalnızca bunun etrafındaki her şey.
 
-  function init(c) {
-    container = c; score = 0; grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  const SIZE = 4;
+  const WIN_TILE = 2048;
+  const GAP = 8;                    // hücreler arası boşluk (px)
+
+  // Faz zamanlamaları. Toplam ~320ms: hamlenin oturması bir karede
+  // bitmiş gibi hissetmeli ama gözün takip edebileceği kadar sürmeli.
+  const SLIDE_MS = 140;
+  const POP_MS = 180;
+
+  let container, wrapEl, boardEl, cellsEl, tilesEl, atmoEl, placeEl;
+  let scoreEl, bestEl;
+  let grid;            // grid[y][x] → tile | null
+  let tiles;           // aktif tile nesneleri
+  let nextId, score, best, won, dead;
+  let cellPx = 0;
+  let commitTimer = null, pendingCommit = null;
+  let resizeObs = null;
+
+  // ── Renk rampası ──
+  // Klasik 2048 ilerlemesinin YAPISI korundu (açık → sıcak → altın →
+  // serin), ama tonlar platformun premium diline çekildi ve zirve
+  // MENEKŞEYE bağlandı: 2048'e ulaşmak PuzzleHub'ın kendi imza rengine
+  // varmak oluyor. Renk yolculuğu markanın yaşadığı yerde bitiyor.
+  const TIERS = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+
+  function tierIndex(v) {
+    const i = TIERS.indexOf(v);
+    return i === -1 ? TIERS.length : i;      // 4096+ → "super"
+  }
+
+  function injectCSS() {
     injectStyle('css-2048', `
-      .g2048{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;max-width:340px;aspect-ratio:1;padding:6px;border-radius:12px;background:rgba(255,255,255,0.04)}
-      .g2048 .t{border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;transition:all .12s;user-select:none}
-      @media(max-width:360px){.g2048 .t{font-size:20px}}
+      #game-container.g2-arcane{
+        /* Karo rampası — oyun kapsamında (§20.4). Tek oyuna ait 11
+           kademelik bir rampa platform token'larını kirletmemeli. */
+        --g2-2-a:#F1EBDD;   --g2-2-b:#E2D9C4;   --g2-2-ink:#4A4235;
+        --g2-4-a:#EADFC6;   --g2-4-b:#D9CBA8;   --g2-4-ink:#4A4235;
+        --g2-8-a:#E8B071;   --g2-8-b:#D4914D;   --g2-8-ink:#FFF8EC;
+        --g2-16-a:#E39A5E;  --g2-16-b:#CE7B3E;  --g2-16-ink:#FFF8EC;
+        --g2-32-a:#DC8064;  --g2-32-b:#C4614A;  --g2-32-ink:#FFF4EE;
+        --g2-64-a:#D06A57;  --g2-64-b:#B44C3E;  --g2-64-ink:#FFF4EE;
+        --g2-128-a:#DCB250; --g2-128-b:#C39430; --g2-128-ink:#FFFBEC;
+        --g2-256-a:#D2A23A; --g2-256-b:#B8851F; --g2-256-ink:#FFFBEC;
+        --g2-512-a:#5DB08A; --g2-512-b:#3E8C69; --g2-512-ink:#F2FFF8;
+        --g2-1024-a:#5A90CE; --g2-1024-b:#3C6FAB; --g2-1024-ink:#F0F7FF;
+        --g2-2048-a:#9B72F0; --g2-2048-b:#7145D4; --g2-2048-ink:#F8F4FF;
+        --g2-super-a:#B98CFF; --g2-super-b:#8A55E8; --g2-super-ink:#FBF8FF;
+      }
+
+      /* ── Sudoku'nun MEKÂNINDAN farklı: mimari değil SU ──
+         Sudoku tapınak sütunları, Water Sort dağlar kullanıyor. 2048'in
+         yeri durgun bir göl: ufuk çizgisi + ayın suya düşen ışık sütunu.
+         Ortak olan gökyüzü; ayırt eden şey mekân. */
+      .g2-place{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+      /* Ay: soğuk inci beyazı, sarı bir top değil. Tahta ortayı
+         kapladığı için gök ve su ANCAK üstte/altta kalan boşlukta
+         yaşayabilir — kompozisyon buna göre kuruldu. */
+      .g2-moon{position:absolute;top:2.5%;left:50%;margin-left:-14px;width:28px;height:28px;
+        border-radius:50%;
+        background:radial-gradient(circle at 36% 32%, #FFFDF6 0%, #EFEADA 46%, #CFC7C0 100%);
+        box-shadow:0 0 26px 8px rgba(232,236,255,.16), inset -3px -3px 6px rgba(150,140,160,.32)}
+
+      /* SU — konteynerin ALT şeridi. Yüzde yerine alta sabitlendi ki
+         konteyner boyu değişince kompozisyon bozulmasın. */
+      .g2-water{position:absolute;left:0;right:0;bottom:0;height:20%;
+        background:linear-gradient(180deg, rgba(120,110,210,.1) 0%, rgba(30,24,70,.34) 55%, rgba(14,12,42,.5) 100%)}
+      /* Ufuk: göğü sudan ayıran ince aydınlık şerit — suyun üst kenarı. */
+      .g2-horizon{position:absolute;left:0;right:0;bottom:20%;height:1px;
+        background:linear-gradient(90deg, transparent, rgba(200,190,255,.26) 28%, rgba(224,216,255,.44) 50%, rgba(200,190,255,.26) 72%, transparent)}
+      /* Ayın suya düşen ışık yolu: ufuktan AŞAĞI doğru genişleyen,
+         yavaşça nefes alan bir sütun. Bu oyunun imzası ve Sudoku'nun
+         mimari mekânından ayıran şey. */
+      .g2-glimmer{position:absolute;left:50%;margin-left:-30px;bottom:0;width:60px;height:20%;
+        background:linear-gradient(180deg, rgba(246,240,214,.4) 0%, rgba(206,198,255,.14) 55%, transparent 100%);
+        filter:blur(7px);transform-origin:top center;
+        animation:g2Glimmer 7s ease-in-out infinite}
+      @keyframes g2Glimmer{
+        0%,100%{opacity:.45;transform:scaleX(1)}
+        50%    {opacity:.8;transform:scaleX(1.3)}
+      }
+
+      .g2-wrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;gap:var(--ph-space-4);width:100%;max-width:430px;min-height:100%;
+        margin:0 auto;padding:var(--ph-space-4) var(--ph-space-3)}
+      .g2-wrap *{box-sizing:border-box}
+
+      /* ── Skor kapsülleri ── */
+      .g2-scores{display:flex;gap:var(--ph-space-3);width:100%;max-width:340px}
+      .g2-score{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+        padding:9px 6px;border-radius:var(--ph-radius-md);
+        background:linear-gradient(180deg, rgba(126,110,220,.2) 0%, rgba(34,30,80,.44) 62%, rgba(20,18,54,.52) 100%);
+        border:1px solid rgba(180,165,255,.2);
+        box-shadow:0 6px 18px -8px rgba(4,6,22,.9), inset 0 1px 0 rgba(205,195,255,.24)}
+      .g2-score-lbl{font:600 9px/1 'Fraunces',serif;letter-spacing:.16em;text-transform:uppercase;
+        color:rgba(210,200,255,.62)}
+      .g2-score-val{font:800 20px/1 var(--ph-font-display);
+        font-variant-numeric:var(--ph-variant-numeral);color:var(--ph-scene-ink)}
+      /* Yeni rekor anı oyun sonuna ertelenmemeli — anında görünür. */
+      @keyframes g2BestFlash{
+        0%,100%{box-shadow:0 6px 18px -8px rgba(4,6,22,.9), inset 0 1px 0 rgba(205,195,255,.24)}
+        40%    {box-shadow:0 0 22px 2px rgba(246,196,90,.6), inset 0 1px 0 rgba(255,235,180,.5)}
+      }
+      .g2-score.flash{animation:g2BestFlash .7s var(--ph-ease-standard)}
+
+      /* ── TAHTA ──
+         Cam kaide üstünde; hücreler oyulmuş yuvalar, karolar üstte
+         mutlak konumlu ayrı bir katmanda. */
+      .g2-board{position:relative;width:100%;max-width:340px;aspect-ratio:1;
+        padding:${GAP}px;border-radius:var(--ph-radius-lg);
+        background:linear-gradient(180deg, rgba(126,110,220,.18) 0%, rgba(30,26,72,.5) 62%, rgba(18,16,50,.6) 100%);
+        border:1px solid rgba(180,165,255,.18);
+        box-shadow:0 26px 54px -20px rgba(4,6,22,.92), inset 0 1px 0 rgba(205,195,255,.22);
+        touch-action:none;user-select:none}
+      .g2-cells{position:absolute;inset:${GAP}px;display:grid;
+        grid-template-columns:repeat(${SIZE},1fr);grid-template-rows:repeat(${SIZE},1fr);gap:${GAP}px}
+      .g2-cell{border-radius:var(--ph-radius-sm);background:rgba(10,8,30,.34);
+        box-shadow:inset 0 1px 3px rgba(0,0,0,.34)}
+      .g2-tiles{position:absolute;inset:${GAP}px}
+
+      /* ── KARO — §13 "solid block / tile" arketipi ──
+         Düz üst yüzey, kalınlık ima eden alt pah, altında yumuşak gölge.
+         Kullanılmamış tek arketip buydu (sıvı=Water Sort, kristal=Block
+         Puzzle, parşömen=Sudoku), yani tutarlılık kendiliğinden geliyor. */
+      .g2-tile{position:absolute;top:0;left:0;
+        display:flex;align-items:center;justify-content:center;
+        border-radius:var(--ph-radius-sm);
+        font:800 26px/1 var(--ph-font-display);
+        font-variant-numeric:var(--ph-variant-numeral);
+        will-change:transform;
+        /* Yalnızca transform geçişli: kayma GPU'da, layout tetiklenmiyor. */
+        transition:transform ${SLIDE_MS}ms var(--ph-ease-decel)}
+      .g2-tile.d3{font-size:22px}
+      .g2-tile.d4{font-size:18px}
+      .g2-tile.d5{font-size:15px}
+
+      /* Doğuş ve birleşme: transform ANİMASYONU, geçişi değil — ikisi
+         aynı özelliği kullandığı için animasyon geçişi geçici olarak
+         devralır, bitince transform yine transition'a döner. */
+      @keyframes g2Spawn{
+        0%  {transform:translate(var(--tx),var(--ty)) scale(0)}
+        100%{transform:translate(var(--tx),var(--ty)) scale(1)}
+      }
+      @keyframes g2Pop{
+        0%  {transform:translate(var(--tx),var(--ty)) scale(1)}
+        45% {transform:translate(var(--tx),var(--ty)) scale(1.18)}
+        100%{transform:translate(var(--tx),var(--ty)) scale(1)}
+      }
+      .g2-tile.spawn{animation:g2Spawn ${POP_MS}ms var(--ph-ease-spring)}
+      .g2-tile.pop{animation:g2Pop ${POP_MS}ms var(--ph-ease-spring)}
+      /* Yutulan karo hayatta kalanın ALTINDA kalmalı, yoksa kayarken
+         onun üstüne biner ve değeri bir an yanlış görünür. */
+      .g2-tile.absorbing{z-index:0}
+      .g2-tile.surviving{z-index:2}
+
+      ${TIERS.map(v => `
+      .g2-tile.v${v}{
+        background:linear-gradient(180deg, var(--g2-${v}-a) 0%, var(--g2-${v}-b) 100%);
+        color:var(--g2-${v}-ink);
+        box-shadow:0 3px 0 rgba(0,0,0,.22), 0 7px 16px -6px rgba(0,0,0,.6),
+                   inset 0 1px 0 rgba(255,255,255,.34);
+      }`).join('')}
+      .g2-tile.vsuper{
+        background:linear-gradient(180deg, var(--g2-super-a) 0%, var(--g2-super-b) 100%);
+        color:var(--g2-super-ink);
+        box-shadow:0 3px 0 rgba(0,0,0,.22), 0 7px 20px -5px rgba(139,92,246,.75),
+                   inset 0 1px 0 rgba(255,255,255,.4);
+      }
+
+      @media (prefers-reduced-motion: reduce){
+        .g2-tile{transition-duration:var(--ph-duration-micro)}
+        .g2-tile.spawn,.g2-tile.pop{animation:none}
+        .g2-glimmer{animation:none}
+      }
     `);
-    addSpawn(); addSpawn(); render();
-    let tx,ty;
-    addEv(container,'touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});
-    addEv(container,'touchend',e=>{const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;if(Math.abs(dx)>30||Math.abs(dy)>30){Math.abs(dx)>Math.abs(dy)?move(dx>0?'right':'left'):move(dy>0?'down':'up')}},{passive:true});
-    addEv(document,'keydown',onKey);
   }
-  function onKey(e){if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();move(e.key.replace('Arrow','').toLowerCase())}}
-  function addSpawn(){const empty=[];grid.forEach((r,y)=>r.forEach((v,x)=>{if(!v)empty.push([y,x])}));if(!empty.length)return;const[y,x]=empty[Math.floor(Math.random()*empty.length)];grid[y][x]=Math.random()<0.9?2:4}
-  function move(dir){
-    moved=false;
-    const rotated=dir==='up'||dir==='down';const rev=dir==='right'||dir==='down';
-    for(let i=0;i<SIZE;i++){
-      let line=[];for(let j=0;j<SIZE;j++){const y=rotated?j:i,x=rotated?i:j;line.push(grid[y][x])}
-      if(rev)line.reverse();
-      line=mergeLine(line);
-      if(rev)line.reverse();
-      for(let j=0;j<SIZE;j++){const y=rotated?j:i,x=rotated?i:j;if(grid[y][x]!==line[j])moved=true;grid[y][x]=line[j]}
+
+  // ───────── Izgara yardımcıları ─────────
+  function withinBounds(x, y) { return x >= 0 && x < SIZE && y >= 0 && y < SIZE; }
+  function cellAt(x, y) { return withinBounds(x, y) ? grid[y][x] : null; }
+
+  function emptyCells() {
+    const out = [];
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (!grid[y][x]) out.push({ x, y });
+    return out;
+  }
+
+  // ───────── Karo yaşam döngüsü ─────────
+  function makeTile(x, y, value) {
+    const el = document.createElement('div');
+    const t = { id: nextId++, x, y, value, el, mergedThisTurn: false };
+    el.className = 'g2-tile';
+    applyFace(t);
+    positionTile(t);
+    tilesEl.appendChild(el);
+    grid[y][x] = t;
+    tiles.push(t);
+    return t;
+  }
+
+  // Görsel yüz: değer, renk sınıfı ve basamak sayısına göre punto.
+  function applyFace(t) {
+    const digits = String(t.value).length;
+    const cls = ['g2-tile'];
+    cls.push(TIERS.indexOf(t.value) === -1 ? 'vsuper' : 'v' + t.value);
+    if (digits >= 5) cls.push('d5'); else if (digits === 4) cls.push('d4'); else if (digits === 3) cls.push('d3');
+    t.el.className = cls.join(' ');
+    t.el.textContent = t.value;
+  }
+
+  // Konum İKİ KEZ yazılıyor ve bu bilerek:
+  //
+  //   --tx/--ty  → spawn/pop KEYFRAME'leri için (onlar transform'u
+  //                baştan yazdığı için konumu bilmek zorundalar)
+  //   transform  → AÇIK piksel değeriyle, geçiş için
+  //
+  // Neden açık değer şart: transform hep `translate(var(--tx),var(--ty))`
+  // olarak yazılsaydı, değer DİZESİ hiç değişmezdi ve CSS geçişi
+  // TETİKLENMEZDİ — yalnızca içindeki değişken değişmiş olurdu. Karolar
+  // kaymak yerine ışınlanırdı. (Ölçülerek bulundu: kaymanın 70. ms'inde
+  // karo zaten hedefteydi.)
+  function positionTile(t) {
+    const px = t.x * (cellPx + GAP), py = t.y * (cellPx + GAP);
+    t.el.style.setProperty('--tx', px + 'px');
+    t.el.style.setProperty('--ty', py + 'px');
+    t.el.style.transform = 'translate(' + px + 'px, ' + py + 'px)';
+  }
+
+  function measure() {
+    if (!boardEl) return;
+    const inner = boardEl.clientWidth - GAP * 2;
+    cellPx = (inner - GAP * (SIZE - 1)) / SIZE;
+    tilesEl.style.setProperty('--cell', cellPx + 'px');
+    tiles.forEach(t => {
+      t.el.style.width = cellPx + 'px';
+      t.el.style.height = cellPx + 'px';
+      positionTile(t);
+    });
+  }
+
+  function spawnTile(animate) {
+    const spots = emptyCells();
+    if (!spots.length) return null;
+    const spot = spots[Math.floor(Math.random() * spots.length)];
+    const t = makeTile(spot.x, spot.y, Math.random() < 0.9 ? 2 : 4);
+    t.el.style.width = cellPx + 'px';
+    t.el.style.height = cellPx + 'px';
+    if (animate) {
+      t.el.classList.add('spawn');
+      setTimeout(() => t.el.classList.remove('spawn'), POP_MS + 40);
     }
-    if(moved){GameAudio.play('merge');GameAudio.haptic(8);addSpawn();render();updateGameScore(score);if(checkWin()){GameAudio.play('win');GameAudio.haptic(30);showGameOver(true,'Kazandın! 🎉','2048\'e ulaştın! Skor: '+score)}else if(checkLose()){GameAudio.play('lose');showGameOver(false,'Oyun Bitti','Hamle kalmadı. Skor: '+score)}}
+    return t;
   }
-  function mergeLine(line){
-    let a=line.filter(v=>v);
-    for(let i=0;i<a.length-1;i++){if(a[i]===a[i+1]){a[i]*=2;score+=a[i];a[i+1]=0}}
-    a=a.filter(v=>v);while(a.length<SIZE)a.push(0);return a
+
+  // ───────── Hamle ─────────
+  const VECTORS = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+
+  function buildTraversals(v) {
+    const xs = [], ys = [];
+    for (let i = 0; i < SIZE; i++) { xs.push(i); ys.push(i); }
+    // Hareket yönündeki hücreler ÖNCE işlenmeli, yoksa karolar
+    // birbirinin üstünden atlar.
+    if (v.x === 1) xs.reverse();
+    if (v.y === 1) ys.reverse();
+    return { xs, ys };
   }
-  function checkWin(){return grid.some(r=>r.some(v=>v>=2048))}
-  function checkLose(){
-    for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){if(!grid[y][x])return false;if(x<SIZE-1&&grid[y][x]===grid[y][x+1])return false;if(y<SIZE-1&&grid[y][x]===grid[y+1][x])return false}
-    return true
+
+  function findFarthest(x, y, v) {
+    let px, py;
+    do { px = x; py = y; x += v.x; y += v.y; } while (withinBounds(x, y) && !cellAt(x, y));
+    return { fx: px, fy: py, nx: x, ny: y };
   }
-  function render(){
-    container.innerHTML=`<div class="g2048">${grid.map(r=>r.map(v=>{
-      const bg=COLORS[v]||'#3c3a32';const dark=DARK[v]??false;const fs=v>=1024?'18px':v>=128?'22px':'24px';
-      return `<div class="t" style="background:${bg};color:${dark?'#776e65':'#f9f6f2'};font-size:${fs}">${v||''}</div>`
-    }).join('')).join('')}</div>`;
+
+  function move(dir) {
+    if (dead) return;
+    // Animasyon sürerken yeni hamle gelirse bekleyen işlem ANINDA
+    // uygulanır. Girdiyi 320ms kilitlemek 2048'i ağır hissettirir —
+    // oyuncu hızlı kaydırır ve her kaydırma sayılmalı.
+    flushCommit();
+
+    const v = VECTORS[dir];
+    const { xs, ys } = buildTraversals(v);
+    const merges = [];
+    let moved = false;
+
+    tiles.forEach(t => { t.mergedThisTurn = false; });
+
+    xs.forEach(x => ys.forEach(y => {
+      const tile = cellAt(x, y);
+      if (!tile) return;
+      const { fx, fy, nx, ny } = findFarthest(x, y, v);
+      const next = cellAt(nx, ny);
+
+      // Bir karo hamle başına YALNIZCA BİR KEZ birleşir — mergedThisTurn
+      // bunu garantiliyor. Klasik 2048 kuralı budur.
+      if (next && next.value === tile.value && !next.mergedThisTurn) {
+        grid[y][x] = null;
+        tile.x = nx; tile.y = ny;          // yutulan karo hedefe kayar
+        next.mergedThisTurn = true;
+        tile.el.classList.add('absorbing');
+        next.el.classList.add('surviving');
+        merges.push({ survivor: next, absorbed: tile });
+        moved = true;
+      } else if (fx !== x || fy !== y) {
+        grid[y][x] = null;
+        grid[fy][fx] = tile;
+        tile.x = fx; tile.y = fy;
+        moved = true;
+      }
+    }));
+
+    if (!moved) return;
+
+    GameAudio.play('swipe');
+    tiles.forEach(positionTile);            // kayma başlar (CSS transition)
+    scheduleCommit(merges);
   }
-  function cleanup(){clearEvs()}
-  return {init,cleanup};
+
+  // Kaymadan SONRA çalışan ikinci faz: yutulanları sil, değerleri
+  // güncelle, yeni karo doğur, oyun durumunu kontrol et.
+  function scheduleCommit(merges) {
+    pendingCommit = () => applyCommit(merges);
+    commitTimer = setTimeout(flushCommit, SLIDE_MS);
+  }
+
+  function flushCommit() {
+    if (!pendingCommit) return;
+    clearTimeout(commitTimer);
+    const fn = pendingCommit;
+    pendingCommit = null; commitTimer = null;
+    fn();
+  }
+
+  function applyCommit(merges) {
+    let gained = 0;
+    let highestMerge = 0;
+
+    merges.forEach(({ survivor, absorbed }) => {
+      absorbed.el.remove();
+      tiles = tiles.filter(t => t !== absorbed);
+      survivor.value *= 2;
+      gained += survivor.value;
+      if (survivor.value > highestMerge) highestMerge = survivor.value;
+      applyFace(survivor);
+      positionTile(survivor);
+      survivor.el.classList.remove('surviving');
+      survivor.el.classList.remove('pop');
+      void survivor.el.offsetWidth;
+      survivor.el.classList.add('pop');
+      setTimeout(() => survivor.el.classList.remove('pop'), POP_MS + 40);
+    });
+
+    if (merges.length) {
+      score += gained;
+      updateScore();
+      // Perde karo kademesiyle yükseliyor: sayı rampasına eşlik eden
+      // ses rampası. 4 birleşmesi alçak, 2048 tiz.
+      const pitch = 1 + tierIndex(highestMerge) * 0.085;
+      GameAudio.play('merge', { pitch });
+      // Hafif dokunsal geri bildirim normal birleşmede; dönüm noktası
+      // karolarında güçlü. Fark hissedilir olmalı, yoksa ikisi de
+      // "titreşim" olarak algılanır.
+      GameAudio.haptic(highestMerge >= 512 ? 'star' : 'micro');
+      if (highestMerge >= 512) phAtmosphereFlare(atmoEl, 1.6, 480);
+    }
+
+    spawnTile(true);
+
+    if (!won && highestMerge >= WIN_TILE) {
+      won = true;
+      // 2048 bir DÖNÜM NOKTASI, oyunun sonu değil — oyun sürüyor.
+      GameAudio.play('premium'); GameAudio.haptic('win');
+      phAtmosphereFlare(atmoEl, 2.4, 700);
+      phShowCelebration({ title: '2048! ✨', subtitle: 'Devam edebilirsin', sfx: 'star' });
+    }
+
+    if (!hasMoves()) {
+      dead = true;
+      GameAudio.play('lose');
+      showGameOver(false, 'Hamle Kalmadı', 'Skor: ' + score.toLocaleString());
+    }
+  }
+
+  function hasMoves() {
+    if (emptyCells().length) return true;
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+      const v = grid[y][x].value;
+      if (x < SIZE - 1 && grid[y][x + 1].value === v) return true;
+      if (y < SIZE - 1 && grid[y + 1][x].value === v) return true;
+    }
+    return false;
+  }
+
+  // ───────── Skor ─────────
+  function updateScore() {
+    if (scoreEl) scoreEl.textContent = score.toLocaleString();
+    updateGameScore(score);
+    if (score > best) {
+      const wasBehind = best > 0;
+      best = score;
+      if (bestEl) bestEl.textContent = best.toLocaleString();
+      writeBest();
+      // Rekorun geçildiği AN belli olmalı, oyun sonunda değil.
+      if (wasBehind && bestEl) {
+        const card = bestEl.closest('.g2-score');
+        card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+      }
+    }
+  }
+
+  function readBest() {
+    try { return parseInt(localStorage.getItem('gh_hi_game2048') || '0', 10) || 0; }
+    catch (e) { return 0; }
+  }
+  function writeBest() {
+    try { localStorage.setItem('gh_hi_game2048', String(best)); } catch (e) {}
+  }
+
+  // ───────── Sahne ─────────
+  function buildPlace() {
+    placeEl = document.createElement('div');
+    placeEl.className = 'g2-place';
+    ['g2-water', 'g2-glimmer', 'g2-horizon', 'g2-moon'].forEach(c => {
+      const d = document.createElement('div'); d.className = c; placeEl.appendChild(d);
+    });
+    container.appendChild(placeEl);
+  }
+
+  // ───────── Yaşam döngüsü ─────────
+  function init(c) {
+    container = c;
+    score = 0; won = false; dead = false; nextId = 1;
+    tiles = [];
+    grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+    best = readBest();
+
+    container.classList.add('ph-scene', 'g2-arcane');
+    injectCSS();
+
+    // Atmosfer Sudoku'dan KISIK: 2048'de göz sürekli tahtayı tarıyor,
+    // arka planda hareket eden her şey o taramaya rakip oluyor.
+    atmoEl = phAtmosphere(container, { stars: 14, beams: 1, motes: 4, skyPct: 30 });
+    buildPlace();
+
+    wrapEl = document.createElement('div');
+    wrapEl.className = 'g2-wrap';
+    wrapEl.innerHTML =
+      '<div class="g2-scores">' +
+        '<div class="g2-score"><span class="g2-score-lbl">Skor</span>' +
+          '<span class="g2-score-val" data-role="score">0</span></div>' +
+        '<div class="g2-score"><span class="g2-score-lbl">👑 En İyi</span>' +
+          '<span class="g2-score-val" data-role="best">0</span></div>' +
+      '</div>' +
+      '<div class="g2-board" data-role="board">' +
+        '<div class="g2-cells" data-role="cells"></div>' +
+        '<div class="g2-tiles" data-role="tiles"></div>' +
+      '</div>';
+    container.appendChild(wrapEl);
+
+    boardEl = wrapEl.querySelector('[data-role="board"]');
+    cellsEl = wrapEl.querySelector('[data-role="cells"]');
+    tilesEl = wrapEl.querySelector('[data-role="tiles"]');
+    scoreEl = wrapEl.querySelector('[data-role="score"]');
+    bestEl = wrapEl.querySelector('[data-role="best"]');
+    bestEl.textContent = best.toLocaleString();
+
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      const d = document.createElement('div'); d.className = 'g2-cell'; cellsEl.appendChild(d);
+    }
+
+    // Ölçüm SENKRON yapılıyor: eleman DOM'a eklendiği için clientWidth
+    // zaten okunabilir (tek bir layout tetikler, kabul edilebilir).
+    // requestAnimationFrame KULLANILMIYOR — sekme arka plandayken rAF
+    // çalışmaz ve oyun hiç karo doğurmadan açılırdı.
+    measure();
+    spawnTile(true);
+    spawnTile(true);
+
+    // Tahta yeniden boyutlanınca (döndürme, klavye açılışı) karoların
+    // piksel konumları yeniden hesaplanmalı.
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObs = new ResizeObserver(() => measure());
+      resizeObs.observe(boardEl);
+    }
+
+    phSwipe(boardEl, move);
+    // Klavye BİLEREK sessiz: hiçbir ipucu gösterilmiyor, mobil deneyimi
+    // etkilemiyor; yalnızca masaüstü PWA'da ve testte işe yarıyor.
+    addEv(document, 'keydown', onKey);
+  }
+
+  function onKey(e) {
+    const map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+    if (map[e.key]) { e.preventDefault(); move(map[e.key]); }
+  }
+
+  function cleanup() {
+    clearEvs();
+    flushCommit();
+    if (resizeObs) { resizeObs.disconnect(); resizeObs = null; }
+    if (placeEl) { placeEl.remove(); placeEl = null; }
+    if (atmoEl) { atmoEl.remove(); atmoEl = null; }
+    if (container) container.classList.remove('ph-scene', 'g2-arcane');
+  }
+
+  return { init, cleanup };
 })();
 
 // ╔══════════════════════════════════════╗
