@@ -830,7 +830,10 @@ PuzzleGames.game2048 = (() => {
   // serin), ama tonlar platformun premium diline çekildi ve zirve
   // MENEKŞEYE bağlandı: 2048'e ulaşmak PuzzleHub'ın kendi imza rengine
   // varmak oluyor. Renk yolculuğu markanın yaşadığı yerde bitiyor.
-  const TIERS = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+  // 2048'in ÖTESİ de rampanın parçası: devam etmeyi özellik yaptıysak
+  // devam etmenin görsel karşılığı olmalı. 65536+ tek "super" tonuna
+  // düşer — oraya varan oyuncu için renk artık ayırt edici değil, sayı.
+  const TIERS = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
 
   function tierIndex(v) {
     const i = TIERS.indexOf(v);
@@ -840,20 +843,46 @@ PuzzleGames.game2048 = (() => {
   function injectCSS() {
     injectStyle('css-2048', `
       #game-container.g2-arcane{
-        /* Karo rampası — oyun kapsamında (§20.4). Tek oyuna ait 11
-           kademelik bir rampa platform token'larını kirletmemeli. */
-        --g2-2-a:#F1EBDD;   --g2-2-b:#E2D9C4;   --g2-2-ink:#4A4235;
-        --g2-4-a:#EADFC6;   --g2-4-b:#D9CBA8;   --g2-4-ink:#4A4235;
-        --g2-8-a:#E8B071;   --g2-8-b:#D4914D;   --g2-8-ink:#FFF8EC;
-        --g2-16-a:#E39A5E;  --g2-16-b:#CE7B3E;  --g2-16-ink:#FFF8EC;
-        --g2-32-a:#DC8064;  --g2-32-b:#C4614A;  --g2-32-ink:#FFF4EE;
-        --g2-64-a:#D06A57;  --g2-64-b:#B44C3E;  --g2-64-ink:#FFF4EE;
-        --g2-128-a:#DCB250; --g2-128-b:#C39430; --g2-128-ink:#FFFBEC;
-        --g2-256-a:#D2A23A; --g2-256-b:#B8851F; --g2-256-ink:#FFFBEC;
-        --g2-512-a:#5DB08A; --g2-512-b:#3E8C69; --g2-512-ink:#F2FFF8;
-        --g2-1024-a:#5A90CE; --g2-1024-b:#3C6FAB; --g2-1024-ink:#F0F7FF;
-        --g2-2048-a:#9B72F0; --g2-2048-b:#7145D4; --g2-2048-ink:#F8F4FF;
-        --g2-super-a:#B98CFF; --g2-super-b:#8A55E8; --g2-super-ink:#FBF8FF;
+        /* ── Karo rampası — oyun kapsamında (§20.4) ──
+           İki kural rampayı yönetiyor:
+
+           1. PARLAKLIK KADEMEYLE ARTAR. Önceki hâlde 2 ve 4 karoları
+              koyu tahtadaki EN parlak nesnelerdi; yani en önemsiz karolar
+              en çok bağırıyordu ve göz sürekli gürültüye çekiliyordu.
+              Artık düşük karolar ay ışığında sönük taş gibi geri
+              çekiliyor, kazanım karoları öne çıkıyor.
+           2. YOLCULUK MENEKŞEDE BİTMİYOR, ORADA DÖNÜYOR. 2048 tek
+              IŞIYAN karo (aşağıdaki .v2048 kuralına bak) — varış noktası
+              olduğu oradan anlaşılıyor. Ötesi söndürülmüyor, başka bir
+              yöne açılıyor: indigo → magenta → gül → ay beyazı. */
+
+        /* Sönük taş — okunur ama sessiz. Ay ışığında geri çekilir. */
+        --g2-2-a:#B9B2C8;    --g2-2-b:#A29AB4;    --g2-2-ink:#332E42;
+        --g2-4-a:#C7BEC9;    --g2-4-b:#B0A5B1;    --g2-4-ink:#332E42;
+        /* Isınma — kehribar */
+        --g2-8-a:#D79A6B;    --g2-8-b:#C07E4A;    --g2-8-ink:#FFF6E9;
+        --g2-16-a:#D8894F;   --g2-16-b:#C06B34;   --g2-16-ink:#FFF6E9;
+        /* Mercan */
+        --g2-32-a:#D4735A;   --g2-32-b:#BA553F;   --g2-32-ink:#FFF2EC;
+        --g2-64-a:#CE6250;   --g2-64-b:#B24336;   --g2-64-ink:#FFF2EC;
+        /* Altın — ilk gerçek kazanım hissi */
+        --g2-128-a:#E0B450;  --g2-128-b:#C4942C;  --g2-128-ink:#FFFBEA;
+        --g2-256-a:#EFC556;  --g2-256-b:#D3A527;  --g2-256-ink:#FFFDF0;
+        /* Serinleme — yeşim, sonra gök. Komşularıyla aynı doygunlukta
+           tutuldu; önceki hâlde bu ikisi rampada sert bir kopukluk
+           yaratıyordu. */
+        --g2-512-a:#6FBE9A;  --g2-512-b:#4E9B78;  --g2-512-ink:#F4FFFA;
+        --g2-1024-a:#6BA0DC; --g2-1024-b:#4A7FBC; --g2-1024-ink:#F4FAFF;
+        /* VARIŞ — platformun imza menekşesi, tek ışıyan karo. */
+        --g2-2048-a:#A886FF; --g2-2048-b:#7C4FE0; --g2-2048-ink:#FBF8FF;
+        /* Ötesi: sönmüyor, başka bir yöne açılıyor. Devam etmenin
+           görsel ödülü buydu — önceden 4096+ hepsi tek renkti. */
+        --g2-4096-a:#8E7BF2;  --g2-4096-b:#5B44C6;  --g2-4096-ink:#FBF8FF;
+        --g2-8192-a:#C77BEE;  --g2-8192-b:#9A46C4;  --g2-8192-ink:#FEF8FF;
+        --g2-16384-a:#E87BC4; --g2-16384-b:#C24693; --g2-16384-ink:#FFF8FC;
+        --g2-32768-a:#F58BA6; --g2-32768-b:#D2557A; --g2-32768-ink:#FFF8FA;
+        /* Ay beyazı — rampanın sonu, gökyüzüne dönüş. */
+        --g2-super-a:#F2EEFF; --g2-super-b:#C9BEEA; --g2-super-ink:#3A3358;
       }
 
       /* ── Sudoku'nun MEKÂNINDAN farklı: mimari değil SU ──
@@ -968,11 +997,19 @@ PuzzleGames.game2048 = (() => {
         box-shadow:0 3px 0 rgba(0,0,0,.22), 0 7px 16px -6px rgba(0,0,0,.6),
                    inset 0 1px 0 rgba(255,255,255,.34);
       }`).join('')}
+      /* 2048 rampadaki TEK ışıyan karo. Varış noktası olduğu renkten
+         değil, ışıktan anlaşılır — sakin ama tartışmasız. */
+      .g2-tile.v2048{
+        box-shadow:0 3px 0 rgba(0,0,0,.22), 0 8px 24px -6px rgba(168,134,255,.7),
+                   0 0 20px -2px rgba(168,134,255,.45),
+                   inset 0 1px 0 rgba(255,255,255,.42);
+      }
+      /* 2048 ötesi: her kademe kendi rengiyle devam eder. */
       .g2-tile.vsuper{
         background:linear-gradient(180deg, var(--g2-super-a) 0%, var(--g2-super-b) 100%);
         color:var(--g2-super-ink);
-        box-shadow:0 3px 0 rgba(0,0,0,.22), 0 7px 20px -5px rgba(139,92,246,.75),
-                   inset 0 1px 0 rgba(255,255,255,.4);
+        box-shadow:0 3px 0 rgba(0,0,0,.22), 0 8px 22px -5px rgba(226,216,255,.55),
+                   inset 0 1px 0 rgba(255,255,255,.5);
       }
 
       /* ── Kontroller — TEK buton ──
@@ -1007,6 +1044,21 @@ PuzzleGames.game2048 = (() => {
         background:linear-gradient(180deg, rgba(255,255,255,.07) 0%, rgba(255,255,255,0) 22%), var(--ph-bg-2)}
       .g2-buy-btn.primary{background:linear-gradient(180deg,var(--ph-accent-light),var(--ph-accent) 20%);border-color:transparent}
       .g2-buy-btn:active{transform:scale(.96)}
+      .g2-buy-btn[disabled]{opacity:.4;pointer-events:none}
+      .g2-buy-balance{text-align:center;font:var(--ph-type-caption);
+        color:var(--ph-text-secondary);margin-top:-4px}
+
+      /* ── GEÇERSİZ HAMLE — direnç ──
+         Duvara doğru kaydırmak eskiden TAMAMEN sessizdi; oyuncu
+         dokunuşunun algılanıp algılanmadığını bilmiyordu. Tahta hamlenin
+         yönünde bir parça zorlanıp geri yaylanıyor: "gördüm, ama olmaz".
+         Bilerek çok küçük (6px) ve çok kısa — hata değil, sınır bildirimi. */
+      @keyframes g2Nudge{
+        0%  {transform:translate(0,0)}
+        38% {transform:translate(var(--nx,0),var(--ny,0))}
+        100%{transform:translate(0,0)}
+      }
+      .g2-board.nudge{animation:g2Nudge 200ms var(--ph-ease-decel)}
 
       /* Dönüm noktası: tahtanın üstünde beliren kısa bir mühür.
          Bilerek küçük ve kısa — tahtanın önüne geçmemeli. */
@@ -1195,11 +1247,17 @@ PuzzleGames.game2048 = (() => {
     scrim.className = 'ph-modal-scrim';
     const panel = document.createElement('div');
     panel.className = 'ph-modal ph-modal-enter';
+    // Bakiye gösteriliyor: oyuncudan 15 elmas harcaması isteniyorsa kaç
+    // elması olduğunu görmeli. Yetmiyorsa buton da pasifleşiyor.
+    const bakiye = (typeof DiamondSystem !== 'undefined') ? DiamondSystem.get() : 0;
+    const yeterli = bakiye >= UNDO_DIAMONDS;
     panel.innerHTML =
       '<div class="g2-buy">' +
         '<div class="g2-buy-title">Geri Alma</div>' +
         '<button class="g2-buy-btn primary" data-a="ad">📺 Reklam İzle → +1</button>' +
-        '<button class="g2-buy-btn" data-a="gem">💎 ' + UNDO_DIAMONDS + ' → +1</button>' +
+        '<button class="g2-buy-btn" data-a="gem"' + (yeterli ? '' : ' disabled') + '>' +
+          '💎 ' + UNDO_DIAMONDS + ' → +1</button>' +
+        '<div class="g2-buy-balance">Bakiyen: 💎 ' + bakiye.toLocaleString() + '</div>' +
         '<button class="g2-buy-btn" data-a="no">Vazgeç</button>' +
       '</div>';
     scrim.appendChild(panel);
@@ -1270,7 +1328,7 @@ PuzzleGames.game2048 = (() => {
       }
     }));
 
-    if (!moved) return;
+    if (!moved) { nudge(v); return; }
 
     history.push(before);
     if (history.length > HISTORY_MAX) history.shift();
@@ -1343,9 +1401,30 @@ PuzzleGames.game2048 = (() => {
       // "Devam et" = ölümcül hamleyi geri al. 2048'de anlamlı olan tek
       // devam biçimi bu; rastgele karo silmek tahtayı oyuncunun
       // kurmadığı bir duruma sokardı.
-      showGameOver(false, 'Hamle Kalmadı', 'Skor: ' + score.toLocaleString(),
-        history.length ? { onContinue: () => { doUndo(); refreshUndo(); } } : undefined);
+      showGameOver(false, 'Hamle Kalmadı', 'En yüksek karo: ' + enBuyukKaro(), {
+        accent: '#7C4FE0', accentLight: '#A886FF', accentGlow: 'rgba(168,134,255,.7)',
+        mark: '✧',
+        stats: [
+          { label: 'Skor', value: score.toLocaleString() },
+          // Rekor bu turda kırıldıysa kapsül altın vurguyla işaretlenir.
+          { label: '👑 En İyi', value: best.toLocaleString(), record: score >= best && score > 0 },
+        ],
+        onContinue: history.length ? () => { doUndo(); refreshUndo(); } : undefined,
+      });
     }
+  }
+
+  // Geçersiz hamlenin karşılığı: tahta o yöne 6px zorlanıp geri döner,
+  // en hafif titreşim eşlik eder. Ses YOK — her duvara dokunuşta ses
+  // çıkması kısa sürede rahatsız ederdi; bu bir hata değil, sınır.
+  function nudge(v) {
+    if (!boardEl) return;
+    boardEl.style.setProperty('--nx', (v.x * 6) + 'px');
+    boardEl.style.setProperty('--ny', (v.y * 6) + 'px');
+    boardEl.classList.remove('nudge'); void boardEl.offsetWidth;
+    boardEl.classList.add('nudge');
+    setTimeout(() => boardEl.classList.remove('nudge'), 240);
+    GameAudio.haptic('micro');
   }
 
   function celebrateMilestone(value) {
@@ -1364,6 +1443,11 @@ PuzzleGames.game2048 = (() => {
     phAtmosphereFlare(atmoEl, isWin ? 2.4 : 1.7, isWin ? 700 : 500);
     GameAudio.play(isWin ? 'premium' : 'star');
     GameAudio.haptic(isWin ? 'win' : 'star');
+  }
+
+  // Bir turun asıl hikâyesi skordan çok ulaşılan en yüksek karodur.
+  function enBuyukKaro() {
+    return tiles.reduce((m, t) => Math.max(m, t.value), 0);
   }
 
   function hasMoves() {
@@ -1531,7 +1615,9 @@ PuzzleGames.game2048 = (() => {
     if (container) container.classList.remove('ph-scene', 'g2-arcane');
   }
 
-  return { init, cleanup };
+  // Kabuğa bildirim: skor göstergesini bu oyun kendi çiziyor, başlıktaki
+  // kopyası gizlensin (aynı sayı iki yerde görünmemeli).
+  return { init, cleanup, ownsScoreDisplay: true };
 })();
 
 // ╔══════════════════════════════════════╗

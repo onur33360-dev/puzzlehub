@@ -370,6 +370,98 @@
   white-space: nowrap;
 }
 
+/* ============================================
+   OYUN SONU — PAYLAŞIMLI, SAHNE-DUYARLI
+   ============================================
+   Tüm oyunlar AYNI UX dilini konuşur; değişen yalnızca içerik ve
+   görsel vurgudur. Oyun `--go-accent` değişkenini vererek kendi imza
+   rengini geçirir (2048 → menekşe, Sudoku → altın); vermezse platform
+   moruna düşer.
+
+   Neden oyuna özel modal YAZILMADI: her oyunun kendi bitiş ekranını
+   yazması, dört oyun sonra dört farklı buton hiyerarşisi ve dört farklı
+   kapatma davranışı demekti. Ortak bileşen bunu bir kez çözer. */
+
+.game-over-overlay { /* konumlandırma style.css'te; buradan yalnızca yüzey diline çekiliyor */
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(76,42,122,.5), transparent 60%),
+              rgba(7,5,20,.9) !important;
+}
+
+.game-over-box {
+  /* Jenerik koyu karttan gece yüzeyine: aynı malzeme ailesi, oyunun
+     sahnesinden kopmuyor. */
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 0%, rgba(126,110,220,.2), transparent 62%),
+    linear-gradient(180deg, rgba(32,26,74,.96) 0%, rgba(18,15,46,.98) 100%) !important;
+  border: 1px solid rgba(180,165,255,.2) !important;
+  box-shadow: 0 30px 70px -24px rgba(0,0,0,.95),
+              inset 0 1px 0 rgba(205,195,255,.22) !important;
+}
+
+/* İşaret — karikatür emoji yerine sahnenin diline ait bir mühür.
+   Kazanmada oyunun imza renginde ışır, kaybetmede söner. Bu, "😔"in
+   premium his üzerindeki tek başına en büyük hasarını kaldırır. */
+.go-mark {
+  width: 62px; height: 62px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 27px; line-height: 1;
+  background: radial-gradient(circle at 38% 34%,
+              var(--go-accent-light, #b9a0ff), var(--go-accent, #7c3aed) 68%);
+  box-shadow: 0 0 30px -4px var(--go-accent-glow, rgba(124,58,237,.7)),
+              inset 0 2px 0 rgba(255,255,255,.32);
+}
+/* Kayıpta mühür söner ama YOK OLMAZ — okunur bir varlık kalmalı,
+   yoksa yer tutucu gibi görünüyor. */
+.go-mark.lost {
+  background: radial-gradient(circle at 38% 34%, rgba(178,170,210,.62), rgba(62,55,96,.85) 70%);
+  color: rgba(228,222,255,.75);
+  box-shadow: 0 0 18px -6px rgba(150,140,200,.5), inset 0 2px 0 rgba(255,255,255,.18);
+}
+
+/* İstatistik kapsülleri — skorun düz altyazı olmaktan çıkması.
+   Oyun içindeki kapsül diliyle aynı, böylece oyun bitince bilgi
+   "başka bir yere" taşınmış gibi olmuyor. */
+.go-stats { display: flex; gap: var(--ph-space-3); width: 100%; }
+.go-stat {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 9px 6px; border-radius: var(--ph-radius-md);
+  background: linear-gradient(180deg, rgba(126,110,220,.18) 0%, rgba(20,17,54,.5) 100%);
+  border: 1px solid rgba(180,165,255,.18);
+}
+.go-stat-lbl {
+  font: 600 9px/1 'Fraunces', serif; letter-spacing: .16em; text-transform: uppercase;
+  color: rgba(210,200,255,.62);
+}
+.go-stat-val {
+  font: 800 19px/1 var(--ph-font-display);
+  font-variant-numeric: var(--ph-variant-numeral); color: var(--ph-scene-ink);
+}
+/* Yeni rekor: sayı değil, ANIN kendisi vurgulanır. */
+.go-stat.record .go-stat-val { color: #F6C45A; text-shadow: 0 0 14px rgba(246,196,90,.5); }
+
+/* ── Buton hiyerarşisi: TEK birincil eylem ──
+   Önceki hâlde dört buton da aynı ağırlıktaydı. Şimdi tek parlak buton
+   "Tekrar Oyna" — yani ücretsiz ve oyuncu lehine olan eylem. Devam
+   seçenekleri (reklam/elmas) görünür ve kolay ama sakin: kaybetmiş bir
+   oyuncuya en parlak şeyin reklam olduğunu söylemek premium his değil,
+   baskı üretir. */
+.game-over-box .go-btn-ad {
+  background: linear-gradient(180deg, rgba(126,110,220,.3), rgba(30,26,72,.6)) !important;
+  border: 1px solid rgba(180,165,255,.24);
+  color: var(--ph-scene-ink) !important;
+}
+.game-over-box .go-btn-diamond {
+  /* Teal, ne oyunlarda ne platform paletinde var — gece diline çekildi. */
+  background: linear-gradient(180deg, rgba(126,110,220,.3), rgba(30,26,72,.6)) !important;
+  border: 1px solid rgba(180,165,255,.24);
+  color: var(--ph-scene-ink) !important;
+}
+.game-over-box .go-btn-secondary {
+  background: transparent !important;
+  border: 1px solid rgba(180,165,255,.16) !important;
+  color: rgba(215,208,255,.72) !important;
+}
+
 /* ── §22 prefers-reduced-motion — dekoratif hareket kapanır,
    işlevsel geri bildirim (shake, float) kısalır ama kalır. ── */
 @media (prefers-reduced-motion: reduce) {

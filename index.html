@@ -276,9 +276,14 @@
         <!-- Game Over Overlay -->
         <div id="game-over" class="game-over-overlay" style="display:none">
           <div class="game-over-box">
-            <span class="game-over-emoji" id="go-emoji">🎉</span>
+            <!-- İşaret: emoji yerine sahne diline ait mühür (bkz.
+                 components.css .go-mark). Eski #go-emoji id'si korundu ki
+                 opts vermeyen oyunlar aynen çalışsın. -->
+            <span class="go-mark" id="go-emoji">🎉</span>
             <h2 class="game-over-title" id="go-title">Tebrikler!</h2>
             <p class="game-over-msg" id="go-msg">Skor: 0</p>
+            <!-- Oyun opts.stats verirse dolar, vermezse gizli kalır. -->
+            <div class="go-stats" id="go-stats" style="display:none"></div>
             
             <!-- Devam Et (sadece kaybettiğinde) -->
             <div id="go-continue" class="go-continue-section" style="display:none">
@@ -336,7 +341,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.4.1';
+    const APP_VERSION = '1.5.1';
 
     // Sıralı yükleme: games.js → ui-kit.js → reels.js → app.js
     // (app.js, games.js'teki PuzzleGames/GameAudio ve reels.js'teki

@@ -673,6 +673,13 @@ function playGame(name, opts) {
   const btnM = document.getElementById('btn-music');
   if (btnS) btnS.textContent = GameAudio.muted ? '🔇' : '🔊';
   if (btnM) btnM.textContent = GameAudio.musicMuted ? '🎵' : '🎶';
+
+  // Oyun kendi skor göstergesini çiziyorsa kabuğunki gizlenir — aynı
+  // sayı iki yerde birden görünmemeli. (2048 sahne dilinde SKOR/EN İYİ
+  // kapsülleri çiziyor; başlıktaki kopyası hiyerarşiyi bulanıklaştırıyordu.)
+  const scoreWrap = document.querySelector('#screen-game .game-score-wrap');
+  if (scoreWrap) scoreWrap.style.display = PuzzleGames[gameId].ownsScoreDisplay ? 'none' : '';
+
   PuzzleGames[gameId].init(container, _currentGameOpts || undefined);
 }
 
@@ -688,12 +695,51 @@ function updateGameScore(score) {
 // mevcut oyunların hiçbiri etkilenmez.
 let _gameOverContinuation = null;
 
+// opts (hepsi isteğe bağlı, verilmezse eski davranış):
+//   onContinue  → reklam/elmasla devam edildiğinde çağrılır
+//   accent      → oyunun imza rengi; mühür ve vurgular buradan boyanır
+//   mark        → mühürdeki işaret (varsayılan ✦ / ✧)
+//   stats       → [{label, value, record}] — skor/en iyi kapsülleri
 function showGameOver(win, title, message, opts) {
-  _gameOverContinuation = (opts && typeof opts.onContinue === 'function') ? opts.onContinue : null;
+  opts = opts || {};
+  _gameOverContinuation = (typeof opts.onContinue === 'function') ? opts.onContinue : null;
 
-  document.getElementById('go-emoji').textContent = win ? '🎉' : '😔';
+  const box = document.querySelector('.game-over-box');
+  // Sahne-duyarlılık: oyun kendi rengini geçirir, geçirmezse platform
+  // moruna düşülür. Tüm oyunlar aynı YAPIYI, farklı VURGUYU kullanır.
+  if (box) {
+    box.style.setProperty('--go-accent', opts.accent || '#7c3aed');
+    box.style.setProperty('--go-accent-light', opts.accentLight || '#b9a0ff');
+    box.style.setProperty('--go-accent-glow', opts.accentGlow || 'rgba(124,58,237,.7)');
+  }
+
+  const mark = document.getElementById('go-emoji');
+  mark.textContent = opts.mark || (win ? '✦' : '✧');
+  mark.classList.toggle('lost', !win);
+
   document.getElementById('go-title').textContent = title;
   document.getElementById('go-msg').textContent = message;
+
+  // İstatistik kapsülleri — skorun düz altyazı olmaktan çıkması.
+  const stats = document.getElementById('go-stats');
+  if (stats) {
+    if (opts.stats && opts.stats.length) {
+      stats.style.display = '';
+      stats.innerHTML = opts.stats.map(s =>
+        '<div class="go-stat' + (s.record ? ' record' : '') + '">' +
+          '<span class="go-stat-lbl"></span><span class="go-stat-val"></span></div>'
+      ).join('');
+      // Metin textContent ile yazılıyor: oyun adları/etiketleri HTML olarak
+      // yorumlanmasın (skor değerleri güvenli olsa da alışkanlık önemli).
+      [...stats.children].forEach((el, i) => {
+        el.querySelector('.go-stat-lbl').textContent = opts.stats[i].label;
+        el.querySelector('.go-stat-val').textContent = opts.stats[i].value;
+      });
+    } else {
+      stats.style.display = 'none';
+      stats.innerHTML = '';
+    }
+  }
 
   // Show/hide continue button (only on loss)
   const continueBtn = document.getElementById('go-continue');
