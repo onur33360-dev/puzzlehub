@@ -975,34 +975,287 @@ PuzzleGames.wordSearch = (() => {
 // ║         4. SUDOKU                    ║
 // ╚══════════════════════════════════════╝
 PuzzleGames.sudoku = (() => {
-  // 3 hazır bulmaca (0=boş)
-  const PUZZLES = [
-    [5,3,0,0,7,0,0,0,0,6,0,0,1,9,5,0,0,0,0,9,8,0,0,0,0,6,0,8,0,0,0,6,0,0,0,3,4,0,0,8,0,3,0,0,1,7,0,0,0,2,0,0,0,6,0,6,0,0,0,0,2,8,0,0,0,0,4,1,9,0,0,5,0,0,0,0,8,0,0,7,9],
-    [0,0,0,2,6,0,7,0,1,6,8,0,0,7,0,0,9,0,1,9,0,0,0,4,5,0,0,8,2,0,1,0,0,0,4,0,0,0,4,6,0,2,9,0,0,0,5,0,0,0,3,0,2,8,0,0,9,3,0,0,0,7,4,0,4,0,0,5,0,0,3,6,7,0,3,0,1,8,0,0,0],
-    [0,0,5,3,0,0,0,0,0,8,0,0,0,0,0,0,2,0,0,7,0,0,1,0,5,0,0,4,0,0,0,0,5,3,0,0,0,1,0,0,7,0,0,0,6,0,0,3,2,0,0,0,8,0,0,6,0,5,0,0,0,0,9,0,0,4,0,0,0,0,3,0,0,0,0,0,0,9,7,0,0],
-  ];
-  const SOLUTIONS = [];
   // Hata bütçesi. Klasik sudokudan bilinçli bir ayrılış: yanlış hamle
   // engelleniyor AMA bedava değil — bedeli bir can. Engelleme ücretsiz
   // olsaydı bulmacanın gerilimi kaçardı (bkz. docs/GAMES/SUDOKU.md).
   const MAX_LIVES = 3;
+  const DEFAULT_DIFFICULTY = 'easy';
+
   let board, initial, solution, selected, container, startTime, wrapEl;
   let tabletEl, mistakesEl, atmoEl, placeEl, lives, dead;
+  let currentSeed, currentDifficulty;
 
-  function solveCopy(puzzle) {
-    const b=[...puzzle];
-    function solve(b){
-      const i=b.indexOf(0);if(i===-1)return true;
-      const r=Math.floor(i/9),c=i%9,bx=Math.floor(r/3)*3,by=Math.floor(c/3)*3;
-      for(let n=1;n<=9;n++){
-        let ok=true;
-        for(let j=0;j<9;j++){if(b[r*9+j]===n||b[j*9+c]===n)ok=false}
-        for(let dr=0;dr<3;dr++)for(let dc=0;dc<3;dc++)if(b[(bx+dr)*9+(by+dc)]===n)ok=false;
-        if(ok){b[i]=n;if(solve(b))return true;b[i]=0}
+  // ═══════════════════════════════════════════════════════════════
+  //  BULMACA ÜRETİCİ
+  // ═══════════════════════════════════════════════════════════════
+  // Önceden üç sabit bulmaca vardı; dördüncü oyunda tekrar başlıyordu.
+  // Artık sınırsız üretiliyor.
+  //
+  // TEKLİK PAZARLIK KONUSU DEĞİL. Can sistemi her hamleyi çözüme karşı
+  // sınadığı için, iki çözümü olan bir bulmaca oyuncuyu geçerli bir
+  // alternatifi girdiği için cezalandırırdı. Bu yüzden her hücre
+  // çıkarımı, çözüm sayısı hâlâ 1 mi diye doğrulanarak yapılıyor.
+  //
+  // ZORLUK = GEREKEN TEKNİK, ipucu sayısı değil.
+  // İpucu sayısı zayıf bir vekildir: 30 ipuçlu bir bulmaca 45 ipuçlu
+  // birinden kolay olabilir. Bunun yerine hücreler, bulmaca belirli bir
+  // teknik setiyle çözülebilir KALDIĞI SÜRECE çıkarılıyor:
+  //   • Kolay  → yalnızca "tek aday" (naked single) yetmeli
+  //   • Orta   → "gizli tek" (hidden single) de gerekebilir
+  //   • Zor+   → teknik kısıtı yok, yalnızca teklik + ipucu tabanı
+  // Böylece kolay bulmacalar gerçekten adım adım çözülebilir olur,
+  // rastgele 45 hücre bırakılmış bir tahta değil.
+
+  // ceil  = kazma sırasında KORUNAN üst sınır ("şu teknikle çözülebilir kal")
+  // floor  = sonuçta KARŞILANMASI GEREKEN alt sınır ("bu kadarını gerektir")
+  //
+  // Taban olmadan merdiven çöküyor: "en fazla gizli tek gerekir" kısıtı
+  // "yalnızca tek aday yeter"i de KAPSADIĞI için kolay bulmacalar orta/zor
+  // kovasına sızıyordu (ölçüldü: 40 "zor" bulmacanın 8'i yalnızca tek
+  // adayla çözülebiliyordu — etiket yalan söylüyordu). Taban bunu keser.
+  const DIFFICULTIES = {
+    easy:   { label: 'Kolay', ceil: 1, floor: 1, minClues: 40 },
+    medium: { label: 'Orta',  ceil: 2, floor: 2, minClues: 32 },
+    hard:   { label: 'Zor',   ceil: 3, floor: 3, minClues: 30 },
+    expert: { label: 'Uzman', ceil: 3, floor: 3, minClues: 26 },
+    master: { label: 'Usta',  ceil: 3, floor: 3, minClues: 23 },
+  };
+
+  // Taban tutmazsa türetilmiş tohumla yeniden denenir. Sınırlı: mobilde
+  // sınırsız döngü kabul edilemez. Denemeler orijinal tohumdan
+  // türetildiği için sonuç HÂLÂ deterministiktir.
+  const MAX_ATTEMPTS = 24;
+
+  // Bit maskesi tabloları. Aday kümeleri 9-bitlik maskeler olarak
+  // tutuluyor; "hangi rakamlar kullanılabilir" sorusu tek bir AND/NOT
+  // işlemine iniyor. Çözüm sayacı binlerce kez çağrıldığı için bu fark
+  // erken optimizasyon değil, üreticiyi mobilde kullanılabilir kılan şey.
+  const ALL9 = 0x1FF;
+  const POPCOUNT = new Uint8Array(512);
+  for (let i = 1; i < 512; i++) POPCOUNT[i] = POPCOUNT[i >> 1] + (i & 1);
+  const BIT_DIGIT = new Int8Array(512);
+  for (let d = 1; d <= 9; d++) BIT_DIGIT[1 << (d - 1)] = d;
+
+  const BOX_OF = new Int8Array(81);
+  for (let i = 0; i < 81; i++) BOX_OF[i] = (((i / 9) | 0) / 3 | 0) * 3 + ((i % 9) / 3 | 0);
+
+  function buildMasks(grid, rows, cols, boxes) {
+    rows.fill(0); cols.fill(0); boxes.fill(0);
+    for (let i = 0; i < 81; i++) {
+      const v = grid[i];
+      if (!v) continue;
+      const bit = 1 << (v - 1);
+      rows[(i / 9) | 0] |= bit; cols[i % 9] |= bit; boxes[BOX_OF[i]] |= bit;
+    }
+  }
+
+  // Çözüm sayısını `limit`e kadar sayar (limit'e ulaşınca durur).
+  // Teklik kontrolü için limit=2 yeterli: "1 mi, birden fazla mı".
+  //
+  // MRV (en az adaylı hücreyi önce seç) kritik: sıralı tarama, seyrek
+  // tahtalarda kombinatoryal patlamaya yol açar; MRV ile aynı tahtalar
+  // milisaniyeler içinde bitiyor.
+  function countSolutions(grid, limit) {
+    const work = Int8Array.from(grid);
+    const rows = new Int32Array(9), cols = new Int32Array(9), boxes = new Int32Array(9);
+    buildMasks(work, rows, cols, boxes);
+    let count = 0;
+
+    function recurse() {
+      let best = -1, bestMask = 0, bestCount = 10;
+      for (let i = 0; i < 81; i++) {
+        if (work[i]) continue;
+        const avail = ~(rows[(i / 9) | 0] | cols[i % 9] | boxes[BOX_OF[i]]) & ALL9;
+        if (avail === 0) return;                 // çıkmaz: bu dal ölü
+        const n = POPCOUNT[avail];
+        if (n < bestCount) {
+          bestCount = n; best = i; bestMask = avail;
+          if (n === 1) break;                    // daha iyisi olamaz
+        }
+      }
+      if (best === -1) { count++; return; }      // tahta doldu → bir çözüm
+
+      const r = (best / 9) | 0, c = best % 9, b = BOX_OF[best];
+      let m = bestMask;
+      while (m) {
+        const bit = m & -m;                      // en düşük set bit
+        m ^= bit;
+        work[best] = BIT_DIGIT[bit];
+        rows[r] |= bit; cols[c] |= bit; boxes[b] |= bit;
+        recurse();
+        work[best] = 0;
+        rows[r] ^= bit; cols[c] ^= bit; boxes[b] ^= bit;
+        if (count >= limit) return;
+      }
+    }
+
+    recurse();
+    return count;
+  }
+
+  // Tohumlu rastgele dolu tahta. Rakam sırası karıştırıldığı için her
+  // tohum farklı bir çözüm ızgarası verir; geri izleme her zaman başarılı.
+  function buildSolvedGrid(rng) {
+    const grid = new Int8Array(81);
+    const rows = new Int32Array(9), cols = new Int32Array(9), boxes = new Int32Array(9);
+
+    function fill(pos) {
+      if (pos === 81) return true;
+      const r = (pos / 9) | 0, c = pos % 9, b = BOX_OF[pos];
+      const used = rows[r] | cols[c] | boxes[b];
+      const order = phShuffle([1, 2, 3, 4, 5, 6, 7, 8, 9], rng);
+      for (let k = 0; k < 9; k++) {
+        const v = order[k], bit = 1 << (v - 1);
+        if (used & bit) continue;
+        grid[pos] = v; rows[r] |= bit; cols[c] |= bit; boxes[b] |= bit;
+        if (fill(pos + 1)) return true;
+        grid[pos] = 0; rows[r] ^= bit; cols[c] ^= bit; boxes[b] ^= bit;
       }
       return false;
     }
-    solve(b);return b;
+
+    fill(0);
+    return grid;
+  }
+
+  // İnsan tekniğiyle çözmeyi dener — geri izleme YOK, tahmin YOK.
+  //   naked single: hücrenin tek bir adayı kalmışsa o rakam oraya girer
+  //   hidden single: bir birimde (satır/sütun/kutu) bir rakam yalnızca
+  //                  tek bir hücreye sığıyorsa oraya girer
+  // Tamamen çözebiliyorsa true. Zorluk derecelendirmesi buna dayanıyor:
+  // "bir insan bunu tahmin etmeden çözebilir mi?"
+  function solveWithTechniques(puzzle, allowHidden) {
+    const grid = Int8Array.from(puzzle);
+    const rows = new Int32Array(9), cols = new Int32Array(9), boxes = new Int32Array(9);
+    buildMasks(grid, rows, cols, boxes);
+    let empties = 0;
+    for (let i = 0; i < 81; i++) if (!grid[i]) empties++;
+
+    function place(i, bit) {
+      grid[i] = BIT_DIGIT[bit];
+      rows[(i / 9) | 0] |= bit; cols[i % 9] |= bit; boxes[BOX_OF[i]] |= bit;
+      empties--;
+    }
+
+    let progress = true;
+    while (progress && empties > 0) {
+      progress = false;
+
+      // Tek aday
+      for (let i = 0; i < 81; i++) {
+        if (grid[i]) continue;
+        const avail = ~(rows[(i / 9) | 0] | cols[i % 9] | boxes[BOX_OF[i]]) & ALL9;
+        if (avail === 0) return false;           // çelişki
+        if (POPCOUNT[avail] === 1) { place(i, avail); progress = true; }
+      }
+      if (progress || !allowHidden) continue;
+
+      // Gizli tek — 27 birimin her biri için, her rakamın kaç hücreye
+      // sığdığına bakılır. Yalnızca tek aday kaldığında ilerleme yoksa
+      // devreye girer (ucuz teknik önce).
+      for (let u = 0; u < 27 && !progress; u++) {
+        const cells = unitCells(u);
+        for (let d = 1; d <= 9 && !progress; d++) {
+          const bit = 1 << (d - 1);
+          let spot = -1, n = 0;
+          for (let k = 0; k < 9; k++) {
+            const i = cells[k];
+            if (grid[i]) { if (grid[i] === d) { n = 0; break; } continue; }
+            const avail = ~(rows[(i / 9) | 0] | cols[i % 9] | boxes[BOX_OF[i]]) & ALL9;
+            if (avail & bit) { n++; spot = i; if (n > 1) break; }
+          }
+          if (n === 1) { place(spot, bit); progress = true; }
+        }
+      }
+    }
+
+    return empties === 0;
+  }
+
+  // 0-8 satır, 9-17 sütun, 18-26 kutu.
+  function unitCells(u) {
+    const out = new Array(9);
+    if (u < 9) { for (let k = 0; k < 9; k++) out[k] = u * 9 + k; }
+    else if (u < 18) { const c = u - 9; for (let k = 0; k < 9; k++) out[k] = k * 9 + c; }
+    else {
+      const b = u - 18, br = ((b / 3) | 0) * 3, bc = (b % 3) * 3;
+      for (let k = 0; k < 9; k++) out[k] = (br + ((k / 3) | 0)) * 9 + (bc + (k % 3));
+    }
+    return out;
+  }
+
+  // Bulmacanın gerçekte hangi teknik seviyesini gerektirdiği (1/2/3).
+  function rateDifficulty(puzzle) {
+    if (solveWithTechniques(puzzle, false)) return 1;
+    if (solveWithTechniques(puzzle, true)) return 2;
+    return 3;
+  }
+
+  // ── Genel API ──
+  // Aynı tohum + aynı zorluk → HER ZAMAN aynı bulmaca. Günlük Meydan
+  // Okuma bunu şöyle kullanacak:
+  //     generate('medium', phDailySeed('sudoku'))
+  // Sunucu gerekmez; aynı gün herkes aynı tahtayı görür.
+  // Tek deneme: bir çözüm ızgarası kur, tekliği ve zorluk TAVANINI
+  // koruyarak hücre çıkar.
+  function digOnce(cfg, attemptSeed) {
+    const rng = phRng(attemptSeed);
+    const solved = buildSolvedGrid(rng);
+    const puzzle = Int8Array.from(solved);
+    const order = phShuffle(Array.from({ length: 81 }, (_, i) => i), rng);
+
+    let clues = 81;
+    for (let k = 0; k < 81 && clues > cfg.minClues; k++) {
+      const pos = order[k];
+      const saved = puzzle[pos];
+      puzzle[pos] = 0;
+
+      // 1) Teklik korunuyor mu? (pazarlık konusu değil)
+      if (countSolutions(puzzle, 2) !== 1) { puzzle[pos] = saved; continue; }
+      // 2) Zorluk tavanı korunuyor mu? (ceil 3 = kısıt yok)
+      if (cfg.ceil < 3 && !solveWithTechniques(puzzle, cfg.ceil >= 2)) {
+        puzzle[pos] = saved; continue;
+      }
+      clues--;
+    }
+
+    return { puzzle, solved, clues, rating: rateDifficulty(puzzle) };
+  }
+
+  function generate(difficulty, seed) {
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const key = difficulty in DIFFICULTIES ? difficulty : DEFAULT_DIFFICULTY;
+    const cfg = DIFFICULTIES[key];
+    const usedSeed = (seed >>> 0) || phRandomSeed();
+
+    // Tabanı tutturana kadar dene. Deneme tohumları orijinalden ALTIN ORAN
+    // sabitiyle türetiliyor — ardışık denemeler birbirine benzemesin diye.
+    // Tohum aynıysa deneme zinciri de aynı olduğu için determinizm korunur.
+    let best = null, attempts = 0;
+    for (let a = 0; a < MAX_ATTEMPTS; a++) {
+      attempts = a + 1;
+      const attemptSeed = a === 0 ? usedSeed : ((usedSeed + Math.imul(a, 0x9E3779B1)) >>> 0) || 1;
+      const r = digOnce(cfg, attemptSeed);
+      if (r.rating >= cfg.floor) { best = r; break; }
+      // Taban tutmadı — en iyisini sakla ve devam et.
+      if (!best || r.rating > best.rating) best = r;
+    }
+
+    return {
+      puzzle: Array.from(best.puzzle),
+      solution: Array.from(best.solved),
+      clues: best.clues,
+      difficulty: key,
+      label: cfg.label,
+      rating: best.rating,
+      // Taban tutturulamadıysa dürüstçe bildirilir; çağıran taraf isterse
+      // farklı bir tohumla tekrar isteyebilir. Sessizce yanlış etiketli
+      // bir bulmaca döndürmekten iyidir.
+      floorMet: best.rating >= cfg.floor,
+      attempts,
+      seed: usedSeed,
+      ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0) * 10) / 10,
+    };
   }
 
   // ═══════════ CSS — "Ancient Arcane" ═══════════
@@ -1246,19 +1499,23 @@ PuzzleGames.sudoku = (() => {
     `);
   }
 
-  function init(c) {
+  // opts: { difficulty, seed } — ikisi de isteğe bağlı. Günlük Meydan
+  // Okuma buraya phDailySeed('sudoku') geçirerek aynı tahtayı üretecek.
+  function init(c, opts) {
+    opts = opts || {};
     container = c; selected = -1; startTime = Date.now(); dead = false;
     container.classList.add('ph-scene', 'sdk-arcane');
-    const idx = Math.floor(Math.random() * PUZZLES.length);
-    initial = [...PUZZLES[idx]];
+
+    // Üretilen her bulmaca TEK ÇÖZÜMLÜ olduğu garanti edilir (üretici her
+    // hücre çıkarımında doğruluyor). Bu bir estetik tercih değil: can
+    // sistemi her hamleyi çözüme karşı sınıyor, çok çözümlü bir tahtada
+    // oyuncu geçerli bir alternatifi girdiği için can kaybederdi.
+    const gen = generate(opts.difficulty || DEFAULT_DIFFICULTY, opts.seed);
+    currentSeed = gen.seed;
+    currentDifficulty = gen.difficulty;
+    initial = gen.puzzle;
+    solution = gen.solution;
     board = [...initial];
-    // Çözüm artık DOĞRULAMA için şart (sadece kazanma kontrolü için değil):
-    // her hamle buna karşı sınanıyor. Bu, bulmacaların TEK ÇÖZÜMLÜ olmasını
-    // fonksiyonel bir gereklilik yapar — çok çözümlü bir bulmacada oyuncu
-    // geçerli bir alternatifi girip haksız yere can kaybederdi.
-    // Mevcut üç bulmaca doğrulandı; yeni bulmaca eklerken bu kontrol şart.
-    if (!SOLUTIONS[idx]) SOLUTIONS[idx] = solveCopy(PUZZLES[idx]);
-    solution = SOLUTIONS[idx];
     injectCSS();
 
     // Ortak evren: gökyüzü (.ph-scene) + atmosfer. Sahne oyuncu hiçbir şey
@@ -1538,7 +1795,18 @@ PuzzleGames.sudoku = (() => {
     if (atmoEl) { atmoEl.remove(); atmoEl = null; }
     if (container) container.classList.remove('ph-scene', 'sdk-arcane');
   }
-  return {init,cleanup};
+
+  // generate/DIFFICULTIES bilerek DIŞA AÇIK: üretici oyunun içine gömülü
+  // bir ayrıntı değil, Günlük Meydan Okuma ve zorluk seçici gibi
+  // gelecek özelliklerin tüketeceği bir yetenek.
+  // currentSeed hata ayıklama içindir — "şu bulmacada sorun var"
+  // denildiğinde tahtayı birebir yeniden üretmeyi sağlar.
+  return {
+    init, cleanup, generate,
+    DIFFICULTIES,
+    get seed() { return currentSeed; },
+    get difficulty() { return currentDifficulty; },
+  };
 })();
 
 // ╔══════════════════════════════════════════════════════╗

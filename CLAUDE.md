@@ -41,6 +41,14 @@ triggers install → new cache bucket → old buckets deleted → page reloads o
 to bump it means returning users keep the old code indefinitely; that is the single most
 likely deployment mistake in this project.
 
+**Do not replace the service worker's precache loop with `cache.addAll()`.** It fetches each
+shell asset with `cache: 'reload'` specifically to bypass the browser's HTTP cache. Static
+assets are served with a long `max-age` and filenames carry no content hash, so a plain
+fetch during install can be answered from the HTTP cache — the version bump would create a
+fresh cache bucket and then fill it with **stale files**, shipping old code under a new
+version number. This was observed in practice, not theorized: a bump to 1.1.0 activated a
+new worker and a new bucket while still serving the previous `games.js`.
+
 ---
 
 ## 3. Documentation Map
@@ -96,8 +104,12 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **Sudoku validates against the SOLUTION, not against Sudoku's rules.** A wrong digit is
   refused and costs one of 3 lives; it never lands on the board. This is deliberate — it is
   why there is no erase key and no undo, and it makes **unique-solution puzzles a functional
-  requirement** (a multi-solution puzzle would punish a valid alternative answer). Verify
-  uniqueness before adding any puzzle. Full rationale: `docs/GAMES/SUDOKU.md`.
+  requirement** (a multi-solution puzzle would punish a valid alternative answer). The
+  generator enforces this structurally. Full rationale: `docs/GAMES/SUDOKU.md`.
+- **Deterministic seeds live in `core/rng.js`** and are game-agnostic on purpose. Daily
+  Challenge for any game is `phDailySeed('<game>')` → generator, no server needed. It uses
+  the **local** date; switching it to UTC would make the daily puzzle change mid-day for
+  some regions. `rng.js` must load before `games.js` (the Sudoku generator depends on it).
 - **`--ph-stone-*` tokens are intentionally unused.** Reserved for the planned "Gölge
   Tapınak" dark theme; Sudoku moved from stone to parchment. Not dead code to clean up —
   but also don't pick colors from it without reading `DESIGN_SYSTEM.md` §13 first (its

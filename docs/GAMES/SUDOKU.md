@@ -49,11 +49,88 @@ definitions of "valid" in one file is how bugs get planted.
 ### §3 Uniqueness is a functional requirement
 
 Validating against *a* stored solution means a multi-solution puzzle would punish a player
-for entering a different, perfectly valid answer. All three shipped puzzles were verified
-by exhaustive solution counting (30, 36, and 23 clues → exactly 1 solution each).
+for entering a different, perfectly valid answer. Uniqueness is therefore not a style
+preference — skipping it produces unfair life loss that looks like a random bug.
 
-**Any puzzle added later must be counted before shipping.** This is not a style
-preference; skipping it produces unfair life loss that will look like a random bug.
+This is now guaranteed structurally: the generator (§3a) re-verifies uniqueness after
+*every* cell removal and restores the cell if it fails. A puzzle that isn't unique cannot
+be produced.
+
+---
+
+## 3a. Puzzle generator
+
+Sudoku originally shipped three hardcoded puzzles — the fourth playthrough was a repeat.
+Puzzles are now generated on demand, unlimited.
+
+### Difficulty is defined by required technique, not clue count
+
+Clue count is a weak proxy: a 30-clue puzzle can be easier than a 45-clue one. Instead,
+cells are removed only while the puzzle *remains solvable* by a bounded set of human
+techniques, implemented as a non-guessing logical solver:
+
+| Rating | Technique needed |
+|---|---|
+| 1 | **naked single** — a cell with exactly one candidate |
+| 2 | **hidden single** — a digit that fits only one cell in a unit |
+| 3 | beyond both — advanced technique or search |
+
+Each difficulty has a **ceiling** (preserved while digging) *and* a **floor** (required of
+the finished puzzle):
+
+| | ceiling | floor | min clues |
+|---|---|---|---|
+| Kolay | 1 | 1 | 40 |
+| Orta | 2 | 2 | 32 |
+| Zor | — | 3 | 30 |
+| Uzman | — | 3 | 26 |
+| Usta | — | 3 | 23 |
+
+**The floor is what makes the ladder real, and it was added after measurement, not by
+design instinct.** The first implementation had only a ceiling — and "solvable with at most
+hidden singles" *includes* "solvable with naked singles alone," so easy puzzles leaked into
+the harder tiers. Measured: 8 of 40 "Zor" puzzles were solvable with naked singles only, and
+half of "Orta" was actually easy. The label was lying. With floors enforced, 150-puzzle
+samples give 100% correct ratings for Kolay/Orta/Uzman/Usta and 98% for Zor.
+
+If the floor isn't met, generation retries with a seed derived from the original (bounded at
+24 attempts). The result reports `floorMet: false` rather than silently returning a
+mislabeled puzzle. Zor is the tightest band (30 clues *and* must require advanced technique)
+and averages ~6.5 attempts; every other tier averages under 2.5.
+
+Zor/Uzman/Usta share floor 3 and are separated by clue count alone. That is an honest
+limitation of a 3-tier rating: a finer ladder would need a fourth technique tier (locked
+candidates / pointing pairs).
+
+### Determinism
+
+`generate(difficulty, seed)` — the same seed and difficulty always produce the identical
+puzzle, including the retry chain (attempt seeds are derived from the original via a golden
+ratio constant). Seed helpers live in `core/rng.js` and are deliberately game-agnostic.
+
+**Daily Challenge is already supported**, no server required:
+
+```js
+PuzzleGames.sudoku.generate('medium', phDailySeed('sudoku'))
+```
+
+`phDailySeed(scope, date)` uses the **local** calendar date — with UTC, some regions would
+see the daily puzzle change mid-day. The `scope` argument keeps different games from sharing
+a seed on the same date.
+
+Every generated puzzle carries its seed (`PuzzleGames.sudoku.seed`), so a reported problem
+can be reproduced exactly rather than guessed at.
+
+### Performance
+
+Measured in-browser, median / max over 15 runs per tier: Kolay 0.4/2.5ms · Orta 0.8/3.3ms ·
+Zor 3.6/12.3ms · Uzman 3.8/21.7ms · Usta 2.7/10.8ms. Generation is synchronous and well
+under one frame at typical values, so no loading state is needed.
+
+The solution counter uses 9-bit candidate masks and MRV (fewest-candidates-first) cell
+selection. This is not premature optimization — plain sequential backtracking blows up
+combinatorially on sparse boards, and it is what keeps Usta generation in milliseconds
+rather than seconds.
 
 ---
 
@@ -247,3 +324,19 @@ After the scanning-aid / rhythm pass (§8):
   cells with distance-ordered delays (0→440ms); no ripple fires on a non-completing move.
 - Exhausted key collapses 42px → 0px, `opacity` 0, unclickable; the row keeps its 46px
   height and the remaining keys redistribute. At full solve all 9 keys are gone.
+
+Generator (§3a), 750 puzzles — 150 per difficulty, validated in Node against checkers
+written independently of the generator's own solver:
+
+- **Uniqueness confirmed by brute-force solution counting on all 750** — exactly 1 solution
+  each. The generator's MRV/bitmask counter was not trusted to check itself.
+- Every solution is a valid complete grid; every clue agrees with its solution; reported
+  clue counts match the actual board.
+- **Determinism**: regenerating from the same seed reproduced the identical puzzle in all
+  750 cases.
+- Different seeds produce different puzzles; `phDailySeed` is stable within a day, differs
+  across consecutive days and across scopes, and produced 365 distinct seeds over a year.
+- Rating distribution: Kolay 150/150 → 1 · Orta 150/150 → 2 · Zor 147/150 → 3 ·
+  Uzman 150/150 → 3 · Usta 150/150 → 3.
+- In-browser: 12 consecutive restarts produced 12 distinct seeds; a generated puzzle was
+  solved end-to-end with 0 unexpected rejections and 0 lives lost.

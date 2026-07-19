@@ -329,7 +329,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.0.1';
+    const APP_VERSION = '1.1.1';
 
     // Sıralı yükleme: games.js → ui-kit.js → reels.js → app.js
     // (app.js, games.js'teki PuzzleGames/GameAudio ve reels.js'teki
@@ -343,10 +343,14 @@
       s.onerror = function(){ console.error('Script yüklenemedi: ' + src); if(cb) cb(); };
       document.body.appendChild(s);
     }
-    loadScript('games/games.js', function(){
-      loadScript('core/ui-kit.js', function(){
-        loadScript('reels/reels.js', function(){
-          loadScript('core/app.js');
+    // rng.js EN ÖNCE: games.js'teki bulmaca üreticisi phRng/phShuffle/
+    // phRandomSeed'e bağımlı.
+    loadScript('core/rng.js', function(){
+      loadScript('games/games.js', function(){
+        loadScript('core/ui-kit.js', function(){
+          loadScript('reels/reels.js', function(){
+            loadScript('core/app.js');
+          });
         });
       });
     });

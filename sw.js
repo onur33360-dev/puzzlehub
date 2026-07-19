@@ -44,6 +44,7 @@ const SHELL_ASSETS = [
   './core/design-tokens.css',
   './core/components.css',
   './style.css',
+  './core/rng.js',
   './games/games.js',
   './core/ui-kit.js',
   './reels/reels.js',
@@ -61,10 +62,25 @@ const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 const MEDIA_EXT = /\.(png|jpg|jpeg|gif|webp|svg|mp3|ogg|wav|m4a|aac)$/i;
 
 // ───────────────── install ─────────────────
+// cache:'reload' KRİTİK — cache.addAll() kullanılamamasının sebebi bu.
+// Statik varlıklar uzun max-age ile servis ediliyor ve dosya adlarında
+// içerik hash'i YOK. addAll (veya düz fetch) tarayıcının HTTP cache'inden
+// BAYAT kopya alabilir: sürüm bump'ı yeni bir kova açar, sonra o kovayı
+// eski dosyalarla doldurur ve kullanıcı güncellemeyi hiç görmez.
+// 'reload' HTTP cache'ini atlayıp ağdan taze kopya almaya zorlar.
+// (Bu, dosya adlarında hash olmadığı sürece zorunludur.)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_ASSETS))
+      .then((cache) => Promise.all(
+        SHELL_ASSETS.map((url) =>
+          fetch(new Request(url, { cache: 'reload' }))
+            .then((res) => {
+              if (!res || res.status !== 200) throw new Error('precache basarisiz: ' + url);
+              return cache.put(url, res);
+            })
+        )
+      ))
       // Yeni sürüm beklemeden devralsın. Sayfa tarafı controllerchange'i
       // dinleyip bir kez yeniliyor (bkz. index.html).
       .then(() => self.skipWaiting())
