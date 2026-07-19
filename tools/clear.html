@@ -1,5 +1,14 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Güncelleniyor...</title>
+<!--
+  GELİŞTİRİCİ ARACI — normal güncelleme yolu DEĞİLDİR.
+  Sürüm yayınlamak için index.html'deki APP_VERSION bump edilir; service
+  worker gerisini halleder. Bu sayfa her şeyi (SW kayıtları + tüm cache
+  kovaları) sıfırdan silmek için bir acil durum düğmesidir — cache
+  durumu bozulduğunda hata ayıklamak içindir.
+  tools/ altındaki dosyalar sw.js tarafından hiç cache'lenmez, bu yüzden
+  bu sayfa her zaman taze yüklenir.
+-->
+<html><head><meta charset="utf-8"><title>Cache Sıfırlama (geliştirici aracı)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -89,9 +98,13 @@ p{font-size:14px;color:#9a9ab0;text-align:center;max-width:300px;line-height:1.6
   msg.textContent = 'Sayfa 3 saniye içinde yeniden yüklenecek...';
   sp.style.display = 'none';
   
-  // 5. Ana sayfaya yönlendir — tamamen temiz URL
+  // 5. Ana sayfaya dön — SORGU DİZESİ OLMADAN.
+  // Eskiden buraya ?updated=<timestamp> ekleniyordu (cache-killer
+  // döneminden kalma). Artık zararlı: service worker kabuğu sorgusuz
+  // URL'lerle precache ediyor, sorgulu her adres cache'te AYRI bir
+  // girdi olarak birikir ve hiçbir zaman eşleşmez.
   setTimeout(() => {
-    window.location.replace('../index.html?updated=' + Date.now());
+    window.location.replace('../index.html');
   }, 3000);
 })();
 </script>

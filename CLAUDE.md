@@ -20,9 +20,26 @@ Full product vision lives in `VISION.md` (to be written). This section is a work
 
 It's static files — open or serve `index.html`, nothing to compile.
 
-**Load-order dependency:** `index.html` loads `games.js → reels.js → app.js` sequentially via a custom `loadScript` chain, not `<script defer>`. This order is required: `app.js` depends on globals (`PuzzleGames`, `GameAudio`) defined in `games.js`, and on `ReelsEngine` defined in `reels.js`. If something in `app.js` can't find a global that "should" exist, check load order before assuming a bug.
+**Serve over HTTP, not `file://`.** The service worker requires an HTTP origin. Any static
+server works (`localhost` counts as a secure origin).
 
-**Caching is currently, deliberately, off.** `index.html` unregisters all service workers and deletes all caches on every load; `sw.js` strips fetch caching entirely; every script/style tag carries a live `?v=timestamp`. Net effect: the whole app re-downloads on every visit. This is flagged again in Section 5 — don't remove it without asking.
+**Load-order dependency:** `index.html` loads `games/games.js → core/ui-kit.js →
+reels/reels.js → core/app.js` sequentially via a custom `loadScript` chain, not
+`<script defer>`. This order is required: `ui-kit.js` depends on `GameAudio` from
+`games.js`, and `app.js` depends on `PuzzleGames`/`GameAudio` plus `ReelsEngine` from
+`reels.js`. If something can't find a global that "should" exist, check load order before
+assuming a bug.
+
+**Caching is ON and versioned.** `sw.js` precaches the app shell and serves it cache-first;
+Google Fonts and runtime media live in separate, version-independent buckets so an app
+update doesn't re-download them. Navigation requests are network-first so a new version is
+picked up as soon as the device is online.
+
+**To ship an update, bump `APP_VERSION` in `index.html` — that one line, nothing else.**
+It flows to the worker through its registration URL, which changes the worker's own URL and
+triggers install → new cache bucket → old buckets deleted → page reloads once. Forgetting
+to bump it means returning users keep the old code indefinitely; that is the single most
+likely deployment mistake in this project.
 
 ---
 
@@ -53,7 +70,7 @@ It's static files — open or serve `index.html`, nothing to compile.
 
 - **Screens:** `div.screen` siblings toggled via an `.active` class. No router. `showScreen()` / `switchTab()` in `app.js`.
 - **Games:** `PuzzleGames` registry object. Each game is a self-contained IIFE exposing `{ init(container), cleanup() }`. Each injects its own scoped `<style>` at runtime via the shared `injectStyle(id, css)` helper.
-- **Audio:** one global `GameAudio` singleton (`games.js`) — fully synthesized via Web Audio API, no audio asset files — shared by the app shell and every game.
+- **Audio:** one global `GameAudio` singleton (`games.js`) — synthesized via Web Audio API — shared by the app shell and every game. See the audio policy in Section 6 before adding any sampled audio file.
 - **Discover feed:** `window.ReelsEngine` (`reels.js`) — infinite scroll, `IntersectionObserver`-driven active-card demo lifecycle (start/pause/destroy), DOM pruned past 24 cards.
 - **State:** no state-management library. State lives in per-game closures plus `localStorage`. UI updates are imperative `innerHTML` template-string re-renders, not reactive/diffed.
 
@@ -63,7 +80,14 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 
 ## 5. Known Landmines (Do Not "Fix" Silently)
 
-- **Cache-nuking in `index.html` + `sw.js`** (Section 2). Looks like a bug; is almost certainly a deliberate workaround for a prior caching incident. Don't remove or "clean up" without checking first.
+- **Caching is now a real versioned strategy — RESOLVED, no longer a landmine.** The old
+  "cache killer" (unregister all SWs + delete all caches on every load, `?v=Date.now()` on
+  every script) is gone. Replaced by a versioned service worker. **The single source of
+  truth is `APP_VERSION` in `index.html`** — that one constant is passed to the worker via
+  its registration URL (`sw.js?v=X`), and the worker derives its cache bucket name from it.
+  To ship an update, bump that one line; nothing else. Do **not** re-add `?v=` query strings
+  to `<link>`/`<script>` tags: the shell is precached without query strings and
+  `cache.match()` compares them, so a stray `?v=` silently misses every cached entry.
 - **A new game must be registered in four places:** `PUZZLE_GAMES` and `GAME_MAP` (`app.js`), `REEL_GAMES` and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or visible-but-broken.
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
@@ -93,6 +117,32 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - Favor the existing pattern over inventing a new one. If a new game or feature fits the `PuzzleGames` / `injectStyle` / `GameAudio` conventions already in place, use them rather than starting a parallel pattern.
 - No new frameworks, bundlers, or external dependencies without an explicit decision. Zero-dependency is a choice here, not an oversight.
 - Simplicity over abstraction. Three similar small games beat one clever "generalized engine" built to anticipate hypothetical future games that don't exist yet.
+
+**Audio policy (production)**
+
+Synthesized Web Audio is **the default and stays the default for lightweight UI feedback** —
+taps, toggles, navigation, toasts, small confirmations. It costs zero bytes, zero latency,
+and zero licensing risk, and it is genuinely good enough for that job.
+
+External audio assets **are permitted** for gameplay sounds, rewards, ambience, and special
+effects — but only where they deliver a *measurable* quality improvement over what the
+synthesizer can produce. "It might sound nicer" is not sufficient justification for adding a
+network-fetched, license-encumbered file to a game that currently ships with none.
+
+Every asset must clear all four bars, without exception:
+
+1. **Commercial-use safe** — CC0 / Public Domain or an equivalent unrestricted license.
+   Anything requiring a commercial license purchase is out unless separately approved.
+2. **No attribution requirement** — CC-BY and similar are rejected. The app has nowhere
+   natural to display credits, and an unsatisfied attribution clause is a license violation.
+3. **Documented** — every file's source URL, license, and retrieval date recorded in
+   `AUDIO_DESIGN.md`. An asset whose provenance can't be shown is treated as unlicensed.
+4. **Approved before it lands** — the product owner approves the candidate list *before*
+   any file enters the repository. Do not add audio assets speculatively.
+
+Operationally: audio belongs in the `ph-media-*` cache bucket (runtime-cached on first use,
+never precached — a cold start must not wait on sound files), and requests carrying a
+`Range` header bypass the cache entirely (see `sw.js`).
 
 **Conventions**
 - UI strings and code comments: Turkish. Identifiers (variables, functions): English. This is the existing convention — keep it, don't "fix" it.
