@@ -6274,6 +6274,9 @@ PuzzleGames.arrowPuzzle = (() => {
   // Tahta parlaması: alt sınır bilerek çok düşük — seviyenin başında
   // efekt fark edilmemeli, sonuna doğru belirginleşmeli.
   const FLASH_MIN = 0.05, FLASH_MAX = 0.3, FLASH_MS = 380;
+  // Can, oyunun tamamı boyunca taşınır — seviye başına yenilenmez.
+  // Yalnızca reklamla devam veya seviyeyi yeniden başlatma doldurur.
+  const MAX_LIVES = 3;
   // Sürüklemeyi dokunuştan ayıran eşik: bu kadar px'ten fazla kaydıysa
   // parmak "kamerayı taşıdı" demektir, ok seçmedi.
   const DRAG_SLOP_PX = 6;
@@ -6295,6 +6298,7 @@ PuzzleGames.arrowPuzzle = (() => {
 
   let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl, camera, flashEl;
   let board, level, cleared, levelTotal, advanceT;
+  let lives, dead;                 // dead: canlar bitti, girdi kapalı
   let tapX = 0, tapY = 0;          // son pointerdown konumu (sürükleme ayrımı)
 
   function injectCSS() {
@@ -6307,7 +6311,9 @@ PuzzleGames.arrowPuzzle = (() => {
       .ar-wrap *{box-sizing:border-box}
 
       /* HUD ortak kapsüldür (.ph-capsule) — tipografi/zemin reçetesi orada.
-         Burada yalnızca ayırıcının kısıklığı var. */
+         Kalpler ortak .ph-lives bileşeni; burada yalnızca yerleşim var. */
+      .ar-top{display:flex;flex-direction:column;align-items:center;
+        gap:var(--ph-space-2)}
       .ar-hud-sep{opacity:.45}
 
       /* Tahta ortak cam kaidedir (.ph-dais): gradyan, kenar, anahtar ışık
@@ -6637,7 +6643,7 @@ PuzzleGames.arrowPuzzle = (() => {
   function onPointerDown(e) { tapX = e.clientX; tapY = e.clientY; }
 
   function onBoardTap(e) {
-    if (cleared) return;
+    if (cleared || dead) return;
     if (Math.hypot(e.clientX - tapX, e.clientY - tapY) > DRAG_SLOP_PX) return;
     const g = e.target.closest('.ar-arrow');
     if (!g) return;
@@ -6772,6 +6778,47 @@ PuzzleGames.arrowPuzzle = (() => {
     flashBoard('var(--ph-error-glow)', 1, FLASH_MS * 0.7);
     GameAudio.play('error');
     GameAudio.haptic('error');
+    // Ceza YALNIZCA bloke bir oka dokunmakta. Doğru hamle asla can
+    // götürmez — yoksa oyuncu denemekten korkar ve oyun "akış" değil
+    // "stres" olur.
+    lives.lose();
+  }
+
+  // ───────── Canlar tükendi ─────────
+  // Yeni bir modal YOK: platformun paylaşımlı Game Over kutusu iki
+  // kancayla kullanılıyor.
+  //   onContinue → ödüllü reklam bittiğinde çalışır. Tahta KORUNUR,
+  //                oyuncu kaldığı yerden sürer.
+  //   onRestart  → "Tekrar Oyna". O ANKİ seviyeyi yeniden kurar; oyunu
+  //                1. seviyeye almaz.
+  // İkisi de canı tam doldurur — "reklam izlenmezse yeniden başlatma ile
+  // devam edilir" kuralı bu iki yolun da oyuncuyu oyunda tutması demek.
+  // Elmasla devam kapalı (noDiamond): bu oyunda devam hakkı yalnızca
+  // reklamla veriliyor.
+  function onLivesEmpty() {
+    dead = true;
+    GameAudio.play('lose');
+    GameAudio.haptic('error');
+    showGameOver(false, 'Enerji Tükendi',
+      'Kanallar söndü. Reklam izleyip devam edebilir ya da seviyeyi baştan alabilirsin.', {
+      accent: 'var(--ph-jewel-1-shadow)',
+      accentLight: 'var(--ph-jewel-1-highlight)',
+      accentGlow: 'var(--ph-jewel-1-glow)',
+      mark: '✦',
+      noDiamond: true,
+      stats: [{ label: 'Seviye', value: level }],
+      onContinue: () => {
+        lives.reset();
+        dead = false;
+        GameAudio.play('star');
+        GameAudio.haptic('soft');
+      },
+      onRestart: () => {
+        lives.reset();
+        dead = false;
+        startLevel();               // aynı seviye, temiz tahta
+      },
+    });
   }
 
   function onCleared() {
@@ -6871,14 +6918,18 @@ PuzzleGames.arrowPuzzle = (() => {
   // ───────── Yaşam döngüsü ─────────
   function init(c) {
     container = c;
-    level = 1; cleared = false;
+    level = 1; cleared = false; dead = false;
+    lives = phLives({ max: MAX_LIVES, onEmpty: onLivesEmpty });
     container.classList.add('ph-scene', 'ar-scene');
     injectCSS();
     atmoEl = phAtmosphere(container, ATMO);
     wrapEl = document.createElement('div');
     wrapEl.className = 'ar-wrap';
     wrapEl.innerHTML =
-      '<div class="ph-capsule ar-hud" data-role="hud"></div>' +
+      '<div class="ar-top">' +
+        '<div class="ph-capsule ar-hud" data-role="hud"></div>' +
+        '<div data-role="lives"></div>' +
+      '</div>' +
       '<div class="ph-dais ar-board">' +
         '<div class="ar-haze" data-role="haze" aria-hidden="true"></div>' +
         '<div class="ar-flash" data-role="flash" aria-hidden="true"></div>' +
@@ -6892,6 +6943,7 @@ PuzzleGames.arrowPuzzle = (() => {
     hudEl = wrapEl.querySelector('[data-role="hud"]');
     svgEl = wrapEl.querySelector('[data-role="svg"]');
     flashEl = wrapEl.querySelector('[data-role="flash"]');
+    lives.mount(wrapEl.querySelector('[data-role="lives"]'));
     buildHaze(wrapEl.querySelector('[data-role="haze"]'));
     camera = phCamera(wrapEl.querySelector('[data-role="viewport"]'),
                       wrapEl.querySelector('[data-role="stage"]'),

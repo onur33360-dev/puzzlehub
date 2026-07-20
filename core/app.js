@@ -695,6 +695,7 @@ function updateGameScore(score) {
 // çağrılır ve oyun kendini toparlar. Vermezse eski davranış aynen sürer —
 // mevcut oyunların hiçbiri etkilenmez.
 let _gameOverContinuation = null;
+let _gameOverRestart = null;
 
 // opts (hepsi isteğe bağlı, verilmezse eski davranış):
 //   onContinue  → reklam/elmasla devam edildiğinde çağrılır
@@ -704,6 +705,11 @@ let _gameOverContinuation = null;
 function showGameOver(win, title, message, opts) {
   opts = opts || {};
   _gameOverContinuation = (typeof opts.onContinue === 'function') ? opts.onContinue : null;
+  // onRestart, onContinue'nun ikizi: "Tekrar Oyna" düğmesinin ne
+  // yapacağını oyun tanımlar. Varsayılan davranış (oyunu baştan kurmak)
+  // seviyeli oyunlarda yanlış — oyuncuyu 1. seviyeye düşürür, oysa
+  // kaybettiği yer o anki seviyedir. Verilmezse eski davranış aynen sürer.
+  _gameOverRestart = (typeof opts.onRestart === 'function') ? opts.onRestart : null;
 
   const box = document.querySelector('.game-over-box');
   // Sahne-duyarlılık: oyun kendi rengini geçirir, geçirmezse platform
@@ -748,6 +754,12 @@ function showGameOver(win, title, message, opts) {
   if (continueBtn) continueBtn.style.display = win ? 'none' : 'flex';
   if (doubleBtn) doubleBtn.style.display = win ? 'flex' : 'none';
 
+  // Elmasla devam, oyun BAZINDA kapatılabilir. Ok Bulmaca'da devam hakkı
+  // yalnızca ödüllü reklamla veriliyor — elmas can satın alma yok.
+  // Yeni bir modal açmak yerine paylaşımlı kutunun bir düğmesi gizleniyor.
+  const diamondBtn = document.querySelector('.go-btn-diamond');
+  if (diamondBtn) diamondBtn.style.display = opts.noDiamond ? 'none' : '';
+
   // Level complete reward
   if (win) DiamondSystem.add(3, 'Level tamamlandı!');
 
@@ -761,6 +773,7 @@ function _runGameOverContinuation(source) {
   if (!_gameOverContinuation) return false;
   const fn = _gameOverContinuation;
   _gameOverContinuation = null;
+  _gameOverRestart = null;        // devam edildi — yeniden başlatma kancası da düştü
   fn(source);
   return true;
 }
@@ -791,6 +804,17 @@ function doubleScoreWithAd() {
 
 function restartCurrentGame() {
   if (!_currentGameId || !PuzzleGames[_currentGameId]) return;
+  // Oyun kendi yeniden başlatmasını tanımladıysa onu çalıştır: seviyeli
+  // bir oyunda "tekrar" o SEVİYEYİ yeniden kurmak demektir, oyunu baştan
+  // almak değil. Kanca tek kullanımlık (onContinue ile aynı sözleşme).
+  if (_gameOverRestart) {
+    const fn = _gameOverRestart;
+    _gameOverRestart = null;
+    _gameOverContinuation = null;
+    document.getElementById('game-over').style.display = 'none';
+    fn();
+    return;
+  }
   _gameOverContinuation = null;   // yeni oyun — eski kanca geçersiz
   document.getElementById('game-over').style.display = 'none';
   document.getElementById('game-score').textContent = '0';
@@ -806,7 +830,8 @@ function exitGame() {
   if (_currentGameId && PuzzleGames[_currentGameId]) {
     PuzzleGames[_currentGameId].cleanup();
   }
-  _gameOverContinuation = null;   // oyundan çıkıldı — eski kanca geçersiz
+  _gameOverContinuation = null;   // oyundan çıkıldı — eski kancalar geçersiz
+  _gameOverRestart = null;
   _currentGameOpts = null;
   GameAudio.stopMusic();
   GameAudio.play('transition');
