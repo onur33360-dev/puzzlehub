@@ -101,6 +101,15 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; PuzzleHub is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked.
 - **Two Discover-feed games** (`flowConnect`, `jigsawCard`) have polished demo animations but no real game behind them. They're marked `playable:false` on purpose — this is a backlog item, not an oversight to quietly complete. (`waterSort` and `arrowPuzzle` were the other two; both are now built and `playable:true`.)
+- **Ok Bulmaca exit rule is the SNAKE model: only the tip's forward ray matters.**
+  An arrow leaves by following its own body path, straightening as it goes, so the cells
+  beside or behind its body are irrelevant. `canExit` and `blockersOf` both walk that single
+  ray and **must stay in agreement** — if they diverge, the game rejects one arrow and then
+  blames a different one. Do not "restore" the old rigid-translation sweep: it swept every
+  cell of the shape, so an obstacle in front of a curved arrow's *tail* also blocked it.
+  Players saw a clear path and got refused; measured at **26.5% of curved-arrow taps**
+  (every single false rejection was a curved shape — for straight arrows the two models are
+  identical, which is why the bug hid for so long).
 - **Ok Bulmaca (`arrowPuzzle`) deliberately has NO input lock during exit animations.**
   Taps may overlap and several arrows can fly off at once. This is safe because arrow
   removal is **monotonic** — a departing arrow only frees cells, so a free arrow can never

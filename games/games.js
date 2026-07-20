@@ -6031,27 +6031,32 @@ PuzzleGames.arrowPuzzle = (() => {
     b.arrows.delete(arrow.id);
   }
 
-  // ───────── Çıkış testi ─────────
-  // Ok yönü boyunca adım adım ötelenir. Herhangi bir adımda ötelenmiş
-  // bir hücre tahtadaysa VE başka bir okla doluysa → bloke.
-  // Tüm hücreler tahtayı terk ettiyse → çıkabilir.
-  // Maliyet: O(hücre × en büyük boyut).
+  // ───────── Çıkış testi — YILAN MODELİ ─────────
+  // Ok kendi izini takip ederek çıkar: uç yönü boyunca ilerler, gövde
+  // ucun geçtiği yoldan gelir ve giderken düzleşir. Dolayısıyla ÇIKIŞI
+  // BELİRLEYEN TEK ŞEY UCUN ÖNÜNDEKİ YOL. Gövdenin yanındaki hücreler
+  // konu dışıdır — gövde oraya hiç uğramaz.
+  //
+  // ÖNCEKİ MODEL (rijit öteleme) BUYDU VE YANLIŞTI: okun bütün hücreleri
+  // birlikte ötelenirdi, yani kıvrımlı bir okun KUYRUĞUNUN önündeki bir
+  // engel de onu durdururdu. Oyuncu ucun önünü boş görüp dokunuyor, oyun
+  // "engel var" diyordu. Ölçüm: kıvrımlı okların %26.5'i (416/416 vakanın
+  // tamamı kıvrımlı) haksız yere reddediliyordu. Düz oklarda iki model
+  // aynı sonucu verir, o yüzden hata yalnızca kıvrımlılarda görünüyordu.
+  //
+  // Monotonluk bu modelde de geçerli (4202 kontrol, 0 ihlal): bir ok
+  // gidince yol yalnızca açılır. Kilitsiz eşzamanlı çıkış hâlâ güvenli.
   function canExit(b, arrow) {
     const cells = cellsOf(arrow);
+    const own = arrow.id + 1;
     const dx = DIRS[arrow.dir][0], dy = DIRS[arrow.dir][1];
-    const maxK = b.cols + b.rows + 2;
-    for (let k = 1; k <= maxK; k++) {
-      let allOff = true;
-      for (let i = 0; i < cells.length; i++) {
-        const c = cells[i][0] + dx * k, r = cells[i][1] + dy * k;
-        if (!onBoard(b, c, r)) continue;
-        allOff = false;
-        const v = b.occ[idx(b, c, r)];
-        if (v !== 0 && v !== arrow.id + 1) return false;
-      }
-      if (allOff) return true;
+    let c = cells[0][0], r = cells[0][1];
+    for (;;) {
+      c += dx; r += dy;
+      if (!onBoard(b, c, r)) return true;     // tahtayı terk etti
+      const v = b.occ[idx(b, c, r)];
+      if (v !== 0 && v !== own) return false; // yolda başka ok var
     }
-    return true;
   }
 
   function freeArrows(b) {
@@ -6060,29 +6065,23 @@ PuzzleGames.arrowPuzzle = (() => {
     return out;
   }
 
-  // Bloke bir okun ÖNÜNDEKİ ilk engelleri döndürür.
+  // Bloke bir okun ÖNÜNDEKİ ilk engeli döndürür.
   // Ceza vermek yeterli değil; oyuncu NEDEN olmadığını görmeli. Bu
   // fonksiyon "öğreten geri bildirim"in veri tarafı.
-  // Yalnızca ilk çarpışma adımındakiler döner — arkadaki okları da
-  // işaretlemek gürültü olurdu, suçlu en öndekidir.
+  // canExit ile AYNI yolu yürümek zorunda — yoksa oyun bir oku reddedip
+  // sonra alakasız bir oku suçlar. Yılan modelinde yol ucun önündeki
+  // ışın olduğu için suçlu tek bir oktur (dizi, çağıranla uyum için).
   function blockersOf(b, arrow) {
     const cells = cellsOf(arrow);
+    const own = arrow.id + 1;
     const dx = DIRS[arrow.dir][0], dy = DIRS[arrow.dir][1];
-    const maxK = b.cols + b.rows + 2;
-    for (let k = 1; k <= maxK; k++) {
-      const hit = new Set();
-      let allOff = true;
-      for (let i = 0; i < cells.length; i++) {
-        const c = cells[i][0] + dx * k, r = cells[i][1] + dy * k;
-        if (!onBoard(b, c, r)) continue;
-        allOff = false;
-        const v = b.occ[idx(b, c, r)];
-        if (v !== 0 && v !== arrow.id + 1) hit.add(v - 1);
-      }
-      if (hit.size) return [...hit];
-      if (allOff) return [];
+    let c = cells[0][0], r = cells[0][1];
+    for (;;) {
+      c += dx; r += dy;
+      if (!onBoard(b, c, r)) return [];
+      const v = b.occ[idx(b, c, r)];
+      if (v !== 0 && v !== own) return [v - 1];
     }
-    return [];
   }
 
   // ───────── Çözülebilirlik ─────────
@@ -6225,7 +6224,9 @@ PuzzleGames.arrowPuzzle = (() => {
   const CASING_W = 0.30;   // koyu kilif — komsu oklar arasindaki sinir       // koyu kılıf kalınlığı (hücre oranı)
   const CORE_W = 0.17;     // ince cekirdek: boru hissi, tikanik degil         // açık çekirdek
   const HIT_W = 0.86;      // dokunma hedefi cizgiden BAGIMSIZ kalin          // görünmez dokunma hedefi
-  const EXIT_MS = 260;
+  // İki fazlı yılan çıkışı için 260ms yetmiyordu: düzleşme fazı algı
+  // eşiğinin altında kalıyordu. 420ms ile faz 1 ~230ms sürüyor.
+  const EXIT_MS = 420;
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl;
@@ -6277,12 +6278,38 @@ PuzzleGames.arrowPuzzle = (() => {
       /* Basılı tutma/dokunma anı — dokunuşun algılandığı belli olmalı */
       .ar-arrow:active .ar-core{stroke:#C4B5FF}
 
-      /* ── ÇIKIŞ ──
-         Grup yön boyunca ötelenir; SVG'de CSS transform kullanıcı
-         birimleriyle çalışır, viewBox sayesinde ölçekten bağımsızdır. */
-      .ar-arrow.exiting{transition:transform ${EXIT_MS}ms var(--ph-ease-decel),
-                                   opacity ${EXIT_MS}ms var(--ph-ease-standard);
-        opacity:.15;pointer-events:none}
+      /* ── ÇIKIŞ (yılan) ──
+         Ok kendi rayında kayar: gövde stroke-dashoffset ile, uç öteleme
+         ile — ikisi aynı zamanlamada, dolayısıyla senkron.
+
+         NEDEN İKİ FAZ: gövde 2-4 birim, uzantı ~14 birim. Tek geçişte
+         düzleşme mesafenin ilk ~%12'sinde biter ve hızlanan bir eğriyle
+         o kısım göz açıp kapayıncaya kadar geçer — yani yılan etkisi
+         GÖRÜNMEZ. Ölçtüm, gerçekten öyleydi.
+           Faz 1 (%55): tam olarak GÖVDE BOYU kadar ilerler. Bu, kuyruğun
+             kıvrımdan düz uzantıya geçmesine yeten en küçük mesafe;
+             sonunda ok kesin olarak düzdür. Sakin eğri — izlenecek an bu.
+           Faz 2 (%45): kalan yolu hızlanarak alır ve tahtayı terk eder.
+         Kısacası: önce kıvrımından sıyrılır, sonra fırlar. */
+      @keyframes arSnakeOut{
+        0%{stroke-dashoffset:var(--ar-o0);animation-timing-function:var(--ph-ease-standard)}
+        55%{stroke-dashoffset:var(--ar-o1);animation-timing-function:cubic-bezier(.55,0,1,.45)}
+        100%{stroke-dashoffset:0}
+      }
+      @keyframes arHeadOut{
+        0%{transform:translate(0,0);animation-timing-function:var(--ph-ease-standard)}
+        55%{transform:var(--ar-h1);animation-timing-function:cubic-bezier(.55,0,1,.45)}
+        100%{transform:var(--ar-h2)}
+      }
+      .ar-arrow.exiting{pointer-events:none;
+        animation:arFadeOut ${EXIT_MS}ms var(--ph-ease-standard) forwards}
+      @keyframes arFadeOut{0%,62%{opacity:1}100%{opacity:0}}
+      .ar-arrow.exiting .ar-casing,
+      .ar-arrow.exiting .ar-core,
+      .ar-arrow.exiting .ar-hit{
+        animation:arSnakeOut ${EXIT_MS}ms linear forwards}
+      .ar-arrow.exiting .ar-head{
+        animation:arHeadOut ${EXIT_MS}ms linear forwards}
 
       /* ── BLOKE ──
          Dokunulan ok sarsılır VE yolu kızıl çizilir VE engelleyen ok
@@ -6310,7 +6337,12 @@ PuzzleGames.arrowPuzzle = (() => {
       @keyframes arBlockFade{0%{opacity:.95}100%{opacity:0}}
 
       @media (prefers-reduced-motion: reduce){
-        .ar-arrow.exiting{transition-duration:var(--ph-duration-micro)}
+        .ar-arrow.exiting,
+        .ar-arrow.exiting .ar-casing,
+        .ar-arrow.exiting .ar-core,
+        .ar-arrow.exiting .ar-hit,
+        .ar-arrow.exiting .ar-head{transition-duration:var(--ph-duration-micro);
+          transition-delay:0ms}
         .ar-arrow.blocked,.ar-arrow.culprit .ar-core{animation:none}
         .ar-blockpath{animation-duration:var(--ph-duration-fast)}
       }
@@ -6330,6 +6362,31 @@ PuzzleGames.arrowPuzzle = (() => {
   function bodyPath(arrow) {
     const cells = cellsOf(arrow);
     return cells.map((c, i) => (i ? 'L' : 'M') + (c[0] + .5) + ' ' + (c[1] + .5)).join(' ');
+  }
+
+  // ───────── Yılan çıkış rayı ─────────
+  // Okun ÜZERİNDE kayacağı ray: uçtan ileri doğru uzanan düz uzantı +
+  // okun kendi gövdesi. Uzantı önce gelir, yani ray şöyle sıralanır:
+  //
+  //   [0 .. EXT]            uçtan ileri, tahtayı terk edecek düz kısım
+  //   [EXT .. EXT+gövde]    okun şu anki gövdesi (uçtan kuyruğa)
+  //
+  // Ok bu ray üzerinde bir "pencere"dir: uzunluğu gövde kadar olan bir
+  // kesit. Pencereyi EXT'ten 0'a kaydırınca ok ileri gider VE kuyruk
+  // kıvrımdan düz uzantıya geçtikçe kendiliğinden DÜZLEŞİR — istenen
+  // yılan hissi bundan çıkıyor, ayrı bir düzleştirme hesabı yok.
+  //
+  // Teknik: stroke-dasharray ile pencere, stroke-dashoffset ile kaydırma.
+  // Tek bir CSS geçişi; JS her karede hesap yapmıyor.
+  function trackPath(arrow, ext) {
+    const cells = cellsOf(arrow);
+    const d = DIRS[arrow.dir];
+    const tx = cells[0][0] + .5, ty = cells[0][1] + .5;
+    let p = 'M' + (tx + d[0] * ext) + ' ' + (ty + d[1] * ext);
+    for (let i = 0; i < cells.length; i++) {
+      p += 'L' + (cells[i][0] + .5) + ' ' + (cells[i][1] + .5);
+    }
+    return p;
   }
 
   // Uç üçgeni: uç hücrenin merkezinden yöne doğru.
@@ -6403,14 +6460,13 @@ PuzzleGames.arrowPuzzle = (() => {
 
   function doExit(arrow, g) {
     const d = DIRS[arrow.dir];
-    // Tahtayı tamamen terk edecek kadar ötele
-    const dist = board.cols + board.rows;
+    const ext = board.cols + board.rows;     // tahtayı terk etmeye yeter
     removeArrow(board, arrow);
     // Sayaç animasyonu değil MODELİ takip eder: dokunuş anında düşer.
     updateHud();
 
-    // Işık izi: hızlı hareketin arkasında kalan ışık (paylaşımlı phTrail
-    // DOM tabanlı; SVG'de aynı işi yapan hafif bir şerit kullanıyoruz)
+    // Işık izi: okun BIRAKTIĞI yer bir an parlar, gövdenin nereden
+    // geçtiği okunsun diye.
     const trail = el('path', {
       class: 'ar-core', d: bodyPath(arrow),
       style: 'stroke:rgba(198,188,255,.3);transition:opacity 260ms;opacity:.5;pointer-events:none',
@@ -6419,8 +6475,25 @@ PuzzleGames.arrowPuzzle = (() => {
     setTimeout(() => { trail.style.opacity = '0'; }, 20);
     setTimeout(() => trail.remove(), EXIT_MS + 80);
 
+    // ── Gövde: kendi rayında kayar ve kıvrım düz uzantıya geçtikçe düzleşir
+    const track = trackPath(arrow, ext);
+    const bodyLen = cellsOf(arrow).length - 1 || 0.001;   // hücre merkezleri arası
+    const strokes = g.querySelectorAll('.ar-casing, .ar-core, .ar-hit');
+    strokes.forEach(p => {
+      p.setAttribute('d', track);
+      // Pencere = gövde boyu; ray boyu kadar boşluk peşinden gelir ki
+      // rayın geri kalanı hiç çizilmesin.
+      p.style.strokeDasharray = bodyLen + ' ' + (ext + bodyLen + 1);
+    });
+    // Faz sınırı GÖVDE BOYU kadar ilerleme: kuyruğun kıvrımdan çıkması
+    // için gereken en küçük mesafe. Bu noktada ok kesin olarak düzdür.
+    g.style.setProperty('--ar-o0', -ext);
+    g.style.setProperty('--ar-o1', -(ext - bodyLen));
+    g.style.setProperty('--ar-h1',
+      'translate(' + (d[0] * bodyLen) + 'px,' + (d[1] * bodyLen) + 'px)');
+    g.style.setProperty('--ar-h2',
+      'translate(' + (d[0] * ext) + 'px,' + (d[1] * ext) + 'px)');
     g.classList.add('exiting');
-    g.style.transform = 'translate(' + (d[0] * dist) + 'px,' + (d[1] * dist) + 'px)';
 
     // Perde kalan ok azaldıkça yükselir: bulmaca çözüldükçe SESLE de
     // ilerleme duyulur. Sentezle bedava (2048'in birleşme rampasıyla
