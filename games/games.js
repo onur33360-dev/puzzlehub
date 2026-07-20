@@ -6271,6 +6271,9 @@ PuzzleGames.arrowPuzzle = (() => {
   // Kamera. 3x, en yoğun tahtada (8x10) bir hücreyi rahat dokunulur
   // kılmaya yetiyor; fazlası tahtanın bağlamını kaybettiriyor.
   const CAM_MAX_SCALE = 3;
+  // Tahta parlaması: alt sınır bilerek çok düşük — seviyenin başında
+  // efekt fark edilmemeli, sonuna doğru belirginleşmeli.
+  const FLASH_MIN = 0.05, FLASH_MAX = 0.3, FLASH_MS = 380;
   // Sürüklemeyi dokunuştan ayıran eşik: bu kadar px'ten fazla kaydıysa
   // parmak "kamerayı taşıdı" demektir, ok seçmedi.
   const DRAG_SLOP_PX = 6;
@@ -6290,7 +6293,7 @@ PuzzleGames.arrowPuzzle = (() => {
   ];
   const HAZE_BLUR_PX = 26;
 
-  let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl, camera;
+  let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl, camera, flashEl;
   let board, level, cleared, levelTotal, advanceT;
   let tapX = 0, tapY = 0;          // son pointerdown konumu (sürükleme ayrımı)
 
@@ -6330,6 +6333,22 @@ PuzzleGames.arrowPuzzle = (() => {
         pointer-events:none;border-radius:inherit;
         box-shadow:inset 0 0 var(--ph-space-10) var(--ph-space-4) rgba(4,6,22,.55)}
       .ar-grid{stroke:rgba(180,170,255,.07);stroke-width:.02;fill:none}
+
+      /* ── Tahta parlaması ──
+         Başarılı çıkışta tahtanın bir an aydınlanması. Seviye başına ~19
+         kez tetiklendiği için ÇOK kısık olmak zorunda: §2.5 "kısıtlama
+         premium sinyalidir" ve her hamlede bağıran bir efekt yorar.
+         Şiddet ilerlemeyle ölçekleniyor (sesin perdesiyle aynı mantık) —
+         ilk çıkışlarda neredeyse görünmez, tahta boşalırken belirginleşir.
+         Tek eleman + yalnızca opacity animasyonu: compositor dostu (§10.6). */
+      .ar-flash{position:absolute;inset:0;z-index:3;pointer-events:none;
+        border-radius:inherit;opacity:0;
+        background:radial-gradient(ellipse 70% 55% at 50% 50%,
+                   var(--ar-flash-tint) 0%, transparent 72%)}
+      .ar-flash.on{animation:arFlash var(--ar-flash-dur) var(--ph-ease-decel)}
+      @keyframes arFlash{
+        0%{opacity:0} 22%{opacity:var(--ar-flash-peak)} 100%{opacity:0}
+      }
 
       /* ── Enerji pusu ──
          Arrow'un kendi mekânı. Water Sort'un ZEMİN sisinin kopyası DEĞİL:
@@ -6496,6 +6515,9 @@ PuzzleGames.arrowPuzzle = (() => {
         /* İz ve kıvılcım tamamen kalkar: ikisi de saf süs, hiçbir oyun
            bilgisi taşımıyorlar. Çıkışın kendisi (ok gitti) duruyor. */
         .ar-wake,.ar-spark{display:none}
+        /* Parlama kalıyor ama animasyonsuz: tek kare bile "oldu" der ve
+           bu bilgi taşıyor — süsleme değil, geri bildirim. */
+        .ar-flash.on{animation-duration:var(--ph-duration-micro)}
         .ar-blockpath{animation-duration:var(--ph-duration-fast)}
       }
     `);
@@ -6699,6 +6721,8 @@ PuzzleGames.arrowPuzzle = (() => {
     const progress = levelTotal ? 1 - board.arrows.size / levelTotal : 0;
     GameAudio.play('swipe', { pitch: 1 + progress * 0.5 });
     GameAudio.haptic('micro');
+    // Işık da sesle aynı rampayı izler: iki duyu aynı şeyi söylüyor.
+    flashBoard('var(--ph-jewel-1-glow)', progress);
 
     setTimeout(() => {
       g.remove();
@@ -6743,6 +6767,9 @@ PuzzleGames.arrowPuzzle = (() => {
     arrowsEl.appendChild(bp);
     setTimeout(() => bp.remove(), 660);
 
+    // Hatada parlama TAM güçte ve kızıl: başarı rampasının aksine bu
+    // olayın "şiddeti" yok, her yanlış hamle aynı ağırlıkta.
+    flashBoard('var(--ph-error-glow)', 1, FLASH_MS * 0.7);
     GameAudio.play('error');
     GameAudio.haptic('error');
   }
@@ -6809,6 +6836,21 @@ PuzzleGames.arrowPuzzle = (() => {
     buildBoard();
   }
 
+  // Tahtayı bir an aydınlatır. p (0..1) ilerleme: efektin şiddeti buna
+  // bağlı, yani aynı olay tahta boşaldıkça daha çok "duyuluyor".
+  // Sınıf yeniden eklenmeden önce kaldırılıp reflow zorlanmalı, yoksa
+  // ikinci çağrı hiçbir şey yapmaz (CSS animasyonları kendiliğinden
+  // yeniden başlamaz — ui-kit'teki phGleam'de de aynı hile var).
+  function flashBoard(tint, p, durMs) {
+    if (!flashEl) return;
+    flashEl.style.setProperty('--ar-flash-tint', tint);
+    flashEl.style.setProperty('--ar-flash-peak', FLASH_MIN + (FLASH_MAX - FLASH_MIN) * p);
+    flashEl.style.setProperty('--ar-flash-dur', (durMs || FLASH_MS) + 'ms');
+    flashEl.classList.remove('on');
+    void flashEl.offsetWidth;
+    flashEl.classList.add('on');
+  }
+
   // Pus bantları: negatif gecikme ile her biri döngünün farklı bir
   // yerinden başlar — hepsinin birlikte parlaması yapay görünür
   // (phAtmosphere'in yıldızlarında da aynı hile var).
@@ -6839,6 +6881,7 @@ PuzzleGames.arrowPuzzle = (() => {
       '<div class="ph-capsule ar-hud" data-role="hud"></div>' +
       '<div class="ph-dais ar-board">' +
         '<div class="ar-haze" data-role="haze" aria-hidden="true"></div>' +
+        '<div class="ar-flash" data-role="flash" aria-hidden="true"></div>' +
         '<div class="ar-viewport" data-role="viewport">' +
           '<div class="ar-stage" data-role="stage">' +
             '<svg class="ar-svg" data-role="svg"></svg>' +
@@ -6848,6 +6891,7 @@ PuzzleGames.arrowPuzzle = (() => {
     container.appendChild(wrapEl);
     hudEl = wrapEl.querySelector('[data-role="hud"]');
     svgEl = wrapEl.querySelector('[data-role="svg"]');
+    flashEl = wrapEl.querySelector('[data-role="flash"]');
     buildHaze(wrapEl.querySelector('[data-role="haze"]'));
     camera = phCamera(wrapEl.querySelector('[data-role="viewport"]'),
                       wrapEl.querySelector('[data-role="stage"]'),
