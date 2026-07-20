@@ -101,6 +101,14 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; PuzzleHub is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked.
 - **Two Discover-feed games** (`flowConnect`, `jigsawCard`) have polished demo animations but no real game behind them. They're marked `playable:false` on purpose — this is a backlog item, not an oversight to quietly complete. (`waterSort` and `arrowPuzzle` were the other two; both are now built and `playable:true`.)
+- **`phCamera` must NOT call `setPointerCapture` on pointerdown** — only once a drag
+  actually starts (movement past `dragStart`). Capture retargets the subsequent `click` to
+  the **capturing element**, and since the camera's viewport is an *ancestor* of the
+  content, every click listener on anything inside it silently stops firing. This shipped
+  once and made Arrow completely unplayable — taps did nothing at all. Note the testing
+  trap that hid it: dispatching a synthetic `click` directly on the target bypasses capture
+  entirely, so it passes while the real game is dead. Verify tap handling by dispatching the
+  full `pointerdown → pointerup → click` chain, not a bare `click`.
 - **Ok Bulmaca exit rule is the SNAKE model: only the tip's forward ray matters.**
   An arrow leaves by following its own body path, straightening as it goes, so the cells
   beside or behind its body are irrelevant. `canExit` and `blockersOf` both walk that single

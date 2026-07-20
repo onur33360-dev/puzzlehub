@@ -6828,7 +6828,10 @@ PuzzleGames.arrowPuzzle = (() => {
     buildHaze(wrapEl.querySelector('[data-role="haze"]'));
     camera = phCamera(wrapEl.querySelector('[data-role="viewport"]'),
                       wrapEl.querySelector('[data-role="stage"]'),
-                      { maxScale: CAM_MAX_SCALE });
+                      // Eşik TEK kaynaktan: kameranın "bu bir sürükleme"
+                      // kararı ile oyunun "bu dokunuş sayılmaz" kararı
+                      // ayrışırsa arada ne pan eden ne ok seçen ölü bant kalır.
+                      { maxScale: CAM_MAX_SCALE, dragStart: DRAG_SLOP_PX });
     addEv(svgEl, 'click', onBoardTap);
     addEv(svgEl, 'pointerdown', onPointerDown);
     startLevel();

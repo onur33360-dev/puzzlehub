@@ -320,6 +320,10 @@ function phCamera(viewport, stage, opts) {
   // hem yönü hem büyüklüğü doğal kılıyor (her "tık" oransal yakınlaşma).
   const WHEEL_K = opts.wheelStep != null ? opts.wheelStep : 0.0022;
   const SETTLE = 0.001;              // bundan yakınsa hedefe oturmuş say
+  // Bu mesafeyi aşana kadar hareket "dokunuş" sayılır ve kamera karışmaz.
+  // Tüketicinin kendi dokunuş eşiğiyle uyumlu olmalı, yoksa arada kamera
+  // da kaydırmayan ok da seçmeyen bir ölü bant kalır.
+  const DRAG_START = opts.dragStart != null ? opts.dragStart : 6;
 
   let s = 1, tx = 0, ty = 0;         // hedef
   let vs = 1, vx = 0, vy = 0;        // görünen (rAF bunu hedefe taşır)
@@ -380,20 +384,35 @@ function phCamera(viewport, stage, opts) {
   }
 
   function onDown(e) {
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size === 1) viewport.setPointerCapture(e.pointerId);
+    // downX/downY: sürüklemenin gerçekten başlayıp başlamadığını ölçmek için.
+    pointers.set(e.pointerId, {
+      x: e.clientX, y: e.clientY, downX: e.clientX, downY: e.clientY, dragging: false,
+    });
     if (pointers.size === 2) pinchD = 0;   // yeni pinch — ilk ölçümde kur
   }
 
   function onMove(e) {
     const p = pointers.get(e.pointerId);
-    if (!p) return;
+    if (!p) return;                        // basılı değil (fare geziniyor)
     const prevX = p.x, prevY = p.y;
     p.x = e.clientX; p.y = e.clientY;
 
     if (pointers.size === 1) {
-      // Tek parmak/fare: saf pan. Ölçek 1'de clamp zaten sıfırlar, yani
-      // yakınlaşmamışken sürükleme kendiliğinden etkisiz.
+      // POINTER CAPTURE'I BASMA ANINDA ALMA — burada alıyoruz, hareket
+      // eşiği aşılınca. Sebebi kritik: yakalama aktifken tarayıcı click
+      // olayını YAKALAYAN elemana yönlendirir. Viewport içeriğin ATASI
+      // olduğu için, içerideki tıklanabilir öğelere bağlı click
+      // dinleyicileri bir daha hiç tetiklenmez ve oyun oynanamaz hâle
+      // gelir. Basit bir dokunuş artık hiç yakalama yapmıyor, dolayısıyla
+      // click hedefine ulaşıyor; yakalama yalnızca gerçek sürüklemede
+      // devreye giriyor (parmak viewport dışına çıksa da pan sürsün diye).
+      if (!p.dragging) {
+        if (Math.hypot(e.clientX - p.downX, e.clientY - p.downY) <= DRAG_START) return;
+        p.dragging = true;
+        try { viewport.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+      // Ölçek 1'de clamp zaten sıfırlar, yani yakınlaşmamışken sürükleme
+      // kendiliğinden etkisiz.
       tx += e.clientX - prevX;
       ty += e.clientY - prevY;
       clamp(); snap();                    // 1:1 — araya yumuşatma girmez
