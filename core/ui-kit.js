@@ -324,17 +324,24 @@ function phCamera(viewport, stage, opts) {
   // Tüketicinin kendi dokunuş eşiğiyle uyumlu olmalı, yoksa arada kamera
   // da kaydırmayan ok da seçmeyen bir ölü bant kalır.
   const DRAG_START = opts.dragStart != null ? opts.dragStart : 6;
+  // Bu kadar sessizlikten sonra gelen tekerlek olayı yeni bir seri sayılır.
+  const WHEEL_BURST_MS = 200;
 
   let s = 1, tx = 0, ty = 0;         // hedef
   let vs = 1, vx = 0, vy = 0;        // görünen (rAF bunu hedefe taşır)
-  let raf = 0, vw = 0, vh = 0;
+  let raf = 0, vw = 0, vh = 0, vLeft = 0, vTop = 0;
+  let lastWheel = 0;
   const pointers = new Map();
   let pinchD = 0;                    // son pinch mesafesi (0 = pinch yok)
   let pinchMx = 0, pinchMy = 0;      // son pinch orta noktası
 
+  // Rect'in KONUMU da önbellekleniyor, yalnızca ölçüsü değil. Sebebi
+  // performans: konumu her olayda okumak, az önce yazdığımız transform'dan
+  // sonra tarayıcıyı zorunlu senkron layout'a sokar (§19 "layout
+  // thrashing yok"). Jest başında bir kez okumak yeterli.
   function measure() {
     const r = viewport.getBoundingClientRect();
-    vw = r.width; vh = r.height;
+    vw = r.width; vh = r.height; vLeft = r.left; vTop = r.top;
   }
   // Ölçek 1'de öteleme zorunlu olarak 0: içerik viewport'u tam doldurur.
   // Büyüdükçe kenarların içeri girmemesi için t ∈ [-(boyut*(s-1)), 0].
@@ -372,18 +379,19 @@ function phCamera(viewport, stage, opts) {
     run();
   }
 
-  function local(e) {
-    const r = viewport.getBoundingClientRect();
-    return [e.clientX - r.left, e.clientY - r.top];
-  }
-
   function onWheel(e) {
     e.preventDefault();
-    const [px, py] = local(e);
-    zoomAt(s * Math.exp(-e.deltaY * WHEEL_K), px, py);
+    // Tekerlek "jest"inin net bir başlangıcı yok; sessizlikten sonraki
+    // ilk olayı başlangıç sayıp yalnızca orada ölçüyoruz. Böylece bir
+    // kaydırma serisi boyunca tek layout okuması yapılıyor.
+    const now = e.timeStamp || performance.now();
+    if (now - lastWheel > WHEEL_BURST_MS) measure();
+    lastWheel = now;
+    zoomAt(s * Math.exp(-e.deltaY * WHEEL_K), e.clientX - vLeft, e.clientY - vTop);
   }
 
   function onDown(e) {
+    if (pointers.size === 0) measure();     // jest başlangıcı: tek okuma
     // downX/downY: sürüklemenin gerçekten başlayıp başlamadığını ölçmek için.
     pointers.set(e.pointerId, {
       x: e.clientX, y: e.clientY, downX: e.clientX, downY: e.clientY, dragging: false,
@@ -419,8 +427,9 @@ function phCamera(viewport, stage, opts) {
     } else if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      const r = viewport.getBoundingClientRect();
-      const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
+      // Önbelleklenmiş konum: her pinch hareketinde rect okumak, snap()'in
+      // yazdığı transform'dan sonra zorunlu layout tetiklerdi.
+      const mx = (a.x + b.x) / 2 - vLeft, my = (a.y + b.y) / 2 - vTop;
       if (pinchD) {
         // İki parmak hem yakınlaştırır hem taşır: önce orta noktanın
         // kaydığı kadar pan, sonra o nokta etrafında ölçek.
