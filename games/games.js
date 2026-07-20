@@ -6221,13 +6221,50 @@ PuzzleGames.arrowPuzzle = (() => {
   // dönüşmez. Referansta bu yok ve yoğun tahtalar okunmuyor.
 
   const CELL = 1;              // SVG kullanıcı birimi = 1 hücre
-  const CASING_W = 0.30;   // koyu kilif — komsu oklar arasindaki sinir       // koyu kılıf kalınlığı (hücre oranı)
-  const CORE_W = 0.17;     // ince cekirdek: boru hissi, tikanik degil         // açık çekirdek
-  const HIT_W = 0.86;      // dokunma hedefi cizgiden BAGIMSIZ kalin          // görünmez dokunma hedefi
+
+  // ───────── Ok materyali: ENERJİ KANALI ─────────
+  // DESIGN_SYSTEM §13'e eklenen yedinci arketip. Ok ne sıvı, ne katı blok,
+  // ne kart, ne küre, ne taş, ne parşömen — ışık TAŞIYAN bir cam kanal.
+  // Dört eşmerkezli çizgi, hepsi aynı yolda, dıştan içe:
+  //
+  //   glow    çok geniş + çok saydam → kanalın etrafına sızan ışık
+  //   casing  koyu ve dar            → komşu okların arasındaki SINIR
+  //   core    derin menekşe          → cam gövdenin kendisi
+  //   inner   parlak ve çok ince     → içeride akan enerjinin ta kendisi
+  //
+  // Glow için SVG filtresi (feGaussianBlur) KULLANILMIYOR: yoğun tahtada
+  // 19 ok × filtre, §19'un "çok sayıda elemanda filter yok" kuralını
+  // çiğner. Geniş ve saydam bir çizgi aynı okumayı bedavaya veriyor.
+  const GLOW_W = 0.46;
+  const CASING_W = 0.28;   // koyu kılıf — komşu oklar arasındaki sınır
+  const CORE_W = 0.18;     // cam gövde
+  const INNER_W = 0.065;   // içerideki enerji filamenti
+  const HIT_W = 0.86;      // dokunma hedefi çizgiden BAĞIMSIZ kalın
+  // Çıkışta hep birlikte kayması gereken katmanlar. Tek yerde tanımlı:
+  // yeni bir katman eklenip burası unutulursa ok parçalanarak çıkar.
+  const STROKE_SEL = '.ar-glow, .ar-casing, .ar-core, .ar-inner, .ar-hit';
+  // Uç üçgeni: t ileri uzunluk, b taban (gövdenin İÇİNDE), w yarı genişlik.
+  // Uzun + dar = keskin. Taban negatif ki uç gövdeden kopuk durmasın.
+  const HEAD = { t: 0.48, b: -0.04, w: 0.165 };
   // İki fazlı yılan çıkışı için 260ms yetmiyordu: düzleşme fazı algı
   // eşiğinin altında kalıyordu. 420ms ile faz 1 ~230ms sürüyor.
   const EXIT_MS = 420;
   const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  // ───────── Sahne ─────────
+  // Atmosfer BİLEREK kısık: göz sürekli tahtayı tarıyor ve arka planda
+  // hareket eden her şey o taramaya rakip oluyor (DESIGN_SYSTEM §2.5,
+  // "kısıtlama premium sinyalidir"). Water Sort nefes alan bir sahne
+  // ister, Arrow ise okunmayı ister — aynı kelimeler, farklı cümle.
+  const ATMO = { stars: 20, beams: 2, motes: 7, skyPct: 46 };
+  // Enerji pusu: tahtanın İÇİNDE asılı yatay ışık akıntıları.
+  // Her bant {üst %, yükseklik, renk, süre, tepe opaklık}.
+  const HAZE_BANDS = [
+    { top: 12, h: 34, tint: 'rgba(150,120,235,.30)', dur: 13000, peak: .55 },
+    { top: 46, h: 42, tint: 'rgba(96,120,225,.24)',  dur: 17000, peak: .42 },
+    { top: 74, h: 30, tint: 'rgba(168,85,247,.22)',  dur: 21000, peak: .38 },
+  ];
+  const HAZE_BLUR_PX = 26;
 
   let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl;
   let board, level, cleared, levelTotal, advanceT;
@@ -6241,42 +6278,70 @@ PuzzleGames.arrowPuzzle = (() => {
         margin:0 auto;padding:var(--ph-space-4) var(--ph-space-3)}
       .ar-wrap *{box-sizing:border-box}
 
-      .ar-hud{display:flex;align-items:center;gap:var(--ph-space-3);
-        font:600 12px/1 'Fraunces',serif;letter-spacing:.1em;text-transform:uppercase;
-        color:rgba(210,200,255,.7)}
-      .ar-hud b{font:800 15px/1 var(--ph-font-display);
-        font-variant-numeric:var(--ph-variant-numeral);color:var(--ar-ink)}
+      /* HUD ortak kapsüldür (.ph-capsule) — tipografi/zemin reçetesi orada.
+         Burada yalnızca ayırıcının kısıklığı var. */
+      .ar-hud-sep{opacity:.45}
 
-      /* Tahta: cam kaide. Hücre ızgarası ÇOK kısık — okların altında
-         referans noktası olsun ama onlarla yarışmasın. */
+      /* Tahta ortak cam kaidedir (.ph-dais): gradyan, kenar, anahtar ışık
+         ve gölge oradan gelir. Burada yalnızca Arrow'a özgü olan kalıyor —
+         ölçü, dolgu ve dokunma davranışı. Reçeteyi kopyalamak §24'ün
+         ikinci adımının ihlali olurdu. */
       .ar-board{position:relative;width:100%;max-width:400px;
-        border-radius:var(--ph-radius-lg);padding:10px;
-        background:linear-gradient(180deg, rgba(126,110,220,.16) 0%, rgba(28,24,68,.5) 62%, rgba(16,14,46,.6) 100%);
-        border:1px solid rgba(180,165,255,.16);
-        box-shadow:0 26px 54px -20px rgba(4,6,22,.92), inset 0 1px 0 rgba(205,195,255,.2);
-        touch-action:manipulation}
-      .ar-svg{display:block;width:100%;height:auto;overflow:visible}
+        padding:var(--ph-space-3);overflow:hidden;touch-action:manipulation}
+      .ar-svg{position:relative;z-index:1;display:block;width:100%;height:auto;
+        overflow:visible}
       .ar-grid{stroke:rgba(180,170,255,.07);stroke-width:.02;fill:none}
 
-      /* ── OK ──
-         Kılıf koyu ve GENİŞ: komşu okların arasındaki sınır bu.
-         Çekirdek açık ve DAR: okun kendisi bu.
-         Uç ayrı ve EN PARLAK: yön buradan okunur. */
+      /* ── Enerji pusu ──
+         Arrow'un kendi mekânı. Water Sort'un ZEMİN sisinin kopyası DEĞİL:
+         orada sis tüplerin dibine çöker ve "bir yüzeydeler" der; burada
+         ışık tahtanın içinde yatay akıntılar hâlinde asılı durur ve "bu
+         oklar enerji taşıyor" der. Aynı gece, farklı hava — components.css
+         bu katmanın oyuna özgü kalmasını şart koşuyor.
+         z-index:0 ile okların (z-index:1) ALTINDA kalır: dekor hiçbir
+         zaman oynanışı gölgelemez. */
+      .ar-haze{position:absolute;inset:0;z-index:0;pointer-events:none;
+        overflow:hidden;border-radius:inherit}
+      .ar-haze i{position:absolute;left:-20%;width:140%;
+        background:linear-gradient(90deg,transparent,var(--ar-tint),transparent);
+        filter:blur(${HAZE_BLUR_PX}px);opacity:0;
+        animation:arHaze var(--ar-dur) ease-in-out infinite}
+      @keyframes arHaze{
+        0%,100%{opacity:0;transform:translate3d(-6%,0,0)}
+        50%{opacity:var(--ar-peak);transform:translate3d(6%,0,0)}
+      }
+
+      /* ── OK: ENERJİ KANALI ──
+         Renkler §3.5 mücevher paletinin 1. hüzmesinden (Violet) geliyor,
+         elle seçilmiş hex DEĞİL. Altın (jewel-5) bilerek kullanılmadı:
+         §3.4 altını yalnızca ödül/başarıya ayırıyor ve "kıtlığı anlamını
+         veriyor" diyor — dekoratif altın o anlamı harcardı. */
       .ar-arrow{cursor:pointer}
-      .ar-casing{fill:none;stroke:#171233;stroke-width:${CASING_W};
-        stroke-linecap:round;stroke-linejoin:round}
-      .ar-core{fill:none;stroke:#9E8CE8;stroke-width:${CORE_W};
-        stroke-linecap:round;stroke-linejoin:round;
+      .ar-arrow path{fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+      .ar-glow{stroke:var(--ph-jewel-1-glow);stroke-width:${GLOW_W};opacity:.5}
+      /* Kılıf sahnenin en koyu gecesine yakın: komşu iki ok arasında
+         gerçek bir boşluk varmış gibi okunsun. */
+      .ar-casing{stroke:var(--ph-night-0);stroke-width:${CASING_W}}
+      .ar-core{stroke:var(--ph-jewel-1-shadow);stroke-width:${CORE_W};
         transition:stroke var(--ph-duration-fast) var(--ph-ease-standard)}
-      .ar-head{fill:#D8CCFF;stroke:#171233;stroke-width:.1;stroke-linejoin:round;
+      .ar-inner{stroke:var(--ph-jewel-1-highlight);stroke-width:${INNER_W};
+        transition:stroke var(--ph-duration-fast) var(--ph-ease-standard)}
+      /* Özgüllük NOTU: yukarıdaki ".ar-arrow path" (0,1,1) blanket kuralı
+         fill:none veriyor ve düz ".ar-head" (0,1,0) onu yenemez — uç
+         dolgusuz kalır, geriye yalnızca koyu kontur kalırdı. Bu yüzden
+         seçici bilerek ".ar-arrow .ar-head" (0,2,0). */
+      .ar-arrow .ar-head{fill:var(--ph-jewel-1-highlight);
+        stroke:var(--ph-night-0);stroke-width:.05;
         transition:fill var(--ph-duration-fast) var(--ph-ease-standard)}
       /* Görünmez ve kalın dokunma hedefi: ince çizgiye dokunmak zordur.
          pointer-events:stroke ile yalnızca çizgi boyunca yakalar. */
-      .ar-hit{fill:none;stroke:transparent;stroke-width:${HIT_W};
-        stroke-linecap:round;stroke-linejoin:round;pointer-events:stroke}
+      .ar-hit{stroke:transparent;stroke-width:${HIT_W};pointer-events:stroke}
 
-      /* Basılı tutma/dokunma anı — dokunuşun algılandığı belli olmalı */
-      .ar-arrow:active .ar-core{stroke:#C4B5FF}
+      /* Dokunuş anı — kanaldaki enerji bir an yükselir (§15 "tepki bir
+         kare içinde"). Hover YOK: dokunmatikte hover yalancı bir durum. */
+      .ar-arrow:active .ar-glow{opacity:.9}
+      .ar-arrow:active .ar-core{stroke:var(--ph-jewel-1-base)}
 
       /* ── ÇIKIŞ (yılan) ──
          Ok kendi rayında kayar: gövde stroke-dashoffset ile, uç öteleme
@@ -6304,8 +6369,10 @@ PuzzleGames.arrowPuzzle = (() => {
       .ar-arrow.exiting{pointer-events:none;
         animation:arFadeOut ${EXIT_MS}ms var(--ph-ease-standard) forwards}
       @keyframes arFadeOut{0%,62%{opacity:1}100%{opacity:0}}
+      .ar-arrow.exiting .ar-glow,
       .ar-arrow.exiting .ar-casing,
       .ar-arrow.exiting .ar-core,
+      .ar-arrow.exiting .ar-inner,
       .ar-arrow.exiting .ar-hit{
         animation:arSnakeOut ${EXIT_MS}ms linear forwards}
       .ar-arrow.exiting .ar-head{
@@ -6320,30 +6387,41 @@ PuzzleGames.arrowPuzzle = (() => {
         25%{transform:translate(var(--anx,0),var(--any,0))}
         60%{transform:translate(calc(var(--anx,0)*-.5),calc(var(--any,0)*-.5))}
       }
+      /* Hata rengi §3.4'ün semantik kırmızısı (jewel-3 / --ph-error).
+         Kanal kızıla döner: enerji "bozuldu", ok yer değiştirmedi. */
       .ar-arrow.blocked{animation:arNudge 320ms var(--ph-ease-standard)}
-      .ar-arrow.blocked .ar-core{stroke:#E0574A}
-      .ar-arrow.blocked .ar-head{fill:#F2897C}
+      .ar-arrow.blocked .ar-glow{stroke:var(--ph-error-glow);opacity:.9}
+      .ar-arrow.blocked .ar-core{stroke:var(--ph-jewel-3-shadow)}
+      .ar-arrow.blocked .ar-inner{stroke:var(--ph-jewel-3-highlight)}
+      .ar-arrow.blocked .ar-head{fill:var(--ph-jewel-3-highlight)}
 
+      /* Suçlu ok: kendi rengini korur ama bir an kızıla çalar — "engel
+         benim" der, "ben de bozuldum" demez. */
       @keyframes arCulprit{
-        0%,100%{stroke:#9E8CE8}
-        30%,60%{stroke:#F0A08F}
+        0%,100%{stroke:var(--ph-jewel-1-highlight)}
+        30%,60%{stroke:var(--ph-jewel-3-highlight)}
       }
-      .ar-arrow.culprit .ar-core{animation:arCulprit 620ms var(--ph-ease-standard)}
+      .ar-arrow.culprit .ar-inner{animation:arCulprit 620ms var(--ph-ease-standard)}
 
       /* Engellenen yol: dokunulan oktan ilk engele kadar kızıl şerit */
-      .ar-blockpath{fill:none;stroke:rgba(224,87,74,.5);stroke-width:${CORE_W * 0.7};
+      .ar-blockpath{fill:none;stroke:var(--ph-error-glow);stroke-width:${CORE_W * 0.7};
         stroke-linecap:round;stroke-dasharray:.28 .22;pointer-events:none;
         animation:arBlockFade 620ms var(--ph-ease-standard) forwards}
       @keyframes arBlockFade{0%{opacity:.95}100%{opacity:0}}
 
       @media (prefers-reduced-motion: reduce){
         .ar-arrow.exiting,
+        .ar-arrow.exiting .ar-glow,
         .ar-arrow.exiting .ar-casing,
         .ar-arrow.exiting .ar-core,
+        .ar-arrow.exiting .ar-inner,
         .ar-arrow.exiting .ar-hit,
         .ar-arrow.exiting .ar-head{transition-duration:var(--ph-duration-micro);
           transition-delay:0ms}
         .ar-arrow.blocked,.ar-arrow.culprit .ar-core{animation:none}
+        /* Pus dursun ama KALSIN: atmosfer dekoratif, hareketi ise gereksiz.
+           Sabit düşük opaklıkta bırakmak sahneyi boşaltmadan sakinleştirir. */
+        .ar-haze i{animation:none;opacity:var(--ar-peak);transform:none}
         .ar-blockpath{animation-duration:var(--ph-duration-fast)}
       }
     `);
@@ -6394,20 +6472,21 @@ PuzzleGames.arrowPuzzle = (() => {
     const c = cellsOf(arrow)[0];
     const d = DIRS[arrow.dir];
     const cx = c[0] + .5, cy = c[1] + .5;
-    // Taban gövdenin İÇİNDE başlar (negatif b) ki uç ile gövde tek parça
-    // okunsun; önceki değerlerde üçgen gövdeden kopuk duruyordu.
-    const t = .42, b = -.10, w = .19;
+    const t = HEAD.t, b = HEAD.b, w = HEAD.w;
     const px = -d[1], py = d[0];            // dike vektör
     return 'M' + (cx + d[0] * t) + ' ' + (cy + d[1] * t) +
            'L' + (cx + px * w + d[0] * b) + ' ' + (cy + py * w + d[1] * b) +
            'L' + (cx - px * w + d[0] * b) + ' ' + (cy - py * w + d[1] * b) + 'Z';
   }
 
+  // Katman sırası boyama sırasıdır: dıştaki önce çizilir, içteki üstünü
+  // örter. Uç en sonda çünkü yönü o anlatıyor ve hiçbir şey onu kesmemeli.
   function drawArrow(arrow) {
     const g = el('g', { class: 'ar-arrow', 'data-id': arrow.id });
     const d = bodyPath(arrow);
-    g.appendChild(el('path', { class: 'ar-casing', d }));
-    g.appendChild(el('path', { class: 'ar-core', d }));
+    ['ar-glow', 'ar-casing', 'ar-core', 'ar-inner'].forEach(cls => {
+      g.appendChild(el('path', { class: cls, d }));
+    });
     g.appendChild(el('path', { class: 'ar-head', d: headPath(arrow) }));
     g.appendChild(el('path', { class: 'ar-hit', d }));
     return g;
@@ -6432,11 +6511,13 @@ PuzzleGames.arrowPuzzle = (() => {
   }
 
   function updateHud() {
-    if (hudEl) {
-      hudEl.innerHTML = 'Seviye <b>' + level + '</b>' +
-                        '<span style="opacity:.5">·</span>' +
-                        'Kalan <b>' + board.arrows.size + '</b>';
-    }
+    if (!hudEl) return;
+    // .ph-capsule-num ortak sayı stilini taşır (tabular-nums dahil):
+    // sayaç düşerken çevresindeki metin kaymaz.
+    hudEl.innerHTML =
+      'Seviye <span class="ph-capsule-num">' + level + '</span>' +
+      '<span class="ar-hud-sep">·</span>' +
+      'Kalan <span class="ph-capsule-num">' + board.arrows.size + '</span>';
   }
 
   // ───────── Etkileşim ─────────
@@ -6478,7 +6559,7 @@ PuzzleGames.arrowPuzzle = (() => {
     // ── Gövde: kendi rayında kayar ve kıvrım düz uzantıya geçtikçe düzleşir
     const track = trackPath(arrow, ext);
     const bodyLen = cellsOf(arrow).length - 1 || 0.001;   // hücre merkezleri arası
-    const strokes = g.querySelectorAll('.ar-casing, .ar-core, .ar-hit');
+    const strokes = g.querySelectorAll(STROKE_SEL);
     strokes.forEach(p => {
       p.setAttribute('d', track);
       // Pencere = gövde boyu; ray boyu kadar boşluk peşinden gelir ki
@@ -6612,25 +6693,42 @@ PuzzleGames.arrowPuzzle = (() => {
     buildBoard();
   }
 
+  // Pus bantları: negatif gecikme ile her biri döngünün farklı bir
+  // yerinden başlar — hepsinin birlikte parlaması yapay görünür
+  // (phAtmosphere'in yıldızlarında da aynı hile var).
+  function buildHaze(host) {
+    if (!host) return;
+    HAZE_BANDS.forEach((b, i) => {
+      const band = document.createElement('i');
+      band.style.top = b.top + '%';
+      band.style.height = b.h + '%';
+      band.style.setProperty('--ar-tint', b.tint);
+      band.style.setProperty('--ar-dur', b.dur + 'ms');
+      band.style.setProperty('--ar-peak', b.peak);
+      band.style.animationDelay = (-i * (b.dur / HAZE_BANDS.length)) + 'ms';
+      host.appendChild(band);
+    });
+  }
+
   // ───────── Yaşam döngüsü ─────────
   function init(c) {
     container = c;
     level = 1; cleared = false;
     container.classList.add('ph-scene', 'ar-scene');
     injectCSS();
-    // Atmosfer kısık: göz sürekli tahtayı tarıyor, arka planda hareket
-    // eden her şey o taramaya rakip oluyor.
-    atmoEl = phAtmosphere(container, { stars: 13, beams: 1, motes: 4, skyPct: 32 });
+    atmoEl = phAtmosphere(container, ATMO);
     wrapEl = document.createElement('div');
     wrapEl.className = 'ar-wrap';
     wrapEl.innerHTML =
-      '<div class="ar-hud" data-role="hud"></div>' +
-      '<div class="ar-board">' +
+      '<div class="ph-capsule ar-hud" data-role="hud"></div>' +
+      '<div class="ph-dais ar-board">' +
+        '<div class="ar-haze" data-role="haze" aria-hidden="true"></div>' +
         '<svg class="ar-svg" data-role="svg"></svg>' +
       '</div>';
     container.appendChild(wrapEl);
     hudEl = wrapEl.querySelector('[data-role="hud"]');
     svgEl = wrapEl.querySelector('[data-role="svg"]');
+    buildHaze(wrapEl.querySelector('[data-role="haze"]'));
     addEv(svgEl, 'click', onBoardTap);
     startLevel();
   }
