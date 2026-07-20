@@ -5978,8 +5978,52 @@ PuzzleGames.arrowPuzzle = (() => {
     { id: 'l4', offsets: [[0, 0], [0, 1], [0, 2], [1, 2]] },
     { id: 's4', offsets: [[0, 0], [0, 1], [1, 1], [1, 2]] },
     { id: 'u5', offsets: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 0]] },
+
+    // ── Uzun kıvrımlılar ──
+    // Referans tasarımdaki "enerji yılanı" siluetleri. Kural aynı: uç
+    // (0,0)'da, ardışık hücreler komşu (bodyPath polyline'ı ve
+    // bodyLen = hücre-1 buna dayanıyor), offsets[1] = [0,1] ki uç
+    // gövdenin ucunda dursun, bir köşenin ortasında değil.
+    { id: 'z6',  offsets: [[0,0],[0,1],[0,2],[1,2],[1,3],[1,4]] },
+    { id: 'n6',  offsets: [[0,0],[0,1],[1,1],[1,2],[2,2],[2,3]] },
+    { id: 'l6',  offsets: [[0,0],[0,1],[0,2],[0,3],[1,3],[2,3]] },
+    { id: 'c6',  offsets: [[0,0],[0,1],[0,2],[1,2],[2,2],[2,1]] },
+    { id: 's7',  offsets: [[0,0],[0,1],[0,2],[-1,2],[-1,3],[-1,4],[-2,4]] },
+    { id: 'w8',  offsets: [[0,0],[0,1],[1,1],[1,2],[2,2],[2,3],[3,3],[3,4]] },
+    { id: 'g8',  offsets: [[0,0],[0,1],[0,2],[0,3],[1,3],[2,3],[2,2],[2,1]] },
+    { id: 'e9',  offsets: [[0,0],[0,1],[1,1],[2,1],[2,2],[2,3],[1,3],[0,3],[0,4]] },
+    { id: 'h10', offsets: [[0,0],[0,1],[1,1],[1,2],[1,3],[2,3],[3,3],[3,2],[3,1],[4,1]] },
   ];
   const STRAIGHT_IDS = ['i2', 'i3', 'i4'];
+
+  // ───────── Zorluk: şekil kademeleri ─────────
+  // Oyuncu düz oklarla başlar, kıvrımı öğrenir, sonra gerçekten uzun
+  // yılanlarla karşılaşır. Havuz BİRİKİMLİ: üst kademe açılınca alttakiler
+  // kaybolmaz, yoksa tahta tek tip olur ve okuma kolaylaşır.
+  const SHAPE_TIERS = [
+    { from: 1,  ids: STRAIGHT_IDS },
+    { from: 4,  ids: ['l3', 'l3b', 'l4', 's4', 'u5'] },
+    { from: 9,  ids: ['z6', 'n6', 'l6', 'c6', 's7'] },
+    { from: 17, ids: ['w8', 'g8', 'e9', 'h10'] },
+  ];
+  function shapePool(n) {
+    const ids = [];
+    for (const t of SHAPE_TIERS) if (n >= t.from) ids.push(...t.ids);
+    return ids;
+  }
+  // Ok başına ortalama hücre — SABİT DEĞİL, havuzdan hesaplanır.
+  // Uzun şekiller açılınca ortalama büyüyor ve tahtaya sığan ok sayısı
+  // düşüyor. Bunu sabit bir sayıyla kestirmek, üretecin başarısız olup
+  // seviyenin hiç açılmamasına yol açardı — bu hata bir kez yaşandı
+  // (bkz. CLAUDE.md, 19. seviye çökmesi).
+  // SHAPE_BY_ID aşağıda cellsOf için zaten tanımlı; ikinci bir eşleme
+  // kurmak yerine o kullanılıyor (aynı isimle yeniden bildirmek modülün
+  // tamamını çökerten bir SyntaxError üretiyordu).
+  function avgCells(ids) {
+    let sum = 0;
+    for (const id of ids) sum += SHAPE_BY_ID[id].offsets.length;
+    return sum / ids.length;
+  }
   const SHAPE_BY_ID = SHAPES.reduce((m, s) => { m[s.id] = s; return m; }, {});
 
   // Kanonik (uç yukarı) ofseti verilen yöne döndürür.
@@ -6681,14 +6725,18 @@ PuzzleGames.arrowPuzzle = (() => {
 
   function doExit(arrow, g) {
     const d = DIRS[arrow.dir];
-    const ext = board.cols + board.rows;     // tahtayı terk etmeye yeter
+    const bodyLen = cellsOf(arrow).length - 1 || 0.001;   // hücre merkezleri arası
+    // Uzantı gövde boyunu DA içermeli: hareket bittiğinde kuyruk uçtan
+    // (ext - bodyLen) kadar ileridedir ve bu mesafe tahtayı aşmalı.
+    // Uzun yılanlarda (10 hücre) sabit cols+rows yetmiyordu — kuyruk
+    // tahtanın içinde kalıp bir anda yok oluyordu.
+    const ext = board.cols + board.rows + bodyLen;
     removeArrow(board, arrow);
     // Sayaç animasyonu değil MODELİ takip eder: dokunuş anında düşer.
     updateHud();
 
     // ── Gövde: kendi rayında kayar ve kıvrım düz uzantıya geçtikçe düzleşir
     const track = trackPath(arrow, ext);
-    const bodyLen = cellsOf(arrow).length - 1 || 0.001;   // hücre merkezleri arası
 
     // ── Enerji izi ──
     // Okun BOŞALTTIĞI ray parçası. Kuyruk ilerledikçe bu bölge büyür,
@@ -6845,20 +6893,21 @@ PuzzleGames.arrowPuzzle = (() => {
   // Ölçüm (24 deneme/kademe): %75 doluluğa kadar üretim 22-24/24,
   // %85'te 18-20/24. Tavan .85 — kalan başarısızlıkları startLevel'ın
   // yeniden deneme döngüsü topluyor.
-  const AVG_CELLS_PER_ARROW = 3.5;   // olculdu: SHAPES ortalamasi (duz-only 3.0)
   const MAX_FILL = 0.85;             // olculdu: pratik uretim siniri
 
   function paramsFor(n) {
     const t = Math.min(n, 40);
-    const cols = 5 + Math.min(Math.floor(t / 8), 3);
-    const rows = 6 + Math.min(Math.floor(t / 6), 4);
-    const straight = n <= 3;
-    const avg = straight ? 3.0 : AVG_CELLS_PER_ARROW;
-    const capacity = Math.floor(cols * rows * MAX_FILL / avg);
+    // Uzun yılanlar açıldıkça tahta da büyümek zorunda: 10 hücrelik bir
+    // şekil 5 genişliğinde bir tahtaya bazı yönlerde hiç sığmaz.
+    const cols = 5 + Math.min(Math.floor(t / 6), 4);
+    const rows = 6 + Math.min(Math.floor(t / 5), 5);
+    const shapes = shapePool(n);
+    // Ortalama HAVUZDAN geliyor, sabitten değil — kademe açılınca ok
+    // başına hücre artar ve kapasite kendiliğinden düşer.
+    const capacity = Math.floor(cols * rows * MAX_FILL / avgCells(shapes));
     return {
-      cols, rows,
+      cols, rows, shapes,
       arrows: Math.max(3, Math.min(4 + Math.floor(t * 0.7), capacity)),
-      shapes: straight ? STRAIGHT_IDS : SHAPES.map(s => s.id),
     };
   }
 
