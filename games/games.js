@@ -6248,8 +6248,21 @@ PuzzleGames.arrowPuzzle = (() => {
   const HEAD = { t: 0.48, b: -0.04, w: 0.165 };
   // İki fazlı yılan çıkışı için 260ms yetmiyordu: düzleşme fazı algı
   // eşiğinin altında kalıyordu. 420ms ile faz 1 ~230ms sürüyor.
+  // SPARK_MS buna DAYANIYOR — bu yüzden ondan önce tanımlı olmak zorunda.
   const EXIT_MS = 420;
   const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  // Çıkış efektleri. Kıvılcım sayısı ok başına BİLEREK küçük: çıkış sık
+  // bir olay (tahta başına ~19) ve §17 sık olaylarda düşük sayı şart
+  // koşuyor — burada amaç patlama değil, kalkışın bıraktığı enerji.
+  const WAKE_W = CORE_W * 0.85;
+  const SPARK_N = 3;
+  const SPARK_R = 0.055;
+  const SPARK_REACH = 0.5;        // hücre biriminde saçılma mesafesi
+  const SPARK_STAGGER_MS = 45;
+  // Kıvılcım ömrü çıkıştan KISA: ok gittikten sonra ortalıkta kalan
+  // parıltı, olayın bittiğini geciktirir.
+  const SPARK_MS = Math.round(EXIT_MS * 0.62);
 
   // ───────── Sahne ─────────
   // Atmosfer BİLEREK kısık: göz sürekli tahtayı tarıyor ve arka planda
@@ -6378,6 +6391,28 @@ PuzzleGames.arrowPuzzle = (() => {
       .ar-arrow.exiting .ar-head{
         animation:arHeadOut ${EXIT_MS}ms linear forwards}
 
+      /* ── Enerji izi ──
+         Okun boşalttığı ray parçası. Gövdeden İNCE ve saydam: iz okun
+         kendisiyle yarışırsa hangisinin gerçek ok olduğu karışır. */
+      .ar-wake{fill:none;stroke:var(--ph-jewel-1-glow);stroke-width:${WAKE_W};
+        stroke-linecap:round;pointer-events:none;
+        animation:arWake ${EXIT_MS}ms var(--ph-ease-decel) forwards}
+      @keyframes arWake{
+        0%{stroke-dasharray:var(--ar-w0);stroke-dashoffset:var(--ar-wo0);opacity:.85}
+        70%{opacity:.35}
+        100%{stroke-dasharray:var(--ar-w1);stroke-dashoffset:var(--ar-wo1);opacity:0}
+      }
+
+      /* ── Kıvılcım ──
+         Kalkışta açığa çıkan enerji. Küçük ve kısa: okunabilirliği
+         bozmamasının tek garantisi boyutunun ve ömrünün küçüklüğü. */
+      .ar-spark{fill:var(--ph-jewel-1-highlight);pointer-events:none;
+        animation:arSpark ${SPARK_MS}ms var(--ph-ease-decel) forwards}
+      @keyframes arSpark{
+        0%{transform:translate(0,0) scale(1);opacity:.9}
+        100%{transform:translate(var(--ar-sx),var(--ar-sy)) scale(.2);opacity:0}
+      }
+
       /* ── BLOKE ──
          Dokunulan ok sarsılır VE yolu kızıl çizilir VE engelleyen ok
          parlar. Üçü birlikte "neden olmadığını" anlatır; yalnızca
@@ -6422,6 +6457,9 @@ PuzzleGames.arrowPuzzle = (() => {
         /* Pus dursun ama KALSIN: atmosfer dekoratif, hareketi ise gereksiz.
            Sabit düşük opaklıkta bırakmak sahneyi boşaltmadan sakinleştirir. */
         .ar-haze i{animation:none;opacity:var(--ar-peak);transform:none}
+        /* İz ve kıvılcım tamamen kalkar: ikisi de saf süs, hiçbir oyun
+           bilgisi taşımıyorlar. Çıkışın kendisi (ok gitti) duruyor. */
+        .ar-wake,.ar-spark{display:none}
         .ar-blockpath{animation-duration:var(--ph-duration-fast)}
       }
     `);
@@ -6539,6 +6577,31 @@ PuzzleGames.arrowPuzzle = (() => {
     else doBlocked(arrow, g);
   }
 
+  // ── Kıvılcımlar ──
+  // Okun kalkış anında açığa çıkan enerji. DOM partikülü (phParticleBurst)
+  // yerine SVG içinde duruyorlar, iki sebeple: (1) tahtanın koordinat
+  // sisteminde kalıyorlar, yani zoom uygulandığında da doğru yerdeler;
+  // (2) çıkış sık bir olay — tahta başına ~19 kez — ve §17 sık olayları
+  // "ambient/micro" katmanında, düşük sayıda tutmayı şart koşuyor.
+  // Bu yüzden ok başına yalnızca SPARK_N tane var, patlama değil.
+  function emitSparks(g, arrow, d) {
+    const c = cellsOf(arrow)[0];
+    const cx = c[0] + .5, cy = c[1] + .5;
+    const px = -d[1], py = d[0];                  // dike vektör
+    for (let i = 0; i < SPARK_N; i++) {
+      // Yayılım dikeyde simetrik, ilerleme yönünde hafif öne doğru:
+      // kıvılcım okun peşinden değil, kalkış noktasından saçılır.
+      const spread = (i - (SPARK_N - 1) / 2) / SPARK_N;
+      const s = el('circle', {
+        class: 'ar-spark', r: SPARK_R, cx, cy,
+      });
+      s.style.setProperty('--ar-sx', (d[0] * SPARK_REACH + px * spread) + 'px');
+      s.style.setProperty('--ar-sy', (d[1] * SPARK_REACH + py * spread) + 'px');
+      s.style.animationDelay = (i * SPARK_STAGGER_MS) + 'ms';
+      g.appendChild(s);
+    }
+  }
+
   function doExit(arrow, g) {
     const d = DIRS[arrow.dir];
     const ext = board.cols + board.rows;     // tahtayı terk etmeye yeter
@@ -6546,19 +6609,22 @@ PuzzleGames.arrowPuzzle = (() => {
     // Sayaç animasyonu değil MODELİ takip eder: dokunuş anında düşer.
     updateHud();
 
-    // Işık izi: okun BIRAKTIĞI yer bir an parlar, gövdenin nereden
-    // geçtiği okunsun diye.
-    const trail = el('path', {
-      class: 'ar-core', d: bodyPath(arrow),
-      style: 'stroke:rgba(198,188,255,.3);transition:opacity 260ms;opacity:.5;pointer-events:none',
-    });
-    arrowsEl.insertBefore(trail, arrowsEl.firstChild);
-    setTimeout(() => { trail.style.opacity = '0'; }, 20);
-    setTimeout(() => trail.remove(), EXIT_MS + 80);
-
     // ── Gövde: kendi rayında kayar ve kıvrım düz uzantıya geçtikçe düzleşir
     const track = trackPath(arrow, ext);
     const bodyLen = cellsOf(arrow).length - 1 || 0.001;   // hücre merkezleri arası
+
+    // ── Enerji izi ──
+    // Okun BOŞALTTIĞI ray parçası. Kuyruk ilerledikçe bu bölge büyür,
+    // yani iz gerçekten okun ARDINDAN uzar — sabit bir hayalet değil.
+    // Ray koordinatlarında: [kuyruk, başlangıç-kuyruğu] aralığı.
+    // Başta uzunluk 0, sonda ext. Hem dasharray hem dashoffset animasyonlu
+    // (ikisi de aynı uzunlukta liste olduğu için CSS ara değer üretebiliyor).
+    const wake = el('path', { class: 'ar-wake', d: track });
+    wake.style.setProperty('--ar-w0', '0 ' + (ext + bodyLen + 1));
+    wake.style.setProperty('--ar-w1', ext + ' ' + (ext + bodyLen + 1));
+    wake.style.setProperty('--ar-wo0', -(ext + bodyLen));
+    wake.style.setProperty('--ar-wo1', -bodyLen);
+    g.insertBefore(wake, g.firstChild);          // okun ARKASINDA kalsın
     const strokes = g.querySelectorAll(STROKE_SEL);
     strokes.forEach(p => {
       p.setAttribute('d', track);
@@ -6575,6 +6641,7 @@ PuzzleGames.arrowPuzzle = (() => {
     g.style.setProperty('--ar-h2',
       'translate(' + (d[0] * ext) + 'px,' + (d[1] * ext) + 'px)');
     g.classList.add('exiting');
+    emitSparks(g, arrow, d);
 
     // Perde kalan ok azaldıkça yükselir: bulmaca çözüldükçe SESLE de
     // ilerleme duyulur. Sentezle bedava (2048'in birleşme rampasıyla
