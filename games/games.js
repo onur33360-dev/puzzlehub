@@ -6235,6 +6235,11 @@ PuzzleGames.arrowPuzzle = (() => {
   // Glow için SVG filtresi (feGaussianBlur) KULLANILMIYOR: yoğun tahtada
   // 19 ok × filtre, §19'un "çok sayıda elemanda filter yok" kuralını
   // çiğner. Geniş ve saydam bir çizgi aynı okumayı bedavaya veriyor.
+  // Gölge kanalın ALTINA düşer: tek anahtar ışık sol üstte (§4), yani
+  // gölge sağ-aşağı kayar. Filtre değil, ötelenmiş saydam bir çizgi —
+  // aynı derinlik okuması, filtre maliyeti olmadan.
+  const SHADE_W = 0.40;
+  const SHADE_OFF = 0.07;          // hücre biriminde kayma
   const GLOW_W = 0.46;
   const CASING_W = 0.28;   // koyu kılıf — komşu oklar arasındaki sınır
   const CORE_W = 0.18;     // cam gövde
@@ -6242,7 +6247,7 @@ PuzzleGames.arrowPuzzle = (() => {
   const HIT_W = 0.86;      // dokunma hedefi çizgiden BAĞIMSIZ kalın
   // Çıkışta hep birlikte kayması gereken katmanlar. Tek yerde tanımlı:
   // yeni bir katman eklenip burası unutulursa ok parçalanarak çıkar.
-  const STROKE_SEL = '.ar-glow, .ar-casing, .ar-core, .ar-inner, .ar-hit';
+  const STROKE_SEL = '.ar-shade, .ar-glow, .ar-casing, .ar-core, .ar-inner, .ar-hit';
   // Uç üçgeni: t ileri uzunluk, b taban (gövdenin İÇİNDE), w yarı genişlik.
   // Uzun + dar = keskin. Taban negatif ki uç gövdeden kopuk durmasın.
   const HEAD = { t: 0.48, b: -0.04, w: 0.165 };
@@ -6316,6 +6321,14 @@ PuzzleGames.arrowPuzzle = (() => {
         border-radius:var(--ph-radius-md);touch-action:none}
       .ar-stage{transform-origin:0 0;will-change:transform}
       .ar-svg{display:block;width:100%;height:auto;overflow:visible}
+
+      /* Kenarlarda koyulaşan iç gölge: tahta ÇUKUR bir yüzey gibi okunur,
+         oklar da onun üstünde durur. Katman hissinin ucuz ve tek elemanlı
+         kaynağı — ok başına bir şey eklemiyor.
+         Kameranın üstünde (z-index 2) ama tıklamayı yutmuyor. */
+      .ar-viewport::after{content:'';position:absolute;inset:0;z-index:2;
+        pointer-events:none;border-radius:inherit;
+        box-shadow:inset 0 0 var(--ph-space-10) var(--ph-space-4) rgba(4,6,22,.55)}
       .ar-grid{stroke:rgba(180,170,255,.07);stroke-width:.02;fill:none}
 
       /* ── Enerji pusu ──
@@ -6345,6 +6358,11 @@ PuzzleGames.arrowPuzzle = (() => {
       .ar-arrow{cursor:pointer}
       .ar-arrow path{fill:none;stroke-linecap:round;stroke-linejoin:round}
 
+      /* Gölge: kanalın tahtanın ÜSTÜNDE durduğunu söyleyen tek şey.
+         Kaymanın yönü sol-üst anahtar ışıktan geliyor (§4) — her oyunda
+         aynı yön, yoksa "aynı evren" hissi dağılır. */
+      .ar-shade{stroke:rgba(4,6,22,.6);stroke-width:${SHADE_W};
+        transform:translate(${SHADE_OFF}px,${SHADE_OFF}px)}
       .ar-glow{stroke:var(--ph-jewel-1-glow);stroke-width:${GLOW_W};opacity:.5}
       /* Kılıf sahnenin en koyu gecesine yakın: komşu iki ok arasında
          gerçek bir boşluk varmış gibi okunsun. */
@@ -6364,10 +6382,15 @@ PuzzleGames.arrowPuzzle = (() => {
          pointer-events:stroke ile yalnızca çizgi boyunca yakalar. */
       .ar-hit{stroke:transparent;stroke-width:${HIT_W};pointer-events:stroke}
 
-      /* Dokunuş anı — kanaldaki enerji bir an yükselir (§15 "tepki bir
-         kare içinde"). Hover YOK: dokunmatikte hover yalancı bir durum. */
-      .ar-arrow:active .ar-glow{opacity:.9}
+      /* Seçili/basılı ok — kanaldaki enerji bir an yükselir (§15 "tepki
+         bir kare içinde").
+         HOVER BİLEREK YOK: bu oyun dokunmatik önce ve hover dokunmatikte
+         yalancı bir durum — parmak çekildikten sonra da takılı kalır.
+         Sinyal yalnızca gerçek temasla geliyor. */
+      .ar-arrow:active .ar-shade{opacity:.35}     /* yüzeye yaklaşır */
+      .ar-arrow:active .ar-glow{opacity:1}
       .ar-arrow:active .ar-core{stroke:var(--ph-jewel-1-base)}
+      .ar-arrow:active .ar-inner{stroke:#fff}
 
       /* ── ÇIKIŞ (yılan) ──
          Ok kendi rayında kayar: gövde stroke-dashoffset ile, uç öteleme
@@ -6535,7 +6558,7 @@ PuzzleGames.arrowPuzzle = (() => {
   function drawArrow(arrow) {
     const g = el('g', { class: 'ar-arrow', 'data-id': arrow.id });
     const d = bodyPath(arrow);
-    ['ar-glow', 'ar-casing', 'ar-core', 'ar-inner'].forEach(cls => {
+    ['ar-shade', 'ar-glow', 'ar-casing', 'ar-core', 'ar-inner'].forEach(cls => {
       g.appendChild(el('path', { class: cls, d }));
     });
     g.appendChild(el('path', { class: 'ar-head', d: headPath(arrow) }));
