@@ -285,6 +285,172 @@ function phHighScore(gameId, value) {
   return current;
 }
 
+// ───────── Kamera: Zoom + Pan ─────────
+// Yoğunlaşan tahtalarda oyuncunun yakınlaşabilmesi gerekiyor. İlk
+// tüketici Arrow (ileri seviyelerde 19+ ok, hücreler küçülüyor); ikinci
+// tüketici olarak flowConnect ve jigsawCard aynı ihtiyaca sahip — §20.3'ün
+// "en az bir başka makul tüketici" şartı bu yüzden karşılanıyor.
+//
+// İKİ ELEMAN gerekir:
+//   viewport — sabit ölçülü, kırpan kap
+//   stage    — viewport'u tamamen dolduran, DÖNÜŞTÜRÜLEN kap
+// İçerik (SVG, canvas, DOM — fark etmez) stage'in içinde durur ve ASLA
+// yeniden çizilmez: tek yaptığımız stage'e bir CSS transform yazmak.
+// Bu yüzden kamera içerik türünden bağımsız.
+//
+// TASARIM NOTLARI
+//  • transform-origin 0 0. Matematiği sadeleştiriyor: ekran = dünya*s + t.
+//    İmleç altındaki noktayı sabit tutmak için t1 = p - (p - t0)*s1/s0.
+//    Merkez orijinle aynı formül ek terimler kazanıyor ve okunmuyor.
+//  • HEDEF ve GÖRÜNEN ayrı. Tekerlek/pinch hedefi zıplatır, rAF döngüsü
+//    göreni hedefe yaklaştırır → "kamera" hissi. Sürükleme sırasında ise
+//    araya yumuşatma girmez (immediate), yoksa parmak içerikten kopar.
+//  • rAF döngüsü hedefe varınca DURUR (§19: amacı biten döngü çalışmaz).
+//  • Viewport ölçüsü ResizeObserver ile ÖNBELLEKLENİR. Her olayda
+//    getBoundingClientRect okumak layout thrashing üretirdi (§19).
+//  • minScale 1: içerik zaten viewport'a sığacak şekilde tasarlandığı
+//    için uzaklaşmaya izin yok — uzaklaşınca kenarlarda boşluk oluşur ve
+//    "kaybolmuş" hissi verir.
+function phCamera(viewport, stage, opts) {
+  opts = opts || {};
+  const MIN = opts.minScale != null ? opts.minScale : 1;
+  const MAX = opts.maxScale != null ? opts.maxScale : 4;
+  const EASE = opts.ease != null ? opts.ease : 0.22;
+  // Tekerlek deltası tarayıcı/cihaz arasında çok değişken; üstel ölçek
+  // hem yönü hem büyüklüğü doğal kılıyor (her "tık" oransal yakınlaşma).
+  const WHEEL_K = opts.wheelStep != null ? opts.wheelStep : 0.0022;
+  const SETTLE = 0.001;              // bundan yakınsa hedefe oturmuş say
+
+  let s = 1, tx = 0, ty = 0;         // hedef
+  let vs = 1, vx = 0, vy = 0;        // görünen (rAF bunu hedefe taşır)
+  let raf = 0, vw = 0, vh = 0;
+  const pointers = new Map();
+  let pinchD = 0;                    // son pinch mesafesi (0 = pinch yok)
+  let pinchMx = 0, pinchMy = 0;      // son pinch orta noktası
+
+  function measure() {
+    const r = viewport.getBoundingClientRect();
+    vw = r.width; vh = r.height;
+  }
+  // Ölçek 1'de öteleme zorunlu olarak 0: içerik viewport'u tam doldurur.
+  // Büyüdükçe kenarların içeri girmemesi için t ∈ [-(boyut*(s-1)), 0].
+  function clamp() {
+    const maxX = vw * (s - 1), maxY = vh * (s - 1);
+    tx = Math.min(0, Math.max(-maxX, tx));
+    ty = Math.min(0, Math.max(-maxY, ty));
+  }
+  function draw() {
+    stage.style.transform =
+      'translate(' + vx + 'px,' + vy + 'px) scale(' + vs + ')';
+  }
+  function tick() {
+    const ds = s - vs, dx = tx - vx, dy = ty - vy;
+    if (Math.abs(ds) < SETTLE && Math.abs(dx) < SETTLE && Math.abs(dy) < SETTLE) {
+      vs = s; vx = tx; vy = ty; draw();
+      raf = 0;                        // hedefe varıldı — döngü kapanır
+      return;
+    }
+    vs += ds * EASE; vx += dx * EASE; vy += dy * EASE;
+    draw();
+    raf = requestAnimationFrame(tick);
+  }
+  function run() { if (!raf) raf = requestAnimationFrame(tick); }
+  function snap() { vs = s; vx = tx; vy = ty; draw(); }
+
+  // p: viewport'a göre imleç konumu. O noktadaki dünya noktası sabit kalır.
+  function zoomAt(nextS, px, py) {
+    const s0 = s;
+    s = Math.min(MAX, Math.max(MIN, nextS));
+    if (s === s0) return;
+    tx = px - (px - tx) * (s / s0);
+    ty = py - (py - ty) * (s / s0);
+    clamp();
+    run();
+  }
+
+  function local(e) {
+    const r = viewport.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+
+  function onWheel(e) {
+    e.preventDefault();
+    const [px, py] = local(e);
+    zoomAt(s * Math.exp(-e.deltaY * WHEEL_K), px, py);
+  }
+
+  function onDown(e) {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) viewport.setPointerCapture(e.pointerId);
+    if (pointers.size === 2) pinchD = 0;   // yeni pinch — ilk ölçümde kur
+  }
+
+  function onMove(e) {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    const prevX = p.x, prevY = p.y;
+    p.x = e.clientX; p.y = e.clientY;
+
+    if (pointers.size === 1) {
+      // Tek parmak/fare: saf pan. Ölçek 1'de clamp zaten sıfırlar, yani
+      // yakınlaşmamışken sürükleme kendiliğinden etkisiz.
+      tx += e.clientX - prevX;
+      ty += e.clientY - prevY;
+      clamp(); snap();                    // 1:1 — araya yumuşatma girmez
+    } else if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const r = viewport.getBoundingClientRect();
+      const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
+      if (pinchD) {
+        // İki parmak hem yakınlaştırır hem taşır: önce orta noktanın
+        // kaydığı kadar pan, sonra o nokta etrafında ölçek.
+        tx += mx - pinchMx; ty += my - pinchMy;
+        zoomAt(s * (d / pinchD), mx, my);
+        snap();
+      }
+      pinchD = d; pinchMx = mx; pinchMy = my;
+    }
+  }
+
+  function onUp(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchD = 0;
+  }
+
+  const ro = new ResizeObserver(() => { measure(); clamp(); snap(); });
+  ro.observe(viewport);
+  measure();
+
+  viewport.addEventListener('wheel', onWheel, { passive: false });
+  viewport.addEventListener('pointerdown', onDown);
+  viewport.addEventListener('pointermove', onMove);
+  viewport.addEventListener('pointerup', onUp);
+  viewport.addEventListener('pointercancel', onUp);
+
+  return {
+    get scale() { return s; },
+    zoomBy(f) { zoomAt(s * f, vw / 2, vh / 2); },
+    // İçerik ölçüsü DEĞİŞTİĞİNDE çağrılır (yeni seviye, yeni tahta oranı).
+    // ResizeObserver bunu kendiliğinden yakalar ama YALNIZCA sayfa render
+    // ediliyorken: RO geri çağrıları da rAF gibi "update the rendering"
+    // adımlarına bağlı. Sekme gizliyken hiç tetiklenmez ve kamera, içerik
+    // oluşmadan önce ölçtüğü bayat boyutla clamp yapar. Tüketici tahtayı
+    // yeniden kurduğunda bunu çağırarak o pencereyi kapatır.
+    remeasure() { measure(); clamp(); snap(); },
+    reset() { s = 1; tx = 0; ty = 0; run(); },
+    destroy() {
+      if (raf) cancelAnimationFrame(raf);
+      ro.disconnect();
+      viewport.removeEventListener('wheel', onWheel);
+      viewport.removeEventListener('pointerdown', onDown);
+      viewport.removeEventListener('pointermove', onMove);
+      viewport.removeEventListener('pointerup', onUp);
+      viewport.removeEventListener('pointercancel', onUp);
+    },
+  };
+}
+
 // ───────── Kaydırma (Swipe) ─────────
 // Oyun-bağımsız yön algılama. 2048 ve Labirent bunu ayrı ayrı, ham
 // biçimde yazıyordu (sabit 30px eşik, eksen kilidi yok); ortak hâle

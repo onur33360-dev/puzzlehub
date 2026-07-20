@@ -6263,6 +6263,12 @@ PuzzleGames.arrowPuzzle = (() => {
   // Kıvılcım ömrü çıkıştan KISA: ok gittikten sonra ortalıkta kalan
   // parıltı, olayın bittiğini geciktirir.
   const SPARK_MS = Math.round(EXIT_MS * 0.62);
+  // Kamera. 3x, en yoğun tahtada (8x10) bir hücreyi rahat dokunulur
+  // kılmaya yetiyor; fazlası tahtanın bağlamını kaybettiriyor.
+  const CAM_MAX_SCALE = 3;
+  // Sürüklemeyi dokunuştan ayıran eşik: bu kadar px'ten fazla kaydıysa
+  // parmak "kamerayı taşıdı" demektir, ok seçmedi.
+  const DRAG_SLOP_PX = 6;
 
   // ───────── Sahne ─────────
   // Atmosfer BİLEREK kısık: göz sürekli tahtayı tarıyor ve arka planda
@@ -6279,8 +6285,9 @@ PuzzleGames.arrowPuzzle = (() => {
   ];
   const HAZE_BLUR_PX = 26;
 
-  let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl;
+  let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl, camera;
   let board, level, cleared, levelTotal, advanceT;
+  let tapX = 0, tapY = 0;          // son pointerdown konumu (sürükleme ayrımı)
 
   function injectCSS() {
     injectStyle('css-arrow', `
@@ -6301,8 +6308,14 @@ PuzzleGames.arrowPuzzle = (() => {
          ikinci adımının ihlali olurdu. */
       .ar-board{position:relative;width:100%;max-width:400px;
         padding:var(--ph-space-3);overflow:hidden;touch-action:manipulation}
-      .ar-svg{position:relative;z-index:1;display:block;width:100%;height:auto;
-        overflow:visible}
+      /* Kamera iki katman ister: viewport KIRPAR, stage ÖLÇEKLENİR.
+         SVG'ye hiç dokunulmaz — yakınlaştırma yeniden çizim değil, tek
+         bir CSS transform. touch-action:none şart: yoksa tarayıcı pinch/
+         pan hareketlerini sayfa kaydırması sanıp bize hiç vermez. */
+      .ar-viewport{position:relative;z-index:1;overflow:hidden;
+        border-radius:var(--ph-radius-md);touch-action:none}
+      .ar-stage{transform-origin:0 0;will-change:transform}
+      .ar-svg{display:block;width:100%;height:auto;overflow:visible}
       .ar-grid{stroke:rgba(180,170,255,.07);stroke-width:.02;fill:none}
 
       /* ── Enerji pusu ──
@@ -6546,6 +6559,11 @@ PuzzleGames.arrowPuzzle = (() => {
     svgEl.appendChild(arrowsEl);
     board.arrows.forEach(a => arrowsEl.appendChild(drawArrow(a)));
     updateHud();
+    // Tahta oranı seviyeden seviyeye değişiyor (5x6 → 8x10), yani
+    // viewport'un yüksekliği de değişiyor. Kamera bunu bilmezse eski
+    // ölçüye göre clamp yapar. Ayrıca yeni seviyeye yakınlaşmış hâlde
+    // başlamak istemiyoruz — oyuncu önce tahtanın tamamını görmeli.
+    if (camera) { camera.reset(); camera.remeasure(); }
   }
 
   function updateHud() {
@@ -6566,8 +6584,16 @@ PuzzleGames.arrowPuzzle = (() => {
   // dolayısıyla serbest bir ok başka bir okun çıkışıyla asla bloke hale
   // gelemez. Kilit koymak dokunuşları sessizce yutar (ok başına 280ms) ve
   // oyun tepkisiz hissettirir. Buraya tekrar kilit EKLEME.
+  // Kamera sürüklemesi tıklama SAYILMAZ. Tarayıcı sürükleme sonrası da
+  // click üretir; basma noktasıyla bırakma noktası arasındaki mesafe
+  // eşiği aşmışsa parmak kamerayı taşımıştır, ok seçmemiştir.
+  // Ayrı bir "hareket etti" bayrağı tutmaya gerek yok: click olayının
+  // kendi koordinatları bırakma noktasını zaten veriyor.
+  function onPointerDown(e) { tapX = e.clientX; tapY = e.clientY; }
+
   function onBoardTap(e) {
     if (cleared) return;
+    if (Math.hypot(e.clientX - tapX, e.clientY - tapY) > DRAG_SLOP_PX) return;
     const g = e.target.closest('.ar-arrow');
     if (!g) return;
     // Zaten çıkmakta olan ok Map'ten silinmiştir → ikinci dokunuş düşer.
@@ -6790,13 +6816,21 @@ PuzzleGames.arrowPuzzle = (() => {
       '<div class="ph-capsule ar-hud" data-role="hud"></div>' +
       '<div class="ph-dais ar-board">' +
         '<div class="ar-haze" data-role="haze" aria-hidden="true"></div>' +
-        '<svg class="ar-svg" data-role="svg"></svg>' +
+        '<div class="ar-viewport" data-role="viewport">' +
+          '<div class="ar-stage" data-role="stage">' +
+            '<svg class="ar-svg" data-role="svg"></svg>' +
+          '</div>' +
+        '</div>' +
       '</div>';
     container.appendChild(wrapEl);
     hudEl = wrapEl.querySelector('[data-role="hud"]');
     svgEl = wrapEl.querySelector('[data-role="svg"]');
     buildHaze(wrapEl.querySelector('[data-role="haze"]'));
+    camera = phCamera(wrapEl.querySelector('[data-role="viewport"]'),
+                      wrapEl.querySelector('[data-role="stage"]'),
+                      { maxScale: CAM_MAX_SCALE });
     addEv(svgEl, 'click', onBoardTap);
+    addEv(svgEl, 'pointerdown', onPointerDown);
     startLevel();
   }
 
@@ -6805,6 +6839,9 @@ PuzzleGames.arrowPuzzle = (() => {
     // Seviye geçiş zamanlayıcısı: oyundan çıkılırsa tetiklenmemeli,
     // yoksa kopmuş DOM üzerine yeni bir tahta kurar.
     if (advanceT) { clearTimeout(advanceT); advanceT = null; }
+    // Kamera kendi rAF döngüsünü ve ResizeObserver'ını tutuyor —
+    // sökülmezse oyundan çıkıldıktan sonra da yaşar.
+    if (camera) { camera.destroy(); camera = null; }
     if (atmoEl) { atmoEl.remove(); atmoEl = null; }
     if (container) container.classList.remove('ph-scene', 'ar-scene');
   }
