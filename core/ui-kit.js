@@ -368,8 +368,15 @@ function phCamera(viewport, stage, opts) {
   function run() { if (!raf) raf = requestAnimationFrame(tick); }
   function snap() { vs = s; vx = tx; vy = ty; draw(); }
 
+  // Hedef ölçek her değiştiğinde tüketiciye haber ver — dıştaki bir
+  // slider'ı senkronda tutmak için. GÖRÜNEN değil HEDEF bildiriliyor:
+  // görünen her karede değişir ve slider'ı titretir; hedef ise jest
+  // başına bir kez. Slider'ın kendi tetiklediği değişimde geri
+  // bildirim döngüsü olmasın diye çağıran `silent` geçebilir.
+  function notify() { if (opts.onChange) opts.onChange(s, MIN, MAX); }
+
   // p: viewport'a göre imleç konumu. O noktadaki dünya noktası sabit kalır.
-  function zoomAt(nextS, px, py) {
+  function zoomAt(nextS, px, py, silent) {
     const s0 = s;
     s = Math.min(MAX, Math.max(MIN, nextS));
     if (s === s0) return;
@@ -377,6 +384,7 @@ function phCamera(viewport, stage, opts) {
     ty = py - (py - ty) * (s / s0);
     clamp();
     run();
+    if (!silent) notify();
   }
 
   function onWheel(e) {
@@ -458,7 +466,13 @@ function phCamera(viewport, stage, opts) {
 
   return {
     get scale() { return s; },
+    get min() { return MIN; },
+    get max() { return MAX; },
     zoomBy(f) { zoomAt(s * f, vw / 2, vh / 2); },
+    // Slider için: mutlak ölçeğe, viewport MERKEZİNE göre zoom. silent=true
+    // ile onChange susturulur — slider zaten değeri bildiği için kendine
+    // geri sinyal göndermesini istemeyiz (sonsuz döngü/titreme olurdu).
+    setScale(target, silent) { zoomAt(target, vw / 2, vh / 2, silent); },
     // İçerik ölçüsü DEĞİŞTİĞİNDE çağrılır (yeni seviye, yeni tahta oranı).
     // ResizeObserver bunu kendiliğinden yakalar ama YALNIZCA sayfa render
     // ediliyorken: RO geri çağrıları da rAF gibi "update the rendering"
@@ -466,7 +480,7 @@ function phCamera(viewport, stage, opts) {
     // oluşmadan önce ölçtüğü bayat boyutla clamp yapar. Tüketici tahtayı
     // yeniden kurduğunda bunu çağırarak o pencereyi kapatır.
     remeasure() { measure(); clamp(); snap(); },
-    reset() { s = 1; tx = 0; ty = 0; run(); },
+    reset() { s = 1; tx = 0; ty = 0; run(); notify(); },
     destroy() {
       if (raf) cancelAnimationFrame(raf);
       ro.disconnect();

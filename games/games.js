@@ -6343,22 +6343,125 @@ PuzzleGames.arrowPuzzle = (() => {
   let container, wrapEl, svgEl, arrowsEl, atmoEl, hudEl, camera, flashEl;
   let board, level, cleared, levelTotal, advanceT;
   let lives, dead;                 // dead: canlar bitti, girdi kapalı
+  let diaEl, gridBtn, zoomSlider, gridOn, hintCooling;
+  const GRID_KEY = 'ph_arrow_grid';
+  const HINT_MS = 2200;            // ipucu vurgusunun ömrü
+  const HINT_COOLDOWN_MS = 600;    // reklam sonrası çift tetikleme koruması
   let tapX = 0, tapY = 0;          // son pointerdown konumu (sürükleme ayrımı)
 
   function injectCSS() {
     injectStyle('css-arrow', `
-      #game-container.ar-scene{ --ar-ink:#E8ECFF; }
+      /* Kalpler menekşe (görseldeki gibi, §3.4 kırmızısı değil): can bu
+         oyunun ENERJİSİ, kanallarla aynı ailede. .ph-heart tüketenin
+         token'ından renk aldığı için burada override ediliyor. */
+      #game-container.ar-scene{ --ar-ink:#E8ECFF;
+        --ph-heart-on:var(--ph-jewel-1-highlight);
+        --ph-heart-glow:var(--ph-jewel-1-glow); }
 
       .ar-wrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;
         justify-content:center;gap:var(--ph-space-4);width:100%;max-width:430px;min-height:100%;
         margin:0 auto;padding:var(--ph-space-4) var(--ph-space-3)}
       .ar-wrap *{box-sizing:border-box}
 
-      /* HUD ortak kapsüldür (.ph-capsule) — tipografi/zemin reçetesi orada.
-         Kalpler ortak .ph-lives bileşeni; burada yalnızca yerleşim var. */
-      .ar-top{display:flex;flex-direction:column;align-items:center;
+      /* ════════ HUD ════════
+         Barlar tahtanın KARDEŞİ (üstünde değil) — "HUD tahtayı örtmez"
+         kuralı akış düzeniyle garanti. Hepsi cam + neon, minimal.
+         Ortak reçeteler (.ph-capsule, .ph-lives) korunuyor; buradakiler
+         yalnızca Arrow'a özgü yerleşim ve iki yeni kontrol tipi. */
+
+      /* ── Üst bar: kimlik + elmas + ayarlar ── */
+      .ar-topbar{display:flex;align-items:center;justify-content:space-between;
+        width:100%;padding:0 var(--ph-space-1)}
+      .ar-brand{display:flex;flex-direction:column;line-height:1;
+        font:800 20px/1 var(--ph-font-display);letter-spacing:.14em;
+        color:var(--ar-ink);
+        text-shadow:0 0 18px var(--ph-jewel-1-glow), 0 2px 6px rgba(4,6,22,.6)}
+      .ar-brand-sup{font:700 8px/1 'Fraunces',serif;letter-spacing:.34em;
+        color:rgba(200,188,255,.55);margin-bottom:3px}
+      .ar-topbar-right{display:flex;align-items:center;gap:var(--ph-space-2)}
+
+      /* Elmas: ortak başarı-altını (§3.4) — sayaç, dekor değil, o yüzden
+         izinli. Cam hap içinde. */
+      .ar-diamonds{display:inline-flex;align-items:center;gap:6px;
+        padding:6px 12px;border-radius:var(--ph-radius-full);
+        background:var(--ph-bg-glass);border:1px solid rgba(180,165,255,.2);
+        box-shadow:inset 0 1px 0 rgba(220,215,255,.15)}
+      .ar-dia-ico{color:var(--ph-success);font-size:12px;
+        filter:drop-shadow(0 0 6px var(--ph-success-glow))}
+      .ar-dia-num{font:800 14px/1 var(--ph-font-display);
+        font-variant-numeric:var(--ph-variant-numeral);color:var(--ar-ink)}
+
+      /* İkon butonu — dişli. Soft-solid değil, sahneye ait cam. */
+      .ar-icon-btn{width:38px;height:38px;border-radius:var(--ph-radius-full);
+        display:grid;place-items:center;font-size:17px;cursor:pointer;
+        background:var(--ph-bg-glass);border:1px solid rgba(180,165,255,.2);
+        box-shadow:inset 0 1px 0 rgba(220,215,255,.15);
+        color:var(--ar-ink);transition:transform var(--ph-duration-micro) ease-out,
+                                       background var(--ph-duration-fast) var(--ph-ease-standard)}
+      .ar-icon-btn:active{transform:scale(.92);background:rgba(126,110,220,.28)}
+
+      /* ── Durum: seviye kapsülü + kalpler ── */
+      .ar-status{display:flex;flex-direction:column;align-items:center;
         gap:var(--ph-space-2)}
       .ar-hud-sep{opacity:.45}
+
+      /* ── Alt aksiyon barı ── */
+      .ar-actionbar{display:flex;align-items:center;gap:var(--ph-space-2);
+        width:100%;max-width:400px}
+      .ar-action{display:inline-flex;align-items:center;gap:7px;
+        padding:9px 14px;border-radius:var(--ph-radius-full);cursor:pointer;
+        font:700 13px/1 var(--ph-font-display);color:var(--ar-ink);
+        background:var(--ph-bg-glass);border:1px solid rgba(180,165,255,.2);
+        box-shadow:inset 0 1px 0 rgba(220,215,255,.15);
+        transition:transform var(--ph-duration-micro) ease-out,
+                   background var(--ph-duration-fast) var(--ph-ease-standard)}
+      .ar-action:active{transform:scale(.94)}
+      .ar-action-ico{font-size:15px}
+      /* Reklam rozeti: ipucunun bedelinin reklam olduğunu söyler */
+      .ar-action-tag{font-size:11px;opacity:.7;margin-left:-2px}
+      /* İpucu vurgulu (dikkat çeken tek aksiyon): hafif altın kenar */
+      .ar-action-hint{border-color:rgba(251,191,36,.3)}
+      /* Izgara açık/kapalı durumu — basılı düğme mantığı */
+      .ar-action-grid{opacity:.55}
+      .ar-action-grid.on{opacity:1;border-color:rgba(158,140,232,.45);
+        background:rgba(126,110,220,.22)}
+
+      /* Zoom: aksiyon barının esneyen ortası */
+      .ar-zoom{flex:1;display:flex;align-items:center;gap:8px;
+        padding:0 var(--ph-space-2)}
+      .ar-zoom-btn{width:28px;height:28px;flex:none;border-radius:var(--ph-radius-full);
+        display:grid;place-items:center;cursor:pointer;
+        font:700 17px/1 var(--ph-font-display);color:var(--ar-ink);
+        background:var(--ph-bg-glass);border:1px solid rgba(180,165,255,.2)}
+      .ar-zoom-btn:active{transform:scale(.9)}
+      /* Slider: gövdesi cam oluk, dolgusu neon menekşe, başparmak parlayan orb */
+      .ar-zoom-slider{flex:1;-webkit-appearance:none;appearance:none;height:4px;
+        border-radius:var(--ph-radius-full);cursor:pointer;
+        background:linear-gradient(90deg,var(--ph-jewel-1-base),var(--ph-jewel-1-highlight));
+        outline:none}
+      .ar-zoom-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+        width:16px;height:16px;border-radius:50%;background:var(--ph-jewel-1-highlight);
+        box-shadow:0 0 10px var(--ph-jewel-1-glow), 0 1px 3px rgba(4,6,22,.6);
+        border:2px solid #fff2}
+      .ar-zoom-slider::-moz-range-thumb{width:16px;height:16px;border:none;
+        border-radius:50%;background:var(--ph-jewel-1-highlight);
+        box-shadow:0 0 10px var(--ph-jewel-1-glow)}
+
+      /* ── Ayarlar popover: küçük cam panel, dişlinin altında ── */
+      .ar-pop{position:absolute;top:52px;right:var(--ph-space-3);z-index:5;
+        display:flex;flex-direction:column;gap:2px;padding:6px;min-width:168px;
+        border-radius:var(--ph-radius-md);
+        background:rgba(28,24,68,.86);backdrop-filter:blur(10px);
+        border:1px solid rgba(180,165,255,.24);
+        box-shadow:var(--ph-shadow-3), inset 0 1px 0 rgba(205,195,255,.18);
+        animation:arPop var(--ph-duration-fast) var(--ph-ease-decel)}
+      @keyframes arPop{from{opacity:0;transform:translateY(-6px) scale(.96)}
+        to{opacity:1;transform:none}}
+      .ar-pop-item{display:flex;align-items:center;gap:10px;padding:10px 12px;
+        border-radius:var(--ph-radius-sm);cursor:pointer;text-align:left;
+        font:600 13px/1 var(--ph-font-body,'Inter'),sans-serif;color:var(--ar-ink);
+        background:transparent;border:none;transition:background var(--ph-duration-micro) ease}
+      .ar-pop-item:active{background:rgba(126,110,220,.3)}
 
       /* Tahta ortak cam kaidedir (.ph-dais): gradyan, kenar, anahtar ışık
          ve gölge oradan gelir. Burada yalnızca Arrow'a özgü olan kalıyor —
@@ -6382,7 +6485,11 @@ PuzzleGames.arrowPuzzle = (() => {
       .ar-viewport::after{content:'';position:absolute;inset:0;z-index:2;
         pointer-events:none;border-radius:inherit;
         box-shadow:inset 0 0 var(--ph-space-10) var(--ph-space-4) rgba(4,6,22,.55)}
-      .ar-grid{stroke:rgba(180,170,255,.07);stroke-width:.02;fill:none}
+      .ar-grid{stroke:rgba(180,170,255,.07);stroke-width:.02;fill:none;
+        transition:opacity var(--ph-duration-fast) var(--ph-ease-standard)}
+      /* Izgara kapalı: çizgiler solar ama DOM'da kalır (yeniden kurmak
+         yerine görünürlük — toggle anında ve ucuz). */
+      .ar-svg.ar-nogrid .ar-grid{opacity:0}
 
       /* ── Tahta parlaması ──
          Başarılı çıkışta tahtanın bir an aydınlanması. Seviye başına ~19
@@ -6518,6 +6625,24 @@ PuzzleGames.arrowPuzzle = (() => {
         100%{transform:translate(var(--ar-sx),var(--ar-sy)) scale(.2);opacity:0}
       }
 
+      /* ── İPUCU ──
+         Reklamla açılan vurgu: serbest bir ok nefes alır gibi parlar ve
+         bir enerji halkası kalkışını "önizler". Süreli — çözümü ekranda
+         bırakmaz, yalnızca gözü doğru yere çeker. */
+      @keyframes arHintPulse{
+        0%,100%{stroke:var(--ph-jewel-1-highlight)}
+        50%{stroke:#fff}
+      }
+      .ar-arrow.hinted .ar-inner{animation:arHintPulse 700ms var(--ph-ease-standard) infinite}
+      .ar-arrow.hinted .ar-glow{opacity:.95}
+      .ar-hint-ring{fill:none;stroke:var(--ph-jewel-1-highlight);stroke-width:.05;
+        pointer-events:none;transform-origin:center;transform-box:fill-box;
+        animation:arHintRing 900ms var(--ph-ease-decel) infinite}
+      @keyframes arHintRing{
+        0%{r:.15;opacity:.9;stroke-width:.08}
+        100%{r:.85;opacity:0;stroke-width:.01}
+      }
+
       /* ── BLOKE ──
          Dokunulan ok sarsılır VE yolu kızıl çizilir VE engelleyen ok
          parlar. Üçü birlikte "neden olmadığını" anlatır; yalnızca
@@ -6565,6 +6690,10 @@ PuzzleGames.arrowPuzzle = (() => {
         /* İz ve kıvılcım tamamen kalkar: ikisi de saf süs, hiçbir oyun
            bilgisi taşımıyorlar. Çıkışın kendisi (ok gitti) duruyor. */
         .ar-wake,.ar-spark{display:none}
+        /* İpucu bilgi taşıyor (hangi ok serbest) — kalır ama titremez:
+           sabit parlaklık + halka yok. */
+        .ar-arrow.hinted .ar-inner{animation:none;stroke:#fff}
+        .ar-hint-ring{display:none}
         /* Parlama kalıyor ama animasyonsuz: tek kare bile "oldu" der ve
            bu bilgi taşıyor — süsleme değil, geri bildirim. */
         .ar-flash.on{animation-duration:var(--ph-duration-micro)}
@@ -6964,6 +7093,115 @@ PuzzleGames.arrowPuzzle = (() => {
     });
   }
 
+  // ───────── HUD kontrolleri ─────────
+  function wireControls() {
+    // Zoom: butonlar oransal, slider mutlak. İkisi de kamerayı sürer;
+    // kamera onChange ile slider'ı geri senkronlar (butonla değişince de).
+    addEv(wrapEl.querySelector('[data-role="zoom-in"]'), 'click', () => camera.zoomBy(1.4));
+    addEv(wrapEl.querySelector('[data-role="zoom-out"]'), 'click', () => camera.zoomBy(1 / 1.4));
+    // silent=true: slider zaten değeri biliyor, kameranın ona geri
+    // sinyal göndermesi titreme/döngü yaratır.
+    addEv(zoomSlider, 'input', () => camera.setScale(parseFloat(zoomSlider.value), true));
+
+    addEv(gridBtn, 'click', toggleGrid);
+    addEv(wrapEl.querySelector('[data-role="hint"]'), 'click', requestHint);
+    addEv(wrapEl.querySelector('[data-role="settings"]'), 'click', openSettings);
+  }
+
+  // Kamera hedef ölçeği değiştikçe (pinch/tekerlek/buton) slider'ı takip
+  // ettir — kamera tek doğruluk kaynağı, slider onun görüntüsü.
+  function syncZoomSlider(s) {
+    if (zoomSlider) zoomSlider.value = s;
+  }
+
+  function updateDiamonds() {
+    if (diaEl && typeof DiamondSystem !== 'undefined') {
+      diaEl.textContent = DiamondSystem.get().toLocaleString();
+    }
+  }
+
+  // ── Izgara aç/kapa ──
+  // Tercih kalıcı: oyuncu bir kez kapattıysa her seviyede tekrar açmasın.
+  function loadGridPref() {
+    try { return localStorage.getItem(GRID_KEY) !== '0'; } catch (e) { return true; }
+  }
+  function applyGridPref() {
+    if (gridBtn) {
+      gridBtn.classList.toggle('on', gridOn);
+      gridBtn.setAttribute('aria-pressed', gridOn ? 'true' : 'false');
+    }
+    if (svgEl) svgEl.classList.toggle('ar-nogrid', !gridOn);
+  }
+  function toggleGrid() {
+    gridOn = !gridOn;
+    try { localStorage.setItem(GRID_KEY, gridOn ? '1' : '0'); } catch (e) {}
+    applyGridPref();
+    GameAudio.play('tap');
+    GameAudio.haptic('micro');
+  }
+
+  // ── İpucu (reklamlı) ──
+  // Ödüllü reklam → serbest bir oku kısa süre vurgula. Reklam olmadan
+  // ipucu YOK — can devamıyla aynı ekonomi, elmas hiç devreye girmiyor.
+  // Vurgulanan ok, oyuncunun dokunabileceği (canExit true) gerçek bir
+  // hamle: ipucu "nereye bakacağını" söyler, çözümü değil.
+  function requestHint() {
+    if (dead || cleared || hintCooling) return;
+    const free = freeArrows(board);
+    if (!free.length) { showToast('✨ Şu an serbest ok yok'); return; }
+    // Reklam altyapısı yoksa (test) doğrudan göster — akış kilitlenmesin.
+    if (typeof RewardedAd === 'undefined') { revealHint(); return; }
+    RewardedAd.show({ icon: '💡', text: 'İpucu Göster' }, revealHint);
+  }
+  function revealHint() {
+    hintCooling = true;
+    setTimeout(() => { hintCooling = false; }, HINT_COOLDOWN_MS);
+    const free = freeArrows(board);
+    if (!free.length) return;
+    // İlk serbest ok — deterministik ve sakin (rastgele parıltı değil).
+    const arrow = free[0];
+    const g = arrowsEl.querySelector('.ar-arrow[data-id="' + arrow.id + '"]');
+    if (!g) return;
+    g.classList.remove('hinted'); void g.getBBox();
+    g.classList.add('hinted');
+    updateDiamonds();                            // reklam ekonomisi HUD'a yansısın
+    // Tahtanın kendi koordinatında bir enerji halkası — okun kalkışını
+    // "önizler" gibi. SVG içinde olduğu için zoom'da da doğru yerde.
+    const c = cellsOf(arrow)[0];
+    const ring = el('circle', { class: 'ar-hint-ring',
+      cx: c[0] + .5, cy: c[1] + .5, r: 0.1 });
+    arrowsEl.appendChild(ring);
+    GameAudio.play('star');
+    GameAudio.haptic('soft');
+    setTimeout(() => { g.classList.remove('hinted'); ring.remove(); }, HINT_MS);
+  }
+
+  // ── Ayarlar ──
+  // Yeni bir tam-ekran modal DEĞİL: butona tutturulu küçük bir cam
+  // popover. İçinde oyun-içi anlamlı iki ayar — ses ve menüye dönüş.
+  function openSettings() {
+    const existing = wrapEl.querySelector('.ar-pop');
+    if (existing) { existing.remove(); return; }   // ikinci tık kapatır
+    GameAudio.play('tap');
+    const pop = document.createElement('div');
+    pop.className = 'ar-pop';
+    const label = () => GameAudio.muted
+      ? '<span>🔇</span> Ses Kapalı' : '<span>🔊</span> Ses Açık';
+    pop.innerHTML =
+      '<button class="ar-pop-item" data-act="sound">' + label() + '</button>' +
+      '<button class="ar-pop-item" data-act="exit"><span>←</span> Menüye Dön</button>';
+    wrapEl.querySelector('[data-role="settings"]').after(pop);
+    const soundBtn = pop.querySelector('[data-act="sound"]');
+    addEv(soundBtn, 'click', () => {
+      GameAudio.toggleMute();
+      soundBtn.innerHTML = label();        // popover açık kalır, durum güncellenir
+    });
+    addEv(pop.querySelector('[data-act="exit"]'), 'click', () => {
+      pop.remove();
+      if (typeof exitGame === 'function') exitGame();
+    });
+  }
+
   // ───────── Yaşam döngüsü ─────────
   function init(c) {
     container = c;
@@ -6974,10 +7212,28 @@ PuzzleGames.arrowPuzzle = (() => {
     atmoEl = phAtmosphere(container, ATMO);
     wrapEl = document.createElement('div');
     wrapEl.className = 'ar-wrap';
+    // DÜZEN (mobil dikey — görselin yatay masaüstü kurgusu uyarlandı):
+    //   üst bar   : ARROW kimliği · elmas + ayarlar
+    //   durum     : Seviye kapsülü · kalpler
+    //   tahta     : cam kaide (odak — hiçbir HUD katmanı üstüne binmez)
+    //   alt bar   : İpucu · zoom slider · Izgara
+    // Barlar tahtanın DIŞINDA (kardeşi), üstünde değil: "HUD asla tahtanın
+    // önüne geçmeyecek" kuralı bununla yapısal olarak garanti — konum ya
+    // da z-index hilesi değil, akış düzeni.
     wrapEl.innerHTML =
-      '<div class="ar-top">' +
+      '<div class="ar-topbar">' +
+        '<div class="ar-brand"><span class="ar-brand-sup">PUZZLEHUB</span>ARROW</div>' +
+        '<div class="ar-topbar-right">' +
+          '<div class="ar-diamonds" data-role="dia-wrap">' +
+            '<span class="ar-dia-ico">◆</span>' +
+            '<span class="ar-dia-num" data-role="dia">0</span>' +
+          '</div>' +
+          '<button class="ar-icon-btn" data-role="settings" aria-label="Ayarlar">⚙</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ar-status">' +
         '<div class="ph-capsule ar-hud" data-role="hud"></div>' +
-        '<div data-role="lives"></div>' +
+        '<div class="ar-lives" data-role="lives"></div>' +
       '</div>' +
       '<div class="ph-dais ar-board">' +
         '<div class="ar-haze" data-role="haze" aria-hidden="true"></div>' +
@@ -6987,11 +7243,31 @@ PuzzleGames.arrowPuzzle = (() => {
             '<svg class="ar-svg" data-role="svg"></svg>' +
           '</div>' +
         '</div>' +
+      '</div>' +
+      '<div class="ar-actionbar">' +
+        '<button class="ar-action ar-action-hint" data-role="hint">' +
+          '<span class="ar-action-ico">💡</span>' +
+          '<span class="ar-action-lbl">İpucu</span>' +
+          '<span class="ar-action-tag">📺</span>' +
+        '</button>' +
+        '<div class="ar-zoom" data-role="zoom">' +
+          '<button class="ar-zoom-btn" data-role="zoom-out" aria-label="Uzaklaş">−</button>' +
+          '<input class="ar-zoom-slider" data-role="zoom-slider" type="range" ' +
+                 'min="1" max="' + CAM_MAX_SCALE + '" step="0.01" value="1" aria-label="Yakınlaştır">' +
+          '<button class="ar-zoom-btn" data-role="zoom-in" aria-label="Yakınlaş">+</button>' +
+        '</div>' +
+        '<button class="ar-action ar-action-grid on" data-role="grid" aria-pressed="true">' +
+          '<span class="ar-action-ico">#</span>' +
+          '<span class="ar-action-lbl">Izgara</span>' +
+        '</button>' +
       '</div>';
     container.appendChild(wrapEl);
     hudEl = wrapEl.querySelector('[data-role="hud"]');
     svgEl = wrapEl.querySelector('[data-role="svg"]');
     flashEl = wrapEl.querySelector('[data-role="flash"]');
+    diaEl = wrapEl.querySelector('[data-role="dia"]');
+    gridBtn = wrapEl.querySelector('[data-role="grid"]');
+    zoomSlider = wrapEl.querySelector('[data-role="zoom-slider"]');
     lives.mount(wrapEl.querySelector('[data-role="lives"]'));
     buildHaze(wrapEl.querySelector('[data-role="haze"]'));
     camera = phCamera(wrapEl.querySelector('[data-role="viewport"]'),
@@ -6999,7 +7275,12 @@ PuzzleGames.arrowPuzzle = (() => {
                       // Eşik TEK kaynaktan: kameranın "bu bir sürükleme"
                       // kararı ile oyunun "bu dokunuş sayılmaz" kararı
                       // ayrışırsa arada ne pan eden ne ok seçen ölü bant kalır.
-                      { maxScale: CAM_MAX_SCALE, dragStart: DRAG_SLOP_PX });
+                      { maxScale: CAM_MAX_SCALE, dragStart: DRAG_SLOP_PX,
+                        onChange: syncZoomSlider });
+    wireControls();
+    updateDiamonds();
+    gridOn = loadGridPref();
+    applyGridPref();
     addEv(svgEl, 'click', onBoardTap);
     addEv(svgEl, 'pointerdown', onPointerDown);
     startLevel();
