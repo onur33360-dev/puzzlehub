@@ -101,7 +101,18 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; PuzzleHub is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked.
 - **`flowConnect` has a polished demo animation but no real game behind it.** Marked `playable:false` on purpose — a backlog item, not an oversight to quietly complete. (`waterSort` and `arrowPuzzle` were built earlier; `jigsawCard` is in progress, see below.)
-- **`jigsawCard` (Resim Kaydır) is a sliding puzzle being built in phases, and its registration is DELIBERATELY INCOMPLETE.** Phase 1 shipped the engine only — no theme, no image, no animation, so the CSS is bare on purpose. It is registered in `GAME_MAP` (app.js) and `GAME_NAME_MAP` (reels.js) so `playGameById('jigsawCard')` works for testing, but **not** in `PUZZLE_GAMES` (home screen) and still `playable:false` in `REEL_GAMES`. Those two open in Phase 3 once the theme lands — showing players an unstyled board would be worse than not showing it. Don't "fix" the missing registrations before then. Phases: 1 engine · 2 image system (CSS `background-position`, no canvas) · 3 PuzzleHub theme · 4 polish · 5 content/scale.
+- **`jigsawCard` (Resim Kaydır) tiles must stay exactly `100/N%` wide.** The image is split
+  with `background-position` percentages divided by **N-1**, not N, and that math assumes the
+  tile box is exactly one Nth of the board. Giving tiles a visual gap by shrinking the box
+  breaks alignment — the gap comes from `border-radius`, and the win state removes it so the
+  photo becomes seamless. Phases 1–3 (engine, image + level system, theme) are done; 4
+  (polish) and 5 (content/scale) are not. Pool policy and the review page live in
+  `docs/GAMES/SLIDING_PUZZLE.md` — **no image ships without being approved by eye**: of the
+  first 49 candidates every one returned HTTP 200 and 7 still had to be cut.
+- **`.slp-board-wrap` uses `::after` for its neon frame, never `::before`.** That div is also
+  a `.ph-dais`, and `.ph-dais::before` is the platform's top key light. Writing the frame to
+  `::before` collides with it and the frame renders along the top edge only — this happened
+  and was caught in review.
 - **`phCamera` must NOT call `setPointerCapture` on pointerdown** — only once a drag
   actually starts (movement past `dragStart`). Capture retargets the subsequent `click` to
   the **capturing element**, and since the camera's viewport is an *ancestor* of the

@@ -7621,7 +7621,7 @@ PuzzleGames.arrowPuzzle = (() => {
 PuzzleGames.jigsawCard = (() => {
   const P = 'slp';                    // CSS öneki — repoda kullanılmıyor
   const SIZES = [3, 4, 5];
-  let container, wrapEl, boardEl, movesEl, timeEl, levelEl, goalEl;
+  let container, wrapEl, boardEl, movesEl, timeEl, levelEl, goalEl, atmoEl;
   let N = 3, board = null, moves = 0, won = false;
   let startedAt = 0, timerId = 0, seed = null;
   let level = 1, image = null, imageOk = false;
@@ -7815,45 +7815,109 @@ PuzzleGames.jigsawCard = (() => {
   }
 
   // ═══════════ RENDER (Faz 1: çıplak) ═══════════
+  // ═══════════ MAGIC NIGHT TEMASI (Faz 3) ═══════════
+  // Sahne, kaide, kapsül ve ikon butonlar PLATFORMDAN geliyor
+  // (.ph-scene / .ph-dais / .ph-capsule / .ph-icon-btn). Burada yalnızca
+  // bu oyuna ÖZGÜ olan var — reçeteyi kopyalamak DESIGN_SYSTEM §24'ün
+  // ihlali olurdu.
+  //
+  // Bu oyunun tek gerçek yeniliği: PARÇA. Fotoğraf taşıyan, aralıklı,
+  // kaydırılabilir bir yüzey. Diğer oyunlarda karşılığı yok.
   function css() {
     return '' +
-      '.' + P + '-wrap{display:flex;flex-direction:column;align-items:center;' +
-        'gap:12px;width:100%;max-width:460px;margin:0 auto;padding:8px}' +
+      '.' + P + '-wrap{position:relative;z-index:1;display:flex;flex-direction:column;' +
+        'align-items:center;justify-content:center;gap:var(--ph-space-3);' +
+        'width:100%;max-width:430px;min-height:100%;margin:0 auto;' +
+        'padding:var(--ph-space-4) var(--ph-space-3)}' +
       '.' + P + '-wrap *{box-sizing:border-box}' +
-      '.' + P + '-hud{display:flex;align-items:center;gap:16px;' +
-        'font:700 14px/1 system-ui,sans-serif}' +
-      '.' + P + '-bar{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}' +
-      '.' + P + '-btn{padding:7px 12px;border-radius:8px;border:1px solid #8884;' +
-        'background:#0002;color:inherit;font:700 13px/1 system-ui,sans-serif;cursor:pointer}' +
-      '.' + P + '-btn[aria-pressed="true"]{background:#8886}' +
-      // Tahta KARE ve akışkan: aspect-ratio responsive'ı bedavaya getiriyor.
-      // Parçalar YÜZDE ile konumlandığı için yeniden ölçüm hiç gerekmiyor.
+
+      // ── HUD: tek cam kapsül, üç ölçü ──
+      '.' + P + '-hud{display:flex;align-items:center;gap:var(--ph-space-4)}' +
+      '.' + P + '-stat{display:flex;flex-direction:column;align-items:center;gap:2px}' +
+      '.' + P + '-stat b{font:600 17px/1 var(--ph-font-display,Fraunces),serif;' +
+        'font-variant-numeric:var(--ph-variant-numeral);' +
+        'text-shadow:0 0 18px rgba(150,120,235,.55)}' +
+      '.' + P + '-stat span{font:700 9px/1 var(--ph-font-body,Inter),sans-serif;' +
+        'letter-spacing:.12em;opacity:.55;text-transform:uppercase}' +
+
+      // ── Tahta: kaide + NEON ÇERÇEVE ──
+      // Çerçeve ::before ile kaidenin DIŞINA taşıyor; maketteki ışıyan
+      // kenar bu. Tahtanın kendisi .ph-dais, gradyanı oradan alıyor.
+      '.' + P + '-board-wrap{position:relative;width:100%;max-width:400px;' +
+        'padding:var(--ph-space-3);border-radius:var(--ph-radius-lg)}' +
+      // ::after ŞART, ::before DEĞİL: bu div aynı zamanda .ph-dais ve
+      // platformun üst anahtar ışığı .ph-dais::before'u kullanıyor.
+      // ::before'a yazınca ikisi çakışıyor ve çerçeve yalnızca üstte
+      // görünüyordu — yaşandı, düzeltildi.
+      '.' + P + '-board-wrap::after{content:"";position:absolute;inset:-1.5px;' +
+        'border-radius:inherit;padding:1.5px;pointer-events:none;' +
+        'background:linear-gradient(135deg,#5b8cff,#a855f7 45%,#ec4899);' +
+        '-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);' +
+        '-webkit-mask-composite:xor;mask-composite:exclude;' +
+        'opacity:.85;filter:drop-shadow(0 0 10px rgba(168,85,247,.45))}' +
       '.' + P + '-board{position:relative;width:100%;aspect-ratio:1;' +
-        'border:1px solid #8884;border-radius:10px;overflow:hidden;' +
-        'touch-action:manipulation;user-select:none}' +
-      // Konum transform ile: Faz 4'te animasyon tek satır transition olacak.
-      // left/top olsaydı her hamle layout tetiklerdi.
-      // HEDEF GÖRSEL: oyuncu neyi kurduğunu bilmeli. Bu olmadan 4x4 ve
-      // üstü tahtalarda oyun "hangi parça nereye" bilmecesine dönüşüyor.
-      '.' + P + '-goal{display:flex;align-items:center;gap:8px;' +
-        'font:700 12px/1 system-ui,sans-serif;opacity:.85}' +
-      '.' + P + '-goal i{width:56px;height:56px;border-radius:8px;flex:none;' +
-        'border:1px solid #8886;background:#0003 center/cover no-repeat}' +
+        'border-radius:var(--ph-radius-md);overflow:hidden;' +
+        'touch-action:manipulation;user-select:none;' +
+        'background:rgba(7,11,30,.55);' +
+        'box-shadow:inset 0 0 var(--ph-space-10) var(--ph-space-4) rgba(4,6,22,.5)}' +
+
+      // ── PARÇA ──
+      // Kutu TAM 100/N%: background-position matematiği buna dayanıyor,
+      // bozulursa hizalama gider. Aralık transform'daki scale ile
+      // veriliyor, kutu ölçüsüyle değil.
       '.' + P + '-tile{position:absolute;top:0;left:0;display:flex;' +
         'align-items:center;justify-content:center;' +
-        'font:800 clamp(14px,5vw,28px)/1 system-ui,sans-serif;' +
-        'background:#5b6cff center/cover no-repeat;color:#fff;' +
-        'border:1px solid #0003;cursor:pointer;will-change:transform}' +
-      '.' + P + '-tile[data-movable="0"]{cursor:default;opacity:.9}' +
-      // Resim varken numara KÖŞEDE küçük bir rozet: hedef yeri gösterir
-      // ama fotoğrafı kapatmaz. Ortada büyük dursaydı resmi yok ederdi.
-      // Koyu yarı saydam zemin + beyaz metin, çünkü altındaki fotoğrafın
-      // rengi ne olacağı bilinmiyor.
+        'font:800 clamp(14px,5vw,28px)/1 var(--ph-font-display,Fraunces),serif;' +
+        'color:var(--ph-scene-ink);border-radius:9px;' +
+        'background:linear-gradient(160deg,rgba(126,110,220,.5),rgba(34,30,80,.6))' +
+          ' center/cover no-repeat;' +
+        'box-shadow:0 3px 10px -3px rgba(4,6,22,.85),' +
+          'inset 0 1px 0 rgba(205,195,255,.22);cursor:pointer;' +
+        'will-change:transform;' +
+        'transition:transform var(--ph-duration-fast,180ms) var(--ph-ease-standard,ease),' +
+          'box-shadow var(--ph-duration-fast,180ms) ease}' +
+      // Oynanabilir parça hafifçe öne çıkıyor — "buraya dokunabilirsin".
+      '.' + P + '-tile[data-movable="1"]{box-shadow:0 5px 16px -4px rgba(4,6,22,.9),' +
+        'inset 0 1px 0 rgba(215,205,255,.34),0 0 0 1px rgba(180,165,255,.22)}' +
+      '.' + P + '-tile[data-movable="1"]:active{filter:brightness(1.12)}' +
+      '.' + P + '-tile[data-movable="0"]{cursor:default}' +
+      // Numara rozeti: fotoğrafın rengi bilinmediği için kendi zemini var.
       '.' + P + '-tile[data-img="1"]::after{content:attr(data-num);' +
-        'position:absolute;top:2px;left:2px;min-width:15px;height:15px;' +
-        'padding:0 3px;border-radius:5px;background:rgba(8,8,20,.72);' +
-        'color:#fff;font:700 10px/15px system-ui,sans-serif;text-align:center}' +
-      '.' + P + '-win{font:800 15px/1 system-ui,sans-serif;color:#22c55e}';
+        'position:absolute;top:3px;left:3px;min-width:16px;height:16px;padding:0 4px;' +
+        'border-radius:6px;background:rgba(7,11,30,.72);' +
+        'backdrop-filter:blur(3px);color:var(--ph-scene-ink);' +
+        'font:700 10px/16px var(--ph-font-body,Inter),sans-serif;text-align:center;' +
+        'box-shadow:inset 0 0 0 1px rgba(180,165,255,.2)}' +
+
+      // ── Hedef görsel ──
+      '.' + P + '-goal{display:flex;align-items:center;gap:var(--ph-space-2);' +
+        'font:700 11px/1 var(--ph-font-body,Inter),sans-serif;' +
+        'letter-spacing:.1em;text-transform:uppercase;opacity:.6}' +
+      '.' + P + '-goal i{width:52px;height:52px;border-radius:10px;flex:none;' +
+        'background:rgba(7,11,30,.5) center/cover no-repeat;' +
+        'border:1px solid rgba(180,165,255,.28);' +
+        'box-shadow:0 6px 18px -8px rgba(4,6,22,.9)}' +
+
+      // ── Alt aksiyon çubuğu ──
+      '.' + P + '-bar{display:flex;align-items:center;justify-content:center;' +
+        'gap:var(--ph-space-2);flex-wrap:wrap}' +
+      '.' + P + '-seg{display:flex;gap:4px;padding:4px;border-radius:var(--ph-radius-full);' +
+        'background:rgba(7,11,30,.45);border:1px solid rgba(180,165,255,.18)}' +
+      '.' + P + '-seg button{padding:6px 13px;border-radius:var(--ph-radius-full);' +
+        'border:none;background:transparent;color:var(--ph-scene-ink);' +
+        'font:700 12px/1 var(--ph-font-body,Inter),sans-serif;cursor:pointer;opacity:.62;' +
+        'transition:background var(--ph-duration-micro,120ms) ease,opacity 120ms ease}' +
+      '.' + P + '-seg button[aria-pressed="true"]{opacity:1;' +
+        'background:linear-gradient(160deg,rgba(126,110,220,.55),rgba(40,32,80,.5));' +
+        'box-shadow:inset 0 1px 0 rgba(215,205,255,.3)}' +
+
+      // ── Kazanma: aralıklar KAPANIR, fotoğraf tek parça olur ──
+      // Oyunun ödülü bu an. Oynarken parçalar ayrık duruyor ki tahta
+      // okunsun; çözülünce dikişler yok oluyor.
+      '.' + P + '-board.won .' + P + '-tile{border-radius:0;box-shadow:none}' +
+      '.' + P + '-board.won .' + P + '-tile::after{opacity:0}' +
+      '.' + P + '-win{font:600 15px/1 var(--ph-font-display,Fraunces),serif;' +
+        'color:var(--ph-success,#4ade80);text-shadow:0 0 20px rgba(74,222,128,.5)}';
   }
 
   function place(el, idx) {
@@ -7951,15 +8015,19 @@ PuzzleGames.jigsawCard = (() => {
   function updateHud() {
     if (levelEl) levelEl.textContent = 'Seviye ' + level + ' · ' + N + '×' + N +
                                        ' · ' + (image ? image.category : '-');
-    movesEl.textContent = 'Hamle: ' + moves;
+    movesEl.textContent = moves;
     const s = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
-    timeEl.textContent = 'Süre: ' + String((s / 60) | 0).padStart(2, '0') +
+    timeEl.textContent = String((s / 60) | 0).padStart(2, '0') +
                          ':' + String(s % 60).padStart(2, '0');
   }
 
   function finish() {
     won = true;
     stopTimer();
+    // Oyunun ödülü: aralıklar ve rozetler kaybolur, fotoğraf TEK PARÇA
+    // olur. Oynarken parçalar ayrık duruyor ki tahta okunsun; çözülünce
+    // dikişler kapanıyor.
+    if (boardEl) boardEl.classList.add('won');
     const w = document.createElement('div');
     w.className = P + '-win';
     w.textContent = 'Tamamlandı! ' + moves + ' hamle';
@@ -7991,6 +8059,7 @@ PuzzleGames.jigsawCard = (() => {
     N = forcedSize || plan.size;
     won = false; moves = 0;
     wrapEl.querySelectorAll('.' + P + '-win').forEach(e => e.remove());
+    if (boardEl) boardEl.classList.remove('won');
     board = shuffle(N, rndFor(seed));
     // Önce numaralarla kur (anında oynanabilir), resim gelince boya.
     buildBoard();
@@ -8013,23 +8082,28 @@ PuzzleGames.jigsawCard = (() => {
     opts = opts || {};
     seed = opts.seed != null ? opts.seed : null;
     injectStyle('css-' + P, css());
-    container.innerHTML =
+    // Gece göğü ve atmosfer PLATFORMDAN: her oyunda aynı evren.
+    container.classList.add('ph-scene', P + '-arcane');
+    atmoEl = phAtmosphere(container, { stars: 16, beams: 1, motes: 5, skyPct: 34 });
+    container.insertAdjacentHTML('beforeend',
       '<div class="' + P + '-wrap">' +
-        '<div class="' + P + '-hud">' +
-          '<span data-role="level">Seviye 1</span>' +
-          '<span data-role="moves">Hamle: 0</span>' +
-          '<span data-role="time">Süre: 00:00</span>' +
+        '<div class="ph-capsule" data-role="level">Seviye 1</div>' +
+        '<div class="ph-capsule ' + P + '-hud">' +
+          '<span class="' + P + '-stat"><b data-role="moves">0</b><span>Hamle</span></span>' +
+          '<span class="' + P + '-stat"><b data-role="time">00:00</b><span>Süre</span></span>' +
+        '</div>' +
+        '<div class="' + P + '-goal"><i data-role="goal"></i><span>Hedef</span></div>' +
+        '<div class="' + P + '-board-wrap ph-dais">' +
+          '<div class="' + P + '-board" data-role="board"></div>' +
         '</div>' +
         '<div class="' + P + '-bar">' +
-          SIZES.map(s => '<button class="' + P + '-btn" data-size="' + s + '">' +
-                         s + '×' + s + '</button>').join('') +
-          '<button class="' + P + '-btn" data-role="reset">Yeniden</button>' +
-          '<button class="' + P + '-btn" data-role="next">Sonraki ▸</button>' +
+          '<span class="' + P + '-seg">' +
+            SIZES.map(s => '<button data-size="' + s + '">' + s + '×' + s + '</button>').join('') +
+          '</span>' +
+          '<button class="ph-icon-btn" data-role="reset" aria-label="Yeniden">↻</button>' +
+          '<button class="ph-icon-btn" data-role="next" aria-label="Sonraki">▸</button>' +
         '</div>' +
-        '<div class="' + P + '-goal"><i data-role="goal"></i>' +
-          '<span>Hedef görsel</span></div>' +
-        '<div class="' + P + '-board" data-role="board"></div>' +
-      '</div>';
+      '</div>');
     wrapEl = container.querySelector('.' + P + '-wrap');
     boardEl = wrapEl.querySelector('[data-role="board"]');
     movesEl = wrapEl.querySelector('[data-role="moves"]');

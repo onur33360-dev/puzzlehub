@@ -18,7 +18,7 @@ const REEL_GAMES = [
   { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Zor', gradient:['#e11d48','#881337'], playable:false },
   // playable:false BİLEREK — motor ve resim sistemi hazır ama tema Faz 3'te.
   // Oyuncuya çıplak tahta göstermektense kart demoda kalsın.
-  { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:false },
+  { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:true },
 ];
 
 const GAME_NAME_MAP = {

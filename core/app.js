@@ -12,6 +12,7 @@ const PUZZLE_GAMES = [
   { name:'Kelime Avı', emoji:'📝', rating:4.6, badge:null, desc:'Gizli kelimeleri bul', bg:'linear-gradient(135deg,#16a34a,#166534)' },
   { name:'Sudoku', emoji:'#️⃣', rating:4.7, badge:null, desc:'9x9 tabloyu doldur', bg:'linear-gradient(135deg,#1d4ed8,#1e3a8a)' },
   { name:'Labirent', emoji:'🌀', rating:4.2, badge:null, desc:'Çıkışı bul', bg:'linear-gradient(135deg,#059669,#065f46)' },
+  { name:'Resim Kaydır', emoji:'🖼️', rating:4.9, badge:'yeni', desc:'Fotoğrafı kaydır, tamamla', bg:'linear-gradient(135deg,#123a4a,#06121c)' },
 ];
 
 const DAILY_MISSIONS = [
@@ -615,10 +616,7 @@ const GAME_MAP = {
   'Labirent': 'mazeGame',
   'İksir Sıralama': 'waterSort',
   'Ok Bulmaca': 'arrowPuzzle',
-  // Resim Kaydır Faz 1: motor çalışıyor ama TEMASIZ. Bilerek yalnızca
-  // burada kayıtlı — PUZZLE_GAMES (ana ekran) ve REEL_GAMES.playable
-  // (Keşfet) Faz 3'te, tema bitince açılacak. Şu an playGameById ile
-  // açılabiliyor, bu da test için yeterli.
+  // Faz 3 bitti: tema hazır, oyun Keşfet ve ana ekranda AÇIK.
   'Resim Kaydır': 'jigsawCard',
 };
 
