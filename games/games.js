@@ -7607,3 +7607,245 @@ PuzzleGames.arrowPuzzle = (() => {
     },
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════
+//  RESİM KAYDIR (jigsawCard) — FAZ 1: ÇEKİRDEK MOTOR
+// ═══════════════════════════════════════════════════════════════
+// Faz 1 kapsamı BİLEREK dar: yalnızca kusursuz çalışan oynanış.
+// Tema, resim, animasyon ve ses sırasıyla Faz 2/3/4'te gelecek — bu
+// yüzden buradaki CSS çıplak, "çirkin ama doğru" hedeflendi.
+//
+// Saf durum fonksiyonları (solvedBoard, canMove, applyMove, isSolved,
+// shuffle) DOM'a hiç dokunmaz ve `engine` altında dışa verilir. Ok
+// Bulmaca'da işe yarayan kalıp: oynanış Node'dan doğrulanabiliyor.
+PuzzleGames.jigsawCard = (() => {
+  const P = 'slp';                    // CSS öneki — repoda kullanılmıyor
+  const SIZES = [3, 4, 5];
+  let container, wrapEl, boardEl, movesEl, timeEl;
+  let N = 3, board = null, moves = 0, won = false;
+  let startedAt = 0, timerId = 0, seed = null;
+
+  // ═══════════ SAF DURUM ═══════════
+  // board: uzunluğu N*N dizi. board[i] = o hücredeki parçanın EV indeksi,
+  // boşluk için null. Çözülmüş hâl: board[i] === i, son hücre null.
+  function solvedBoard(n) {
+    const b = new Array(n * n);
+    for (let i = 0; i < n * n - 1; i++) b[i] = i;
+    b[n * n - 1] = null;
+    return b;
+  }
+  function blankOf(b) { return b.indexOf(null); }
+  function isSolved(b) {
+    for (let i = 0; i < b.length - 1; i++) if (b[i] !== i) return false;
+    return b[b.length - 1] === null;
+  }
+  // Yalnızca boşluğa DİK KOMŞU parça oynar. Aynı satır/sütundaki uzak
+  // parçalar oynamaz — "komşu olmayan parça hareket etmesin" kuralı bu.
+  // Klasik 15-puzzle'lar sırayı toptan kaydırır; burada bilerek yapmıyoruz.
+  function neighborsOf(i, n) {
+    const c = i % n, r = (i - c) / n, out = [];
+    if (r > 0) out.push(i - n);
+    if (r < n - 1) out.push(i + n);
+    if (c > 0) out.push(i - 1);
+    if (c < n - 1) out.push(i + 1);
+    return out;
+  }
+  function canMove(b, i, n) {
+    return b[i] !== null && neighborsOf(blankOf(b), n).indexOf(i) >= 0;
+  }
+  function applyMove(b, i) {
+    const z = blankOf(b);
+    b[z] = b[i]; b[i] = null;
+    return b;
+  }
+
+  // ÇÖZÜLEBİLİRLİK İNŞA GEREĞİ: çözülmüş tahtadan başlayıp yalnızca
+  // GEÇERLİ hamleler yapıyoruz, dolayısıyla ters yönde her zaman bir
+  // çözüm var. Parite hesabı gerekmiyor — o yol çift genişlikli
+  // tahtalarda boşluğun satırını da işin içine katar ve sessizce
+  // çözülemez tahta üretmesi çok kolaydır.
+  // prev: bir önceki adımın geldiği hücre. Oraya hemen dönmek hamleyi
+  // geri alır ve karışmayı yavaşlatır, o yüzden eleniyor.
+  function shuffle(n, rnd) {
+    const b = solvedBoard(n);
+    let prev = -1;
+    const steps = n * n * 25;
+    for (let s = 0; s < steps; s++) {
+      const opts = neighborsOf(blankOf(b), n).filter(i => i !== prev);
+      const pick = opts[Math.min(opts.length - 1, Math.floor(rnd() * opts.length))];
+      prev = blankOf(b);
+      applyMove(b, pick);
+    }
+    if (isSolved(b)) applyMove(b, neighborsOf(blankOf(b), n)[0]);
+    return b;
+  }
+
+  // ═══════════ RENDER (Faz 1: çıplak) ═══════════
+  function css() {
+    return '' +
+      '.' + P + '-wrap{display:flex;flex-direction:column;align-items:center;' +
+        'gap:12px;width:100%;max-width:460px;margin:0 auto;padding:8px}' +
+      '.' + P + '-wrap *{box-sizing:border-box}' +
+      '.' + P + '-hud{display:flex;align-items:center;gap:16px;' +
+        'font:700 14px/1 system-ui,sans-serif}' +
+      '.' + P + '-bar{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}' +
+      '.' + P + '-btn{padding:7px 12px;border-radius:8px;border:1px solid #8884;' +
+        'background:#0002;color:inherit;font:700 13px/1 system-ui,sans-serif;cursor:pointer}' +
+      '.' + P + '-btn[aria-pressed="true"]{background:#8886}' +
+      // Tahta KARE ve akışkan: aspect-ratio responsive'ı bedavaya getiriyor.
+      // Parçalar YÜZDE ile konumlandığı için yeniden ölçüm hiç gerekmiyor.
+      '.' + P + '-board{position:relative;width:100%;aspect-ratio:1;' +
+        'border:1px solid #8884;border-radius:10px;overflow:hidden;' +
+        'touch-action:manipulation;user-select:none}' +
+      // Konum transform ile: Faz 4'te animasyon tek satır transition olacak.
+      // left/top olsaydı her hamle layout tetiklerdi.
+      '.' + P + '-tile{position:absolute;top:0;left:0;display:flex;' +
+        'align-items:center;justify-content:center;' +
+        'font:800 clamp(14px,5vw,28px)/1 system-ui,sans-serif;' +
+        'background:#5b6cff;color:#fff;border:1px solid #0003;cursor:pointer;' +
+        'will-change:transform}' +
+      '.' + P + '-tile[data-movable="0"]{cursor:default;opacity:.9}' +
+      '.' + P + '-win{font:800 15px/1 system-ui,sans-serif;color:#22c55e}';
+  }
+
+  function place(el, idx) {
+    const c = idx % N, r = (idx - c) / N, p = 100 / N;
+    el.style.width = p + '%';
+    el.style.height = p + '%';
+    el.style.transform = 'translate(' + (c * 100) + '%,' + (r * 100) + '%)';
+  }
+
+  function buildBoard() {
+    boardEl.innerHTML = '';
+    for (let i = 0; i < N * N; i++) {
+      if (board[i] === null) continue;
+      const t = document.createElement('div');
+      t.className = P + '-tile';
+      t.dataset.home = String(board[i]);
+      t.textContent = String(board[i] + 1);
+      place(t, i);
+      boardEl.appendChild(t);
+    }
+    syncMovable();
+  }
+
+  // Parçaları yeniden KURMADAN taşı: hamle başına DOM yaratılmıyor,
+  // yalnızca transform güncelleniyor.
+  function syncPositions() {
+    const byHome = new Map();
+    boardEl.querySelectorAll('.' + P + '-tile')
+      .forEach(t => byHome.set(Number(t.dataset.home), t));
+    for (let i = 0; i < N * N; i++) {
+      if (board[i] === null) continue;
+      const t = byHome.get(board[i]);
+      if (t) place(t, i);
+    }
+    syncMovable();
+  }
+  function syncMovable() {
+    const legal = new Set(neighborsOf(blankOf(board), N).map(i => board[i]));
+    boardEl.querySelectorAll('.' + P + '-tile').forEach(t => {
+      t.dataset.movable = legal.has(Number(t.dataset.home)) ? '1' : '0';
+    });
+  }
+
+  function onTap(e) {
+    if (won) return;
+    const t = e.target.closest ? e.target.closest('.' + P + '-tile') : null;
+    if (!t || !boardEl.contains(t)) return;
+    const idx = board.indexOf(Number(t.dataset.home));
+    if (idx < 0 || !canMove(board, idx, N)) return;   // komşu değilse sessizce yok say
+    applyMove(board, idx);
+    moves++;
+    syncPositions();
+    updateHud();
+    if (isSolved(board)) finish();
+  }
+
+  function updateHud() {
+    movesEl.textContent = 'Hamle: ' + moves;
+    const s = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+    timeEl.textContent = 'Süre: ' + String((s / 60) | 0).padStart(2, '0') +
+                         ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function finish() {
+    won = true;
+    stopTimer();
+    const w = document.createElement('div');
+    w.className = P + '-win';
+    w.textContent = 'Tamamlandı! ' + moves + ' hamle';
+    wrapEl.appendChild(w);
+  }
+
+  function startTimer() {
+    stopTimer();
+    startedAt = Date.now();
+    timerId = setInterval(updateHud, 1000);
+  }
+  function stopTimer() { if (timerId) { clearInterval(timerId); timerId = 0; } }
+
+  // Tohum verilirse tahta TEKRARLANABİLİR olur — günlük bulmaca ve hata
+  // ayıklama bunu ister (bkz. core/rng.js). Verilmezse Math.random.
+  function rndFor(sd) {
+    if (sd == null) return Math.random;
+    const r = phRng(sd >>> 0 || 1);
+    return () => phRngInt(r, 1000000) / 1000000;
+  }
+
+  function reset(n) {
+    if (n) N = n;
+    won = false; moves = 0;
+    wrapEl.querySelectorAll('.' + P + '-win').forEach(e => e.remove());
+    board = shuffle(N, rndFor(seed));
+    buildBoard();
+    updateHud();
+    startTimer();
+    wrapEl.querySelectorAll('[data-size]').forEach(b => {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.size) === N));
+    });
+  }
+
+  function init(cont, opts) {
+    container = cont;
+    opts = opts || {};
+    seed = opts.seed != null ? opts.seed : null;
+    N = SIZES.indexOf(opts.size) >= 0 ? opts.size : 3;
+    injectStyle('css-' + P, css());
+    container.innerHTML =
+      '<div class="' + P + '-wrap">' +
+        '<div class="' + P + '-hud">' +
+          '<span data-role="moves">Hamle: 0</span>' +
+          '<span data-role="time">Süre: 00:00</span>' +
+        '</div>' +
+        '<div class="' + P + '-bar">' +
+          SIZES.map(s => '<button class="' + P + '-btn" data-size="' + s + '">' +
+                         s + '×' + s + '</button>').join('') +
+          '<button class="' + P + '-btn" data-role="reset">Yeniden</button>' +
+        '</div>' +
+        '<div class="' + P + '-board" data-role="board"></div>' +
+      '</div>';
+    wrapEl = container.querySelector('.' + P + '-wrap');
+    boardEl = wrapEl.querySelector('[data-role="board"]');
+    movesEl = wrapEl.querySelector('[data-role="moves"]');
+    timeEl = wrapEl.querySelector('[data-role="time"]');
+    addEv(boardEl, 'click', onTap);
+    wrapEl.querySelectorAll('.' + P + '-btn').forEach(b => {
+      addEv(b, 'click', () => { reset(b.dataset.size ? Number(b.dataset.size) : 0); });
+    });
+    reset(N);
+  }
+
+  function cleanup() {
+    stopTimer();
+    clearEvs();
+    if (container) container.innerHTML = '';
+    container = wrapEl = boardEl = movesEl = timeEl = null;
+    board = null;
+  }
+
+  return {
+    init, cleanup,
+    engine: { solvedBoard, blankOf, isSolved, neighborsOf, canMove, applyMove, shuffle },
+  };
+})();

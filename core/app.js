@@ -615,6 +615,11 @@ const GAME_MAP = {
   'Labirent': 'mazeGame',
   'İksir Sıralama': 'waterSort',
   'Ok Bulmaca': 'arrowPuzzle',
+  // Resim Kaydır Faz 1: motor çalışıyor ama TEMASIZ. Bilerek yalnızca
+  // burada kayıtlı — PUZZLE_GAMES (ana ekran) ve REEL_GAMES.playable
+  // (Keşfet) Faz 3'te, tema bitince açılacak. Şu an playGameById ile
+  // açılabiliyor, bu da test için yeterli.
+  'Resim Kaydır': 'jigsawCard',
 };
 
 let _currentGameId = null;
