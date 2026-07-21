@@ -7623,7 +7623,7 @@ PuzzleGames.jigsawCard = (() => {
   const SIZES = [3, 4, 5];
   let container, wrapEl, boardEl, movesEl, timeEl, levelEl, goalEl, atmoEl;
   let N = 3, board = null, moves = 0, won = false;
-  let startedAt = 0, timerId = 0, seed = null;
+  let startedAt = 0, timerId = 0, seed = null, winT = 0;
   let level = 1, image = null, imageOk = false;
 
   // ═══════════ RESİM HAVUZU ═══════════
@@ -7881,6 +7881,9 @@ PuzzleGames.jigsawCard = (() => {
         'inset 0 1px 0 rgba(215,205,255,.34),0 0 0 1px rgba(180,165,255,.22)}' +
       '.' + P + '-tile[data-movable="1"]:active{filter:brightness(1.12)}' +
       '.' + P + '-tile[data-movable="0"]{cursor:default}' +
+      // Komsu olmayan parcaya dokununca kisa itiraz — ceza degil, bilgi.
+      '.' + P + '-tile.nudge{animation:slpNudge 260ms var(--ph-ease-standard,ease)}' +
+      '@keyframes slpNudge{0%,100%{filter:none}35%{filter:brightness(.78) saturate(.7)}}' +
       // Numara rozeti: fotoğrafın rengi bilinmediği için kendi zemini var.
       '.' + P + '-tile[data-img="1"]::after{content:attr(data-num);' +
         'position:absolute;top:3px;left:3px;min-width:16px;height:16px;padding:0 4px;' +
@@ -8004,9 +8007,17 @@ PuzzleGames.jigsawCard = (() => {
     const t = e.target.closest ? e.target.closest('.' + P + '-tile') : null;
     if (!t || !boardEl.contains(t)) return;
     const idx = board.indexOf(Number(t.dataset.home));
-    if (idx < 0 || !canMove(board, idx, N)) return;   // komşu değilse sessizce yok say
+    if (idx < 0 || !canMove(board, idx, N)) {
+      // Sessizce yutmak öğretmiyor: oyuncu neden olmadığını anlamalı.
+      // Ceza yok, yalnızca kısa bir itiraz — "flow, not stress".
+      t.classList.remove('nudge'); void t.offsetWidth; t.classList.add('nudge');
+      GameAudio.haptic('micro');
+      return;
+    }
     applyMove(board, idx);
     moves++;
+    GameAudio.play('slide');
+    GameAudio.haptic('micro');
     syncPositions();
     updateHud();
     if (isSolved(board)) finish();
@@ -8028,10 +8039,47 @@ PuzzleGames.jigsawCard = (() => {
     // olur. Oynarken parçalar ayrık duruyor ki tahta okunsun; çözülünce
     // dikişler kapanıyor.
     if (boardEl) boardEl.classList.add('won');
-    const w = document.createElement('div');
-    w.className = P + '-win';
-    w.textContent = 'Tamamlandı! ' + moves + ' hamle';
-    wrapEl.appendChild(w);
+
+    // Yıldız: hamle sayısı PAR'a göre. Par = N²·2.5 (3×3→22, 4×4→40,
+    // 5×5→62). 3×3'ün teorik en kötü optimali 31, ortalaması ~22 —
+    // yani par "iyi oynadın" eşiği, "kusursuz" değil. Zorlayıcı bir
+    // hedef koymak bu oyunun rahatlatıcı tonuna ters düşerdi.
+    const par = Math.round(N * N * 2.5);
+    const stars = moves <= par ? 3 : moves <= Math.round(par * 1.7) ? 2 : 1;
+    const secs = Math.floor((Date.now() - startedAt) / 1000);
+    const mmss = String((secs / 60) | 0).padStart(2, '0') + ':' +
+                 String(secs % 60).padStart(2, '0');
+
+    GameAudio.play('premium');
+    GameAudio.haptic('win');
+    if (atmoEl) phAtmosphereFlare(atmoEl, 2.2, 700);
+    if (boardEl) {
+      const r = boardEl.getBoundingClientRect();
+      phParticleBurst(document.body, r.left + r.width / 2, r.top + r.height / 2,
+                      'var(--ph-accent)', 16);
+    }
+
+    // Platformun paylaşımlı kutusu; kendi modalimizi kurmuyoruz.
+    // Kısa gecikme, dikişlerin kapanma anının görülmesi için.
+    winT = setTimeout(() => {
+      winT = null;
+      showGameOver(true, '★'.repeat(stars) + '☆'.repeat(3 - stars),
+        image ? image.category + ' · ' + N + '×' + N : N + '×' + N, {
+        accent: 'var(--ph-accent-dark)',
+        accentLight: 'var(--ph-accent-light)',
+        accentGlow: 'var(--ph-accent)',
+        mark: '✦',
+        noDiamond: true,
+        stats: [
+          { label: 'Hamle', value: moves },
+          { label: 'Süre', value: mmss },
+          { label: 'Hedef', value: par },
+        ],
+        // "Tekrar Oyna" oyuncuyu 1. seviyeye DÜŞÜRMEMELİ; kazandığı
+        // seviyenin bir sonrasını verir.
+        onRestart: () => startLevel(level + 1, 0),
+      });
+    }, 1100);
   }
 
   function startTimer() {
@@ -8058,6 +8106,7 @@ PuzzleGames.jigsawCard = (() => {
     image = plan.image;
     N = forcedSize || plan.size;
     won = false; moves = 0;
+    if (winT) { clearTimeout(winT); winT = 0; }
     wrapEl.querySelectorAll('.' + P + '-win').forEach(e => e.remove());
     if (boardEl) boardEl.classList.remove('won');
     board = shuffle(N, rndFor(seed));
@@ -8123,8 +8172,15 @@ PuzzleGames.jigsawCard = (() => {
 
   function cleanup() {
     stopTimer();
+    // Bekleyen kazanma zamanlayıcısı sökülmezse oyundan çıktıktan SONRA
+    // ateşlenip kopmuş DOM üzerine game over kutusu açıyor.
+    if (winT) { clearTimeout(winT); winT = 0; }
     clearEvs();
-    if (container) container.innerHTML = '';
+    if (atmoEl) { atmoEl.remove(); atmoEl = null; }
+    if (container) {
+      container.innerHTML = '';
+      container.classList.remove('ph-scene', P + '-arcane');
+    }
     container = wrapEl = boardEl = movesEl = timeEl = levelEl = goalEl = null;
     board = null; image = null; imageOk = false;
   }
