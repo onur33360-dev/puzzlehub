@@ -131,6 +131,29 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   asked for 32 arrows on an 80-cell board (~112 cells needed), the generator returned
   `null`, and the game **crashed at level 19**. Never write `res.board` without the retry
   guard. The numbers (`MAX_FILL` 0.85, avg 3.5 cells/arrow) are measured, not guessed.
+- **Arrow has THREE generators and the order in `startLevel` is load-bearing.**
+  `generateSlide` (Üreteç C) is tried first, then `generateReverse`, then
+  `generateForward`. All three share the *same* validity condition — an arrow's
+  exit ray must be clear at placement time — and C asks `canExit` itself rather
+  than deriving a second "can it exit" definition. **Never let a generator define
+  its own exit test**; that divergence already cost this game once (see the snake
+  exit bullet above). C wins because it computes the tips whose rays are *already*
+  clear instead of sampling random anchors and rejecting: measured at 26×24/85
+  arrows, B gets 50% in 112 ms, C gets 80% in 14 ms. Removing C or reordering the
+  chain silently reverts levels to the slow, often-failing path.
+- **`generateSlide`'s `mask` and `fill` options are deliberately unused today.**
+  `mask` restricts which cells may be filled (the reference game's silhouette
+  levels — a board shaped like a digit or animal); `fill` packs until nothing more
+  fits, raising density from ~0.55 to 0.68–0.78. `startLevel` uses neither: it
+  still asks for a target arrow count. They exist because they are the search's
+  natural parameters and bolting them on later would mean rewriting the generator.
+  Not dead code — unshipped capability.
+- **`sp12`–`sp20` (serpentine shapes) are in `SHAPES` but in NO tier.**
+  `SHAPE_TIERS` doesn't list them, so `shapePool()` never returns them and they
+  never appear in play. They are the data the denser-board work will need, and the
+  generator benchmark was run with them. Don't delete them as unused, and don't
+  add them to a tier casually — that changes the difficulty curve, which is a
+  product decision, and it also shifts `avgCells()` and therefore the capacity cap.
 - **Sudoku validates against the SOLUTION, not against Sudoku's rules.** A wrong digit is
   refused and costs one of 3 lives; it never lands on the board. This is deliberate — it is
   why there is no erase key and no undo, and it makes **unique-solution puzzles a functional
