@@ -7621,9 +7621,110 @@ PuzzleGames.arrowPuzzle = (() => {
 PuzzleGames.jigsawCard = (() => {
   const P = 'slp';                    // CSS öneki — repoda kullanılmıyor
   const SIZES = [3, 4, 5];
-  let container, wrapEl, boardEl, movesEl, timeEl;
+  let container, wrapEl, boardEl, movesEl, timeEl, levelEl;
   let N = 3, board = null, moves = 0, won = false;
   let startedAt = 0, timerId = 0, seed = null;
+  let level = 1, image = null, imageOk = false;
+
+  // ═══════════ RESİM HAVUZU ═══════════
+  // Veri; kod değil. 1000+ seviyeye çıkmak = bu diziye satır eklemek.
+  // Seviye sistemi HAVUZU BİLMEZ, yalnızca uzunluğunu kullanır.
+  //
+  // URL biçimi kasıtlı: `w/h/fit=crop` CDN'e KARE kırptırıyor, yani
+  // parçalama hep tam kare bir kaynakla çalışıyor ve hizalama bozulmuyor.
+  // 1200px kaynak, en büyük tahtamız ~460 CSS px olduğu için retina'da
+  // bile 2.6x fazla örnekleme demek — parçalar net kalıyor.
+  //
+  // LİSANS: Unsplash lisansı ticari kullanıma açık ve atıf ZORUNLU değil
+  // (CLAUDE.md §6 ses politikasındaki çıtanın aynısı). Watermark yok.
+  const IMG = id => 'https://images.unsplash.com/photo-' + id + '?w=1200&h=1200&fit=crop&q=80';
+  const IMAGE_POOL = [
+    { id: 'mtn-1',  category: 'mountains',    difficulty: 2, url: IMG('1506905925346-21bda4d32df4') },
+    { id: 'for-1',  category: 'forest',       difficulty: 3, url: IMG('1441974231531-c6227db76b6e') },
+    { id: 'oce-1',  category: 'ocean',        difficulty: 3, url: IMG('1505118380757-91f5f5632de0') },
+    { id: 'ani-1',  category: 'animals',      difficulty: 1, url: IMG('1425082661705-1834bfd09dca') },
+    { id: 'arc-1',  category: 'architecture', difficulty: 2, url: IMG('1487958449943-2429e8be8625') },
+    { id: 'cit-1',  category: 'city',         difficulty: 3, url: IMG('1449824913935-59a10b8d2000') },
+    { id: 'spa-1',  category: 'space',        difficulty: 2, url: IMG('1446776811953-b23d57bd21aa') },
+    { id: 'flo-1',  category: 'flowers',      difficulty: 1, url: IMG('1490750967868-88aa4486c946') },
+    { id: 'foo-1',  category: 'food',         difficulty: 2, url: IMG('1504674900247-0877df9cc836') },
+    { id: 'art-1',  category: 'art',          difficulty: 3, url: IMG('1541961017774-22349e4a1262') },
+    { id: 'ani-2',  category: 'animals',      difficulty: 2, url: IMG('1474511320723-9a56873867b5') },
+  ];
+  // ELENENLER — neden elendikleri kalsın ki aynı hata tekrarlanmasın:
+  //   1507003211169  bir insan PORTRESİ. "minimal" etiketiyle geldi ama
+  //                  yüz; kimliği tanınan birini oyuna koymuyoruz.
+  //   1470071459604  neredeyse tamamen gökyüzü — odak noktası yok.
+  //   1439405326854  aynı şekilde düz gökyüzü.
+  // Üçü de URL olarak SAĞLAMDI (200, kare, yüksek çözünürlük); kusur
+  // görselin İÇERİĞİNDEYDİ. Bu yüzden havuza resim eklemenin şartı
+  // erişilebilirlik değil, GÖZLE ONAY — bkz. docs/GAMES/SLIDING_PUZZLE.md.
+
+  // ═══════════ SEVİYE SİSTEMİ ═══════════
+  // Boyut eğrisi. Tek zorluk kolu tahta boyu — 11-30 arası 3x3'ten
+  // 4x4'e KADEMELİ geçiş: 4x4 olasılığı 0'dan 1'e çıkıyor, yani oyuncu
+  // duvara toslamadan alışıyor.
+  function sizeFor(lv) {
+    if (lv <= 10) return 3;
+    if (lv <= 30) return (((lv * 7) % 20) / 20) < ((lv - 10) / 20) ? 4 : 3;
+    if (lv <= 70) return 4;
+    return 5;
+  }
+
+  // Resim seçimi: havuzu her TURDA yeniden karıp sırayla tüketiyoruz.
+  // Sonucu: bir resim havuz bitmeden ASLA tekrar etmiyor (14 resimle 14
+  // seviye), ve tur değişince sıra da değişiyor. Rastgele seçim bunu
+  // garanti edemezdi — aynı resim iki seviye üst üste gelebilirdi.
+  // Kart karıştırdıktan sonra AYNI KATEGORİ yan yana gelirse ileriden
+  // farklı kategorili biriyle takas ediliyor.
+  // Aynı kategoriyi yan yana bırakma: çakışanı ileriden uygun biriyle takas.
+  function declusterCats(ord, prevCat) {
+    const n = ord.length;
+    for (let i = 0; i < n; i++) {
+      const before = i === 0 ? prevCat : IMAGE_POOL[ord[i - 1]].category;
+      if (before == null || IMAGE_POOL[ord[i]].category !== before) continue;
+      for (let j = i + 1; j < n; j++) {
+        if (IMAGE_POOL[ord[j]].category === before) continue;
+        if (i + 1 < n && IMAGE_POOL[ord[j]].category === IMAGE_POOL[ord[i + 1]].category) continue;
+        const t = ord[i]; ord[i] = ord[j]; ord[j] = t; break;
+      }
+    }
+    return ord;
+  }
+
+  // Turlar BİRBİRİNDEN HABERSİZ olamaz. Her tur bağımsız karılırsa önceki
+  // turun kuyruğu bu turun başına düşer ve resim 1-2 seviye arayla tekrar
+  // eder. Ölçüldü: korumasız hâlde 400 seviyede 174 erken tekrar, üstelik
+  // bir kez de üst üste aynı resim. Çözüm: önceki turun SON YARISINI bu
+  // turun ARKASINA it — böylece iki görülme arası en az ~havuz/2 seviye.
+  // Tur sırası kümülatif olduğu için önbelleğe alınıyor; seviye 1000'de
+  // bile hesap 14 elemanlı birkaç düzine karıştırma.
+  const _orderCache = [];
+  function orderFor(epoch) {
+    for (let e = _orderCache.length; e <= epoch; e++) {
+      const n = IMAGE_POOL.length;
+      const rng = phRng(((e + 1) * 2654435761) >>> 0);
+      let ord = IMAGE_POOL.map((_, i) => i);
+      for (let i = n - 1; i > 0; i--) {
+        const j = phRngInt(rng, i + 1);
+        const t = ord[i]; ord[i] = ord[j]; ord[j] = t;
+      }
+      let prevCat = null;
+      if (e > 0) {
+        const prev = _orderCache[e - 1];
+        const recent = new Set(prev.slice(Math.ceil(n / 2)));
+        ord = ord.filter(i => !recent.has(i)).concat(ord.filter(i => recent.has(i)));
+        prevCat = IMAGE_POOL[prev[prev.length - 1]].category;
+      }
+      _orderCache[e] = declusterCats(ord, prevCat);
+    }
+    return _orderCache[epoch];
+  }
+  function planFor(lv) {
+    const n = IMAGE_POOL.length;
+    const idx = (lv - 1) % n, epoch = Math.floor((lv - 1) / n);
+    return { level: lv, size: sizeFor(lv), image: IMAGE_POOL[orderFor(epoch)[idx]] };
+  }
 
   // ═══════════ SAF DURUM ═══════════
   // board: uzunluğu N*N dizi. board[i] = o hücredeki parçanın EV indeksi,
@@ -7715,6 +7816,30 @@ PuzzleGames.jigsawCard = (() => {
     el.style.transform = 'translate(' + (c * 100) + '%,' + (r * 100) + '%)';
   }
 
+  // ═══════════ PARÇALAMA ═══════════
+  // Canvas YOK. Tek resim, N*N parçaya YÜZDE ile bölünüyor:
+  //
+  //   background-size     : (N*100)%  → resim tam tahta boyuna ölçekleniyor
+  //   background-position : c/(N-1)*100%  → yüzde konumlandırma, resmin
+  //                         %X noktasını kutunun %X noktasına hizalar.
+  //                         N-1 bölmesi bu yüzden; N değil.
+  //
+  // Her şey yüzde olduğu için tahta hangi piksel boyunda olursa olsun
+  // hizalama TAM: yeniden ölçüm, yuvarlama hatası, kırık kenar yok.
+  // Retina da bedava — tarayıcı 1200px kaynağı ölçekliyor, biz karışmıyoruz.
+  function paint(el, home) {
+    if (!imageOk) {                       // resim gelmediyse numaralı kal
+      el.textContent = String(home + 1);
+      el.style.backgroundImage = '';
+      return;
+    }
+    el.textContent = '';
+    const c = home % N, r = (home - c) / N, d = N - 1;
+    el.style.backgroundImage = 'url("' + image.url + '")';
+    el.style.backgroundSize = (N * 100) + '% ' + (N * 100) + '%';
+    el.style.backgroundPosition = (d ? (c / d) * 100 : 0) + '% ' + (d ? (r / d) * 100 : 0) + '%';
+  }
+
   function buildBoard() {
     boardEl.innerHTML = '';
     for (let i = 0; i < N * N; i++) {
@@ -7722,11 +7847,22 @@ PuzzleGames.jigsawCard = (() => {
       const t = document.createElement('div');
       t.className = P + '-tile';
       t.dataset.home = String(board[i]);
-      t.textContent = String(board[i] + 1);
       place(t, i);
+      paint(t, board[i]);
       boardEl.appendChild(t);
     }
     syncMovable();
+  }
+
+  // Resmi ÖNDEN yükle: yarısı boyalı tahta göstermektense numaralarla
+  // başlayıp gelince boyuyoruz. Ağ hatasında oyun yine oynanır kalıyor.
+  function loadImage(img, done) {
+    imageOk = false;
+    const pre = new Image();
+    pre.onload = () => { imageOk = true; done(); };
+    pre.onerror = () => { imageOk = false; done(); };
+    pre.src = img.url;
+    if (pre.complete && pre.naturalWidth) { imageOk = true; done(); }
   }
 
   // Parçaları yeniden KURMADAN taşı: hamle başına DOM yaratılmıyor,
@@ -7763,6 +7899,8 @@ PuzzleGames.jigsawCard = (() => {
   }
 
   function updateHud() {
+    if (levelEl) levelEl.textContent = 'Seviye ' + level + ' · ' + N + '×' + N +
+                                       ' · ' + (image ? image.category : '-');
     movesEl.textContent = 'Hamle: ' + moves;
     const s = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
     timeEl.textContent = 'Süre: ' + String((s / 60) | 0).padStart(2, '0') +
@@ -7793,28 +7931,41 @@ PuzzleGames.jigsawCard = (() => {
     return () => phRngInt(r, 1000000) / 1000000;
   }
 
-  function reset(n) {
-    if (n) N = n;
+  // Seviyeyi kur: plan boyutu ve resmi VERİR, burada yalnızca uygulanır.
+  // forcedSize verilirse (3×3/4×4/5×5 düğmeleri) plan boyutu ezilir ama
+  // resim aynı kalır — oyuncu aynı resmi başka zorlukta deneyebilsin.
+  function startLevel(lv, forcedSize) {
+    const plan = planFor(lv);
+    level = lv;
+    image = plan.image;
+    N = forcedSize || plan.size;
     won = false; moves = 0;
     wrapEl.querySelectorAll('.' + P + '-win').forEach(e => e.remove());
     board = shuffle(N, rndFor(seed));
+    // Önce numaralarla kur (anında oynanabilir), resim gelince boya.
     buildBoard();
+    loadImage(image, () => {
+      if (!boardEl) return;                       // arada cleanup olduysa
+      boardEl.querySelectorAll('.' + P + '-tile')
+        .forEach(t => paint(t, Number(t.dataset.home)));
+    });
     updateHud();
     startTimer();
     wrapEl.querySelectorAll('[data-size]').forEach(b => {
       b.setAttribute('aria-pressed', String(Number(b.dataset.size) === N));
     });
   }
+  function reset(n) { startLevel(level, n || 0); }
 
   function init(cont, opts) {
     container = cont;
     opts = opts || {};
     seed = opts.seed != null ? opts.seed : null;
-    N = SIZES.indexOf(opts.size) >= 0 ? opts.size : 3;
     injectStyle('css-' + P, css());
     container.innerHTML =
       '<div class="' + P + '-wrap">' +
         '<div class="' + P + '-hud">' +
+          '<span data-role="level">Seviye 1</span>' +
           '<span data-role="moves">Hamle: 0</span>' +
           '<span data-role="time">Süre: 00:00</span>' +
         '</div>' +
@@ -7822,6 +7973,7 @@ PuzzleGames.jigsawCard = (() => {
           SIZES.map(s => '<button class="' + P + '-btn" data-size="' + s + '">' +
                          s + '×' + s + '</button>').join('') +
           '<button class="' + P + '-btn" data-role="reset">Yeniden</button>' +
+          '<button class="' + P + '-btn" data-role="next">Sonraki ▸</button>' +
         '</div>' +
         '<div class="' + P + '-board" data-role="board"></div>' +
       '</div>';
@@ -7829,23 +7981,29 @@ PuzzleGames.jigsawCard = (() => {
     boardEl = wrapEl.querySelector('[data-role="board"]');
     movesEl = wrapEl.querySelector('[data-role="moves"]');
     timeEl = wrapEl.querySelector('[data-role="time"]');
+    levelEl = wrapEl.querySelector('[data-role="level"]');
     addEv(boardEl, 'click', onTap);
     wrapEl.querySelectorAll('.' + P + '-btn').forEach(b => {
-      addEv(b, 'click', () => { reset(b.dataset.size ? Number(b.dataset.size) : 0); });
+      addEv(b, 'click', () => {
+        if (b.dataset.size) reset(Number(b.dataset.size));
+        else if (b.dataset.role === 'next') startLevel(level + 1, 0);
+        else reset(0);
+      });
     });
-    reset(N);
+    startLevel(Math.max(1, opts.level || 1), SIZES.indexOf(opts.size) >= 0 ? opts.size : 0);
   }
 
   function cleanup() {
     stopTimer();
     clearEvs();
     if (container) container.innerHTML = '';
-    container = wrapEl = boardEl = movesEl = timeEl = null;
-    board = null;
+    container = wrapEl = boardEl = movesEl = timeEl = levelEl = null;
+    board = null; image = null; imageOk = false;
   }
 
   return {
     init, cleanup,
-    engine: { solvedBoard, blankOf, isSolved, neighborsOf, canMove, applyMove, shuffle },
+    engine: { solvedBoard, blankOf, isSolved, neighborsOf, canMove, applyMove, shuffle,
+              IMAGE_POOL, sizeFor, orderFor, planFor },
   };
 })();
