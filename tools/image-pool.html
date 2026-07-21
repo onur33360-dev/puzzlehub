@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Resim Kaydır — Havuz</title>
+<!--
+  Resim Kaydır'ın görsel havuzunu gözden geçirme aracı.
+
+  NEDEN VAR: havuza resim eklemenin şartı URL'nin çalışması DEĞİL, gözle
+  onaydır. İlk turda 49 adayın 49'u da 200 dönüyordu ve 7'si yine de
+  kullanılamazdı (bir insan portresi, düz gökyüzü, odaksız gradyan).
+  Bu sayfa o incelemeyi yapılabilir kılıyor.
+  Politika: docs/GAMES/SLIDING_PUZZLE.md §5.
+
+  Havuz BURADA TANIMLI DEĞİL: games.js'ten okunuyor, yani tek kaynak
+  korunuyor ve liste asla kaymıyor.
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0b0b16; color:#e9e6ff;
+         font:400 14px/1.5 system-ui,-apple-system,sans-serif; }
+  header { position:sticky; top:0; z-index:10; padding:14px 16px 10px;
+           background:rgba(11,11,22,.94); backdrop-filter:blur(10px);
+           border-bottom:1px solid #ffffff14; }
+  h1 { margin:0 0 2px; font-size:17px; font-weight:800; letter-spacing:.2px; }
+  .sub { color:#a9a3d0; font-size:12px; }
+  .cats { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .cat { padding:5px 11px; border-radius:999px; border:1px solid #ffffff26;
+         background:#ffffff0d; color:inherit; font:700 12px/1 system-ui;
+         cursor:pointer; }
+  .cat[aria-pressed="true"] { background:#7c5cff33; border-color:#7c5cff88; }
+  .grid { display:grid; gap:8px; padding:12px 16px 40px;
+          grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); }
+  figure { margin:0; position:relative; border-radius:10px; overflow:hidden;
+           background:#000; aspect-ratio:1; cursor:pointer;
+           border:1px solid #ffffff14; }
+  figure img { width:100%; height:100%; object-fit:cover; display:block; }
+  figcaption { position:absolute; left:0; top:0; padding:3px 7px;
+               background:#000000d9; font:800 12px/1.35 system-ui;
+               border-radius:0 0 8px 0; }
+  .miss { position:absolute; inset:0; display:grid; place-items:center;
+          color:#ff8a8a; font:700 12px system-ui; background:#2a0f14; }
+  /* Detay katmanı */
+  dialog { border:none; padding:0; background:transparent; max-width:min(92vw,620px); }
+  dialog::backdrop { background:#000000cc; }
+  .card { background:#14142a; border:1px solid #ffffff1f; border-radius:14px;
+          overflow:hidden; }
+  .card img { width:100%; display:block; aspect-ratio:1; object-fit:cover; }
+  .meta { padding:12px 14px; }
+  .meta dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:0; }
+  .meta dt { color:#a9a3d0; font-size:12px; }
+  .meta dd { margin:0; font-size:12px; word-break:break-all; }
+  .meta button { margin-top:12px; width:100%; padding:9px; border-radius:9px;
+                 border:1px solid #ffffff26; background:#ffffff0d; color:inherit;
+                 font:700 13px system-ui; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Resim Kaydır — görsel havuzu</h1>
+  <div class="sub" id="sub">yükleniyor…</div>
+  <div class="cats" id="cats"></div>
+</header>
+<div class="grid" id="grid"></div>
+
+<dialog id="dlg"><div class="card">
+  <img id="dImg" alt="" />
+  <div class="meta">
+    <dl>
+      <dt>sıra</dt><dd id="dN"></dd>
+      <dt>id</dt><dd id="dId"></dd>
+      <dt>kategori</dt><dd id="dCat"></dd>
+      <dt>zorluk</dt><dd id="dDif"></dd>
+      <dt>çözünürlük</dt><dd id="dW"></dd>
+      <dt>kaynak</dt><dd id="dSrc"></dd>
+      <dt>lisans</dt><dd id="dLic"></dd>
+      <dt>URL</dt><dd id="dUrl"></dd>
+    </dl>
+    <button id="dClose">Kapat</button>
+  </div>
+</div></dialog>
+
+<!-- rng.js önce: games.js'teki üreteçler phRng'e bağlı (bkz. CLAUDE.md §5) -->
+<script src="../core/rng.js"></script>
+<script src="../games/games.js"></script>
+<script>
+  const POOL = PuzzleGames.jigsawCard.engine.IMAGE_POOL;
+  const grid = document.getElementById('grid');
+  const cats = document.getElementById('cats');
+  const dlg  = document.getElementById('dlg');
+  let filter = null;
+
+  const counts = {};
+  POOL.forEach(p => counts[p.category] = (counts[p.category] || 0) + 1);
+  document.getElementById('sub').textContent =
+    POOL.length + ' görsel · ' + Object.keys(counts).length + ' kategori · ' +
+    'hepsi Unsplash, atıf zorunlu değil';
+
+  function chip(label, value) {
+    const b = document.createElement('button');
+    b.className = 'cat'; b.textContent = label;
+    b.setAttribute('aria-pressed', String(filter === value));
+    b.onclick = () => { filter = value; render(); };
+    return b;
+  }
+  function open(p, n) {
+    document.getElementById('dImg').src = p.url;
+    document.getElementById('dN').textContent   = '#' + n;
+    document.getElementById('dId').textContent  = p.id;
+    document.getElementById('dCat').textContent = p.category;
+    document.getElementById('dDif').textContent = p.difficulty;
+    document.getElementById('dW').textContent   = p.w + '×' + p.w;
+    document.getElementById('dSrc').textContent = p.src;
+    document.getElementById('dLic').textContent = p.lic;
+    document.getElementById('dUrl').textContent = p.url;
+    dlg.showModal();
+  }
+  document.getElementById('dClose').onclick = () => dlg.close();
+  dlg.onclick = e => { if (e.target === dlg) dlg.close(); };
+
+  function render() {
+    cats.innerHTML = '';
+    cats.appendChild(chip('Tümü (' + POOL.length + ')', null));
+    Object.keys(counts).sort().forEach(c =>
+      cats.appendChild(chip(c + ' (' + counts[c] + ')', c)));
+
+    grid.innerHTML = '';
+    POOL.forEach((p, i) => {
+      if (filter && p.category !== filter) return;
+      const f = document.createElement('figure');
+      const img = document.createElement('img');
+      img.src = p.url; img.loading = 'lazy'; img.alt = p.category;
+      // Kırık URL sessizce boş kare olarak geçmesin — gözden kaçar.
+      img.onerror = () => {
+        const e = document.createElement('div');
+        e.className = 'miss'; e.textContent = 'YÜKLENEMEDİ';
+        f.appendChild(e);
+      };
+      const cap = document.createElement('figcaption');
+      cap.textContent = '#' + (i + 1) + ' ' + p.category;
+      f.appendChild(img); f.appendChild(cap);
+      f.onclick = () => open(p, i + 1);
+      grid.appendChild(f);
+    });
+  }
+  render();
+</script>
+</body>
+</html>
