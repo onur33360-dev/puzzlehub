@@ -7621,7 +7621,7 @@ PuzzleGames.arrowPuzzle = (() => {
 PuzzleGames.jigsawCard = (() => {
   const P = 'slp';                    // CSS öneki — repoda kullanılmıyor
   const SIZES = [3, 4, 5];
-  let container, wrapEl, boardEl, movesEl, timeEl, levelEl;
+  let container, wrapEl, boardEl, movesEl, timeEl, levelEl, goalEl;
   let N = 3, board = null, moves = 0, won = false;
   let startedAt = 0, timerId = 0, seed = null;
   let level = 1, image = null, imageOk = false;
@@ -7833,12 +7833,26 @@ PuzzleGames.jigsawCard = (() => {
         'touch-action:manipulation;user-select:none}' +
       // Konum transform ile: Faz 4'te animasyon tek satır transition olacak.
       // left/top olsaydı her hamle layout tetiklerdi.
+      // HEDEF GÖRSEL: oyuncu neyi kurduğunu bilmeli. Bu olmadan 4x4 ve
+      // üstü tahtalarda oyun "hangi parça nereye" bilmecesine dönüşüyor.
+      '.' + P + '-goal{display:flex;align-items:center;gap:8px;' +
+        'font:700 12px/1 system-ui,sans-serif;opacity:.85}' +
+      '.' + P + '-goal i{width:56px;height:56px;border-radius:8px;flex:none;' +
+        'border:1px solid #8886;background:#0003 center/cover no-repeat}' +
       '.' + P + '-tile{position:absolute;top:0;left:0;display:flex;' +
         'align-items:center;justify-content:center;' +
         'font:800 clamp(14px,5vw,28px)/1 system-ui,sans-serif;' +
-        'background:#5b6cff;color:#fff;border:1px solid #0003;cursor:pointer;' +
-        'will-change:transform}' +
+        'background:#5b6cff center/cover no-repeat;color:#fff;' +
+        'border:1px solid #0003;cursor:pointer;will-change:transform}' +
       '.' + P + '-tile[data-movable="0"]{cursor:default;opacity:.9}' +
+      // Resim varken numara KÖŞEDE küçük bir rozet: hedef yeri gösterir
+      // ama fotoğrafı kapatmaz. Ortada büyük dursaydı resmi yok ederdi.
+      // Koyu yarı saydam zemin + beyaz metin, çünkü altındaki fotoğrafın
+      // rengi ne olacağı bilinmiyor.
+      '.' + P + '-tile[data-img="1"]::after{content:attr(data-num);' +
+        'position:absolute;top:2px;left:2px;min-width:15px;height:15px;' +
+        'padding:0 3px;border-radius:5px;background:rgba(8,8,20,.72);' +
+        'color:#fff;font:700 10px/15px system-ui,sans-serif;text-align:center}' +
       '.' + P + '-win{font:800 15px/1 system-ui,sans-serif;color:#22c55e}';
   }
 
@@ -7861,12 +7875,15 @@ PuzzleGames.jigsawCard = (() => {
   // hizalama TAM: yeniden ölçüm, yuvarlama hatası, kırık kenar yok.
   // Retina da bedava — tarayıcı 1200px kaynağı ölçekliyor, biz karışmıyoruz.
   function paint(el, home) {
-    if (!imageOk) {                       // resim gelmediyse numaralı kal
+    el.dataset.num = String(home + 1);    // hedef sıra numarası
+    if (!imageOk) {                       // resim gelmediyse ORTADA büyük numara
+      el.dataset.img = '0';
       el.textContent = String(home + 1);
       el.style.backgroundImage = '';
       return;
     }
-    el.textContent = '';
+    el.dataset.img = '1';
+    el.textContent = '';                  // numara artık ::after rozetinde
     const c = home % N, r = (home - c) / N, d = N - 1;
     el.style.backgroundImage = 'url("' + image.url + '")';
     el.style.backgroundSize = (N * 100) + '% ' + (N * 100) + '%';
@@ -7981,6 +7998,7 @@ PuzzleGames.jigsawCard = (() => {
       if (!boardEl) return;                       // arada cleanup olduysa
       boardEl.querySelectorAll('.' + P + '-tile')
         .forEach(t => paint(t, Number(t.dataset.home)));
+      if (goalEl) goalEl.style.backgroundImage = imageOk ? 'url("' + image.url + '")' : '';
     });
     updateHud();
     startTimer();
@@ -8008,6 +8026,8 @@ PuzzleGames.jigsawCard = (() => {
           '<button class="' + P + '-btn" data-role="reset">Yeniden</button>' +
           '<button class="' + P + '-btn" data-role="next">Sonraki ▸</button>' +
         '</div>' +
+        '<div class="' + P + '-goal"><i data-role="goal"></i>' +
+          '<span>Hedef görsel</span></div>' +
         '<div class="' + P + '-board" data-role="board"></div>' +
       '</div>';
     wrapEl = container.querySelector('.' + P + '-wrap');
@@ -8015,6 +8035,7 @@ PuzzleGames.jigsawCard = (() => {
     movesEl = wrapEl.querySelector('[data-role="moves"]');
     timeEl = wrapEl.querySelector('[data-role="time"]');
     levelEl = wrapEl.querySelector('[data-role="level"]');
+    goalEl = wrapEl.querySelector('[data-role="goal"]');
     addEv(boardEl, 'click', onTap);
     wrapEl.querySelectorAll('.' + P + '-btn').forEach(b => {
       addEv(b, 'click', () => {
@@ -8030,7 +8051,7 @@ PuzzleGames.jigsawCard = (() => {
     stopTimer();
     clearEvs();
     if (container) container.innerHTML = '';
-    container = wrapEl = boardEl = movesEl = timeEl = levelEl = null;
+    container = wrapEl = boardEl = movesEl = timeEl = levelEl = goalEl = null;
     board = null; image = null; imageOk = false;
   }
 
