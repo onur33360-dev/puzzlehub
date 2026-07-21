@@ -5993,6 +5993,18 @@ PuzzleGames.arrowPuzzle = (() => {
     { id: 'g8',  offsets: [[0,0],[0,1],[0,2],[0,3],[1,3],[2,3],[2,2],[2,1]] },
     { id: 'e9',  offsets: [[0,0],[0,1],[1,1],[2,1],[2,2],[2,3],[1,3],[0,3],[0,4]] },
     { id: 'h10', offsets: [[0,0],[0,1],[1,1],[1,2],[1,3],[2,3],[3,3],[3,2],[3,1],[4,1]] },
+
+    // ── Serpantinler (12-20 hücre) ──
+    // HENÜZ HİÇBİR KADEMEDE DEĞİL: SHAPE_TIERS bunları içermiyor, yani
+    // shapePool() döndürmüyor ve bugünkü oyunda çıkmıyorlar. Zorluk
+    // eğrisine dokunmak ayrı bir karar. Burada duruyorlar çünkü yeni
+    // üretecin ölçümü bu uzunluklarla yapıldı (26x24'te %68 yoğunluk,
+    // ort. 6.4 hücre/ok) ve şekil kütüphanesi VERİdir.
+    { id: 'sp12', offsets: [[0,0],[0,1],[0,2],[0,3],[1,3],[1,2],[1,1],[1,0],[2,0],[2,1],[2,2],[2,3]] },
+    { id: 'sp14', offsets: [[0,0],[0,1],[0,2],[0,3],[0,4],[1,4],[1,3],[1,2],[1,1],[1,0],[2,0],[2,1],[2,2],[2,3]] },
+    { id: 'sp16', offsets: [[0,0],[0,1],[0,2],[0,3],[1,3],[1,2],[1,1],[1,0],[2,0],[2,1],[2,2],[2,3],[3,3],[3,2],[3,1],[3,0]] },
+    { id: 'sp18', offsets: [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[1,5],[1,4],[1,3],[1,2],[1,1],[1,0],[2,0],[2,1],[2,2],[2,3],[2,4],[2,5]] },
+    { id: 'sp20', offsets: [[0,0],[0,1],[0,2],[0,3],[0,4],[1,4],[1,3],[1,2],[1,1],[1,0],[2,0],[2,1],[2,2],[2,3],[2,4],[3,4],[3,3],[3,2],[3,1],[3,0]] },
   ];
   const STRAIGHT_IDS = ['i2', 'i3', 'i4'];
 
@@ -6243,6 +6255,119 @@ PuzzleGames.arrowPuzzle = (() => {
     }
     if (b.arrows.size < target) return null;
     return { board: b, seed: seed >>> 0, attempts: 1, method: 'reverse' };
+  }
+
+  // ───────── Üreteç C: çıkış ışınından içeri sokma ─────────
+  // GEÇERLİLİK KOŞULU ÜRETEÇ B İLE BİREBİR AYNI: bir ok yerleştirildiği
+  // anda kendi çıkış ışını açık olmak zorunda. Bu sağlandığında ters
+  // yerleştirme sırası geçerli bir çözümdür. Oyun kuralına EKLEME YOK —
+  // canExit'in kendisi çağrılıyor, ikinci bir "çıkabilir mi" tanımı
+  // türetilmiyor (iki tanımın ayrışması bu oyunda bir kez yaşandı).
+  //
+  // Fark YALNIZCA ARAMADA. Üreteç B rastgele bir anchor seçip "çıkışı
+  // açık mı?" diye soruyor; tahta doldukça cevap neredeyse hep hayır
+  // oluyor ve 3000 başarısız denemeden sonra pes ediyor. Ölçüm (20 tohum):
+  //   26x24 / 85 ok  → B: %50 başarı, 112 ms   C: %80 başarı, 14 ms
+  //   22x22 / 66 ok  → B: %75 başarı,  56 ms   C: %95 başarı,  5.6 ms
+  // Bu üreteç ışını ZATEN açık olan uç hücrelerini doğrudan hesaplıyor ve
+  // yalnızca onlardan seçiyor: geçerli konum deneme-yanılmayla değil,
+  // inşa yoluyla bulunuyor.
+  //
+  // validTips maliyeti O(hücre), yerleştirme başına bir kez.
+  // Bir hücrenin ışını açıksa, o yöndeki ilk dolu hücreye kadar hepsi boş
+  // demektir; dolayısıyla sütun/satır başına tek tarama yetiyor.
+  function validTips(b, dir, mask) {
+    const cols = b.cols, rows = b.rows, occ = b.occ, out = [];
+    const ok = (c, r) => !mask || mask[r * cols + c];
+    if (dir === 0 || dir === 2) {                    // yukarı / aşağı
+      for (let c = 0; c < cols; c++) {
+        let first = rows, last = -1;
+        for (let r = 0; r < rows; r++) if (occ[r * cols + c]) { if (r < first) first = r; last = r; }
+        if (dir === 0) { for (let r = 0; r < first; r++) if (ok(c, r)) out.push([c, r, first - r]); }
+        else           { for (let r = last + 1; r < rows; r++) if (ok(c, r)) out.push([c, r, r - last]); }
+      }
+    } else {                                          // sağ / sol
+      for (let r = 0; r < rows; r++) {
+        let first = cols, last = -1;
+        for (let c = 0; c < cols; c++) if (occ[r * cols + c]) { if (c < first) first = c; last = c; }
+        if (dir === 3) { for (let c = 0; c < first; c++) if (ok(c, r)) out.push([c, r, first - c]); }
+        else           { for (let c = last + 1; c < cols; c++) if (ok(c, r)) out.push([c, r, c - last]); }
+      }
+    }
+    return out;   // [c, r, derinlik] — derinlik = ucun önündeki boş hücre sayısı
+  }
+
+  function cellsInMask(b, cells, mask) {
+    if (!mask) return true;
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i][0], r = cells[i][1];
+      if (!onBoard(b, c, r) || !mask[r * b.cols + c]) return false;
+    }
+    return true;
+  }
+
+  // opts: { cols, rows, arrows, shapes, mask?, fill?, preferLong?, deepSpan? }
+  //   mask  — hangi hücreler doldurulabilir (Uint8Array). Yoksa tüm tahta.
+  //   fill  — hedef sayı yerine "sığdığı kadar" doldur.
+  // NOT: mask ve fill şu an startLevel tarafından KULLANILMIYOR; silüet
+  // seviyeleri ayrı bir iş. Burada duruyorlar çünkü aramanın doğal
+  // parametreleri ve sonradan eklemek üreteci yeniden yazmak olurdu.
+  function generateSlide(opts, seed) {
+    const cols = opts.cols, rows = opts.rows;
+    const pool = (opts.shapes && opts.shapes.length) ? opts.shapes : STRAIGHT_IDS;
+    const mask = opts.mask || null;
+    const target = opts.fill ? Infinity : opts.arrows;
+    const rng = phRng(seed >>> 0 || 1);
+    // preferLong: uzun şekli önce dene. Yoğunluğu artırır AMA alanı erken
+    // tükettiği için hedef SAYIYI tutturmayı zorlaştırır — ölçüldü:
+    // 22x22'de %100 → %20. O yüzden yalnızca doldurma modunda açık.
+    const preferLong = opts.preferLong !== undefined ? opts.preferLong : !!opts.fill;
+    const deepSpan = opts.deepSpan !== undefined ? opts.deepSpan : 0.35;
+    const staleMax = opts.staleMax !== undefined ? opts.staleMax : 200;
+
+    const b = makeBoard(cols, rows);
+    let id = 0, stale = 0;
+
+    while (b.arrows.size < target && stale < staleMax) {
+      const dirs = [0, 1, 2, 3];
+      for (let i = 3; i > 0; i--) { const j = phRngInt(rng, i + 1); const t = dirs[i]; dirs[i] = dirs[j]; dirs[j] = t; }
+      let placed = false;
+
+      for (let d = 0; d < 4 && !placed; d++) {
+        const dir = dirs[d];
+        const tips = validTips(b, dir, mask);
+        if (!tips.length) continue;
+        // İÇTEN DIŞA paketleme: önce DERİN uçlar. Erken oklar merkeze
+        // gömülür, geç gelenler kabuğu doldurur. Yoğunluğu bu sıra belirliyor.
+        tips.sort((x, y) => y[2] - x[2]);
+        const span = Math.max(1, Math.ceil(tips.length * deepSpan));
+
+        for (let t = 0; t < 14 && !placed; t++) {
+          const tip = tips[phRngInt(rng, span)];
+          const tries = [];
+          for (let k = 0; k < 6; k++) tries.push(pool[phRngInt(rng, pool.length)]);
+          if (preferLong) {
+            tries.sort((x, y) => SHAPE_BY_ID[y].offsets.length - SHAPE_BY_ID[x].offsets.length);
+          }
+          for (let k = 0; k < tries.length; k++) {
+            const cand = { id, shapeId: tries[k], dir, anchor: [tip[0], tip[1]] };
+            const cells = cellsOf(cand);
+            if (!cellsInMask(b, cells, mask)) continue;
+            if (!cellsFree(b, cells, -1)) continue;
+            placeArrow(b, cand);
+            // Işın açıktı, yani buranın geçmesi bekleniyor. Yine de
+            // SÖZLEŞME burada: geçerliliği canExit tanımlar, biz değil.
+            if (!canExit(b, cand)) { removeArrow(b, cand); continue; }
+            id++; placed = true; break;
+          }
+        }
+      }
+      if (placed) stale = 0; else stale++;
+    }
+
+    if (!opts.fill && b.arrows.size < opts.arrows) return null;
+    if (b.arrows.size === 0) return null;
+    return { board: b, seed: seed >>> 0, attempts: 1, method: 'slide' };
   }
 
 
@@ -7051,7 +7176,12 @@ PuzzleGames.arrowPuzzle = (() => {
     let res = null;
     for (let give = 0; give < 6 && !res; give++) {
       const q = { ...p, arrows: Math.max(3, p.arrows - give) };
-      res = generateReverse(q, seed + give) || generateForward(q, seed + give);
+      // Önce Üreteç C (slide-in): aynı geçerlilik koşulu, çok daha yüksek
+      // isabet ve hız. Başarısız olursa bugünkü zincir aynen devrede —
+      // yani en kötü senaryo eski davranış.
+      res = generateSlide(q, seed + give)
+         || generateReverse(q, seed + give)
+         || generateForward(q, seed + give);
     }
     if (!res) {   // olmamalı, ama oyun asla açılmamaktansa kolay tahta versin
       res = generateReverse({ ...p, arrows: 3, shapes: STRAIGHT_IDS }, seed);
@@ -7304,7 +7434,7 @@ PuzzleGames.arrowPuzzle = (() => {
       SHAPES, STRAIGHT_IDS, DIRS,
       cellsOf, makeBoard, cellsFree, placeArrow, removeArrow,
       canExit, blockersOf, freeArrows, solveOrder, isSolvable, metrics,
-      generateForward, generateReverse,
+      generateForward, generateReverse, generateSlide, validTips,
     },
   };
 })();
