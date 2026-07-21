@@ -6592,16 +6592,33 @@ PuzzleGames.arrowPuzzle = (() => {
          ve gölge oradan gelir. Burada yalnızca Arrow'a özgü olan kalıyor —
          ölçü, dolgu ve dokunma davranışı. Reçeteyi kopyalamak §24'ün
          ikinci adımının ihlali olurdu. */
+      /* flex:1 + min-height:0 ŞART. Tahta kolon flex'in çocuğu; yer
+         yetmediğinde flex-shrink onu içeriğinin ALTINA sıkıştırır ve
+         overflow:hidden farkı sessizce keser. Ölçüldü: 5x6 tahta 430px
+         yükseklikte 396px'ten 218px'e büzüldü, SVG'nin 192 pikseli
+         tahtanın altında kaldı — en alttaki ok gövdesinin ortasından
+         kırpıldı, oyuncu ona dokunamadı ve hangi okun serbest olduğunu
+         okuyamadı. min-height:0 büzülmeyi meşrulaştırır, aşağıdaki
+         height:100% zinciri de SVG'yi büzülen kutuya SIĞDIRIR. */
       .ar-board{position:relative;width:100%;max-width:400px;
+        display:flex;flex-direction:column;flex:1 1 auto;min-height:0;
         padding:var(--ph-space-3);overflow:hidden;touch-action:manipulation}
       /* Kamera iki katman ister: viewport KIRPAR, stage ÖLÇEKLENİR.
          SVG'ye hiç dokunulmaz — yakınlaştırma yeniden çizim değil, tek
          bir CSS transform. touch-action:none şart: yoksa tarayıcı pinch/
          pan hareketlerini sayfa kaydırması sanıp bize hiç vermez. */
       .ar-viewport{position:relative;z-index:1;overflow:hidden;
+        flex:1;min-height:0;width:100%;
         border-radius:var(--ph-radius-md);touch-action:none}
-      .ar-stage{transform-origin:0 0;will-change:transform}
-      .ar-svg{display:block;width:100%;height:auto;overflow:visible}
+      .ar-stage{transform-origin:0 0;will-change:transform;width:100%;height:100%}
+      /* height:100% + preserveAspectRatio'nun varsayılanı (xMidYMid meet):
+         viewBox HER İKİ eksende kutuya sığar ve ortalanır. height:auto
+         idi; o, yüksekliği yalnızca GENİŞLİKTEN türetiyordu, yani boyu
+         eninden büyük her tahtada (5x6, 5x7, 9x11 — hepsi öyle) içerik
+         kutuyu taşıyordu. Artık taşma yok: dar kalan eksende tahta
+         küçülür, tamamı görünür. Kenar boşluğu referansın da yaptığı şey.
+         Kamera etkilenmiyor: ölçek 1'de öteleme zaten 0. */
+      .ar-svg{display:block;width:100%;height:100%;overflow:visible}
 
       /* Kenarlarda koyulaşan iç gölge: tahta ÇUKUR bir yüzey gibi okunur,
          oklar da onun üstünde durur. Katman hissinin ucuz ve tek elemanlı
