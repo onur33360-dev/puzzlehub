@@ -81,9 +81,21 @@ anime-style illustration (clothed, safe), fantasy landscapes, cyberpunk cities, 
 scenes, Japanese streets, castles, space and galaxies, flowers, animals, digital art.
 
 **Rejected outright:** photographs of **real people** — portraits, faces, or any shot where
-an identifiable person is the subject; sexual or suggestive imagery; characters framed
-around breasts or hips; lingerie/bikini-centric characters; violence, blood, horror; low
-resolution; visible text or watermarks; memes, adverts, collage-style images.
+an identifiable person is the subject; **nudity**; violence, blood, horror; low resolution;
+visible text or watermarks; memes, adverts, collage-style images.
+
+**Owner's standard on suggestiveness (revised):** mild suggestiveness in *illustrated*
+characters is acceptable **provided there is no nudity**. Two practical consequences follow,
+and both are the owner's call to accept:
+
+1. **It changes the whole app's store rating, not just this game.** Google Play and the App
+   Store rate suggestive content into a higher age band, and PuzzleHub ships as one app —
+   the Discover feed, daily rewards and streaks all target a broad casual audience. A single
+   image in one game sets the rating for the hub.
+2. **The three approved sources barely carry this material.** Unsplash, Pexels and Pixabay
+   content policies largely exclude it. Sourcing it means art-sharing or image-board sites,
+   whose licensing is unclear — which fails the commercial-safety bar in §5 regardless of
+   how well the artwork fits the theme.
 
 Illustrated/anime characters are permitted where a real person's photograph is not, but the
 subject must be the **art and composition**, not the character's body. The real-person rule
