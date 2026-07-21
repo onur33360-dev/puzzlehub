@@ -68,8 +68,21 @@ new worker and a new bucket while still serving the previous `games.js`.
 
 ### Android (Capacitor)
 
-Requires **JDK 17+** and the **Android SDK** (installed with Android Studio). Neither is
-needed to work on the web surface.
+Requires **JDK 21** and the **Android SDK** (platform 35 + build-tools 35). Neither is needed
+to work on the web surface.
+
+**JDK 17 does not work** — Capacitor 7 compiles its Android library at source level 21 and
+fails with `invalid source release: 21`. The error names Java 21 but not the fix, and JDK 17
+is still the default suggestion in most Android tutorials, so this is easy to lose an hour
+to. On this machine the toolchain lives outside the repo, installed without admin rights:
+
+```
+JAVA_HOME    = C:\Users\onur3\dev-tools\jdk-21.0.11+10
+ANDROID_HOME = C:\Users\onur3\dev-tools\android-sdk
+```
+
+`android/local.properties` points Gradle at the SDK. It is machine-specific and gitignored,
+so a fresh clone must recreate it.
 
 | Command | Does |
 |---|---|
