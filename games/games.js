@@ -8160,13 +8160,19 @@ PuzzleGames.jigsawCard = (() => {
     levelEl = wrapEl.querySelector('[data-role="level"]');
     goalEl = wrapEl.querySelector('[data-role="goal"]');
     addEv(boardEl, 'click', onTap);
-    wrapEl.querySelectorAll('.' + P + '-btn').forEach(b => {
-      addEv(b, 'click', () => {
-        if (b.dataset.size) reset(Number(b.dataset.size));
-        else if (b.dataset.role === 'next') startLevel(level + 1, 0);
-        else reset(0);
+    // Seçici İŞARETLEMEYE değil VERİYE bağlı. Faz 3'te düğmeler
+    // yeniden yazılınca `.slp-btn` sınıfı kalktı ama seçici onu aramaya
+    // devam etti; hiçbir düğmeye dinleyici bağlanmadı ve 3×3/4×4/5×5,
+    // Yeniden, Sonraki hepsi sessizce öldü. data-* öznitelikleri
+    // düğmenin GÖRÜNÜŞÜ değiştiğinde de yerinde kalıyor.
+    wrapEl.querySelectorAll('[data-size],[data-role="reset"],[data-role="next"]')
+      .forEach(b => {
+        addEv(b, 'click', () => {
+          if (b.dataset.size) reset(Number(b.dataset.size));
+          else if (b.dataset.role === 'next') startLevel(level + 1, 0);
+          else reset(0);
+        });
       });
-    });
     startLevel(Math.max(1, opts.level || 1), SIZES.indexOf(opts.size) >= 0 ? opts.size : 0);
   }
 
