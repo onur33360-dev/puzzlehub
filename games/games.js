@@ -6189,6 +6189,15 @@ PuzzleGames.arrowPuzzle = (() => {
     }
   }
 
+  // Bağımlılık grafiğinin kenar sayısı: kaç ok, kaç oku kilitliyor.
+  // Tahtanın BULMACA olup olmadığının ölçüsü — doluluk ve komşuluk değil.
+  // Sıfır kenar = her ok serbest = tek turda biten seviye.
+  function depEdgeCount(b) {
+    let e = 0;
+    b.arrows.forEach(a => { e += blockersOf(b, a).length; });
+    return e;
+  }
+
   // ───────── Çözülebilirlik ─────────
   // Monotonluk sayesinde arama GEREKMEZ: serbest olan herhangi bir oku
   // çıkarmak asla çözümü bozamaz. Tahtanın kopyası üzerinde çalışır.
@@ -7306,8 +7315,22 @@ PuzzleGames.arrowPuzzle = (() => {
     // yeterli değil. Her tur bir ok azaltıp yeniden dener; seyrek tahta
     // her zaman üretilebildiği için bu döngü kesin sonlanır.
     // BURAYA KORUMASIZ res.board YAZMA — çökmenin kaynağı oydu.
-    let res = null;
-    for (let give = 0; give < 6 && !res; give++) {
+    // ───── KALİTE KAPISI ─────
+    // Dolu ve iç içe geçmiş tahta, BULMACA demek değil: iki ok yan yana
+    // durup birbirini hiç kilitlemeyebilir — kilitleyen tek şey ucun
+    // önündeki ışın. Kapısız üretimde seviye 6'da 10 yılanın 10'u da
+    // serbest çıkıyordu, bağımlılık grafiğinin SIFIR kenarı vardı; tek
+    // turda biten bir "bulmaca". Eşik ok sayısının dörtte biri. Ölçüm
+    // (sv 4-40): ortalama kenar 3.6 → 4.5, derinlik 2.27 → 2.51,
+    // dejenere seviye 1 → 0; bedeli 13.9 → 17.0 ms (en kötü 42 ms,
+    // seviye başına 1.4 deneme). n/3 eşiği en kötüyü 79 ms'ye çıkarıyor
+    // ve kazancı küçük — denendi, alınmadı.
+    const needEdges = Math.max(1, Math.ceil(p.arrows / 4));
+    let res = null, best = null;
+    for (let attempt = 0; attempt < 6 && !res; attempt++) {
+    const sd = seed + attempt * 7919;
+    let cand = null;
+    for (let give = 0; give < 6 && !cand; give++) {
       const q = { ...p, arrows: Math.max(3, p.arrows - give) };
       // Önce Üreteç C, DOLDURMA modunda: hedef sayı yerine "sığdığı kadar"
       // paketler ve uzun şekli önce dener. Ölçüm (15 tohum, sv 4-40):
@@ -7318,11 +7341,16 @@ PuzzleGames.arrowPuzzle = (() => {
       // dolu ve daha iç içe geçmiş oluyor.
       // DİKKAT: bu modda p.arrows kullanılmaz; sayı tahtadan DOĞAR.
       // Aşağıdaki yedekler onu hâlâ kullanıyor, o yüzden paramsFor duruyor.
-      res = generateSlide({ ...q, fill: true, preferLong: true }, seed + give)
-         || generateSlide(q, seed + give)
-         || generateReverse(q, seed + give)
-         || generateForward(q, seed + give);
+      cand = generateSlide({ ...q, fill: true, preferLong: true }, sd + give)
+          || generateSlide(q, sd + give)
+          || generateReverse(q, sd + give)
+          || generateForward(q, sd + give);
     }
+      if (!cand) continue;
+      if (!best) best = cand;                  // hiçbiri kapıyı geçmezse bu kullanılır
+      if (depEdgeCount(cand.board) >= needEdges) res = cand;
+    }
+    res = res || best;
     if (!res) {   // olmamalı, ama oyun asla açılmamaktansa kolay tahta versin
       res = generateReverse({ ...p, arrows: 3, shapes: STRAIGHT_IDS }, seed);
     }
@@ -7574,7 +7602,7 @@ PuzzleGames.arrowPuzzle = (() => {
       SHAPES, STRAIGHT_IDS, DIRS,
       cellsOf, makeBoard, cellsFree, placeArrow, removeArrow,
       canExit, blockersOf, freeArrows, solveOrder, isSolvable, metrics,
-      generateForward, generateReverse, generateSlide, validTips,
+      generateForward, generateReverse, generateSlide, validTips, depEdgeCount,
       HAND_LEVELS, buildHandLevel,
     },
   };
