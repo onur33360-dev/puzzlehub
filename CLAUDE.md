@@ -160,12 +160,21 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   still asks for a target arrow count. They exist because they are the search's
   natural parameters and bolting them on later would mean rewriting the generator.
   Not dead code — unshipped capability.
-- **`sp12`–`sp20` (serpentine shapes) are in `SHAPES` but in NO tier.**
-  `SHAPE_TIERS` doesn't list them, so `shapePool()` never returns them and they
-  never appear in play. They are the data the denser-board work will need, and the
-  generator benchmark was run with them. Don't delete them as unused, and don't
-  add them to a tier casually — that changes the difficulty curve, which is a
-  product decision, and it also shifts `avgCells()` and therefore the capacity cap.
+- **Generated levels (4+) run the packer in FILL mode, not target-count mode.**
+  `startLevel` calls `generateSlide` with `{ fill: true, preferLong: true }` first, so
+  `paramsFor(...).arrows` is **not** what decides the arrow count — the board size does.
+  `paramsFor` still runs because the fallbacks need a count. Measured over levels 4–40:
+  curved-arrow share 51%→69%, mean snake length 3.8→5.3, interlocking (distinct
+  touching neighbours per arrow) 2.21→2.91, density 0.58→0.77, while the arrow count
+  per level moved by at most ±1 — the difficulty curve survived, the boards just got
+  fuller. Fill mode's `staleMax` defaults to 25, not 200: measured identical output at
+  both but 86.7 ms → 7.5 ms, and level generation blocks the main thread.
+- **`i2` was removed from `SHAPE_TIERS`; `sp12`/`sp14`/`sp16` were added at tier 22.**
+  `sp18`/`sp20` remain in `SHAPES` but in no tier. `i2` had to go because the packer
+  tries six candidates and places the first that fits, so the smallest shape won far
+  more often than its share of the pool: at level 40 straights were 17.6% of the pool
+  but 48% of placements. Adding shapes to a tier shifts `avgCells()` and therefore the
+  capacity cap, so it is never a cosmetic edit.
 - **Sudoku validates against the SOLUTION, not against Sudoku's rules.** A wrong digit is
   refused and costs one of 3 lives; it never lands on the board. This is deliberate — it is
   why there is no erase key and no undo, and it makes **unique-solution puzzles a functional

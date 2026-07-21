@@ -6012,11 +6012,18 @@ PuzzleGames.arrowPuzzle = (() => {
   // Oyuncu düz oklarla başlar, kıvrımı öğrenir, sonra gerçekten uzun
   // yılanlarla karşılaşır. Havuz BİRİKİMLİ: üst kademe açılınca alttakiler
   // kaybolmaz, yoksa tahta tek tip olur ve okuma kolaylaşır.
+  // i2 (2 hücre) havuzdan ÇIKARILDI. Paketleyici 6 aday deneyip ilk
+  // sığanı koyduğu için en küçük şekil orantısız kazanıyordu: seviye
+  // 40'ta havuzun %17.6'sı düzken yerleşenlerin %48'i düz çıkıyordu ve
+  // ortalama uzunluk 3.8'de kalıyordu (havuz ortalaması 5.5 iken).
+  // Serpantinler 22'den itibaren giriyor — uzun kıvrımlı siluetler
+  // ancak tahta 8x10'u geçince sığıyor.
   const SHAPE_TIERS = [
-    { from: 1,  ids: STRAIGHT_IDS },
+    { from: 1,  ids: ['i3', 'i4'] },
     { from: 4,  ids: ['l3', 'l3b', 'l4', 's4', 'u5'] },
     { from: 9,  ids: ['z6', 'n6', 'l6', 'c6', 's7'] },
     { from: 17, ids: ['w8', 'g8', 'e9', 'h10'] },
+    { from: 22, ids: ['sp12', 'sp14', 'sp16'] },
   ];
   function shapePool(n) {
     const ids = [];
@@ -6365,7 +6372,14 @@ PuzzleGames.arrowPuzzle = (() => {
     // 22x22'de %100 → %20. O yüzden yalnızca doldurma modunda açık.
     const preferLong = opts.preferLong !== undefined ? opts.preferLong : !!opts.fill;
     const deepSpan = opts.deepSpan !== undefined ? opts.deepSpan : 0.35;
-    const staleMax = opts.staleMax !== undefined ? opts.staleMax : 200;
+    // Doldurma modunda tahta dolduğunda ARDIŞIK başarısızlıklar birikir ve
+    // sonrası tamamen israftır: ölçüldü, staleMax 200 ile 15 arasında çıktı
+    // BİREBİR aynı (kavisli %63, uzunluk 4.8, komşuluk 2.74, yoğunluk .76)
+    // ama süre 86.7 ms'den 7.5 ms'ye iniyor. Hedef modunda ise yüksek sınır
+    // isabet oranını taşıyor (istenen sayıya ulaşamayınca vazgeçmesin), o
+    // yüzden orada 200 kalıyor.
+    const staleMax = opts.staleMax !== undefined ? opts.staleMax
+                   : (opts.fill ? 25 : 200);
 
     const b = makeBoard(cols, rows);
     let id = 0, stale = 0;
@@ -7295,10 +7309,17 @@ PuzzleGames.arrowPuzzle = (() => {
     let res = null;
     for (let give = 0; give < 6 && !res; give++) {
       const q = { ...p, arrows: Math.max(3, p.arrows - give) };
-      // Önce Üreteç C (slide-in): aynı geçerlilik koşulu, çok daha yüksek
-      // isabet ve hız. Başarısız olursa bugünkü zincir aynen devrede —
-      // yani en kötü senaryo eski davranış.
-      res = generateSlide(q, seed + give)
+      // Önce Üreteç C, DOLDURMA modunda: hedef sayı yerine "sığdığı kadar"
+      // paketler ve uzun şekli önce dener. Ölçüm (15 tohum, sv 4-40):
+      //   kavisli ok  %51 → %69   ortalama uzunluk 3.8 → 5.3
+      //   komşuluk   2.21 → 2.91  yoğunluk        0.58 → 0.77
+      // Ok SAYISI değişmiyor (seviye başına ±1) çünkü tahta boyu zaten
+      // sınırlıyor — yani zorluk eğrisi korunuyor, tahta yalnızca daha
+      // dolu ve daha iç içe geçmiş oluyor.
+      // DİKKAT: bu modda p.arrows kullanılmaz; sayı tahtadan DOĞAR.
+      // Aşağıdaki yedekler onu hâlâ kullanıyor, o yüzden paramsFor duruyor.
+      res = generateSlide({ ...q, fill: true, preferLong: true }, seed + give)
+         || generateSlide(q, seed + give)
          || generateReverse(q, seed + give)
          || generateForward(q, seed + give);
     }
