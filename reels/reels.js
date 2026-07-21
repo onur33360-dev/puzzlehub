@@ -16,7 +16,9 @@ const REEL_GAMES = [
   { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#1e2a63','#080b22'], playable:true },
   { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🔮', category:'puzzle', desc:'Enerji kanallarını doğru sırayla boşalt!', difficulty:'Kolay', gradient:['#2a1a5e','#0d0824'], playable:true },
   { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Zor', gradient:['#e11d48','#881337'], playable:false },
-  { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#d97706','#78350f'], playable:false },
+  // playable:false BİLEREK — motor ve resim sistemi hazır ama tema Faz 3'te.
+  // Oyuncuya çıplak tahta göstermektense kart demoda kalsın.
+  { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:false },
 ];
 
 const GAME_NAME_MAP = {
@@ -1182,165 +1184,113 @@ MiniDemos.demo_jigsawCard = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  const G=4; // 4x4 grid = 15 puzzle
-  
-  // Manzara fotoğrafı simüle eden gradient renk matrisi (günbatımı dağ manzarası)
-  // Her hücre, büyük resmin o kısmının rengini temsil eder
-  const IMG_COLORS = [
-    // Row 0: Gökyüzü (üst)
-    ['#f97316','#fb923c','#fdba74','#fed7aa'],
-    // Row 1: Dağlar + gökyüzü geçişi
-    ['#ea580c','#9a3412','#7c2d12','#f97316'],
-    // Row 2: Dağ gövdesi + göl
-    ['#78350f','#451a03','#0ea5e9','#0284c7'],
-    // Row 3: Göl + orman (alt)
-    ['#065f46','#047857','#0369a1','#0c4a6e'],
-  ];
-  // Corresponding background-position for each tile (simulating a split photo)
-  
-  if(!document.getElementById('css-slider-demo')){
-    const s=document.createElement('style');s.id='css-slider-demo';
-    s.textContent='@keyframes _slSlide{0%{transform:translate(0,0)}100%{transform:translate(var(--dx),var(--dy))}}@keyframes _slCorrect{0%{box-shadow:0 0 0 2px #22c55e}100%{box-shadow:none}}';
+  // Eski demo bir gradyan renk matrisiyle fotoğraf TAKLİT ediyordu ve
+  // parçalar yerinde renk değiştiriyordu — oyunun mekaniği bu değil.
+  // Bu demo gerçek oyunun kendisini gösteriyor: gerçek bir fotoğraf,
+  // background-position ile parçalanmış, ve yalnızca BOŞLUĞA DİK KOMŞU
+  // parçalar kayıyor. Oyundaki numara rozetleri ve hedef önizlemesi de var.
+  const G = 3;                       // kart boyunda 4x4 okunmuyor, 3x3 doğru
+  const URL = 'https://images.unsplash.com/photo-1474044159687-1ee9f3a51722' +
+              '?w=600&h=600&fit=crop&q=80';
+
+  if(!document.getElementById('css-jig-demo2')){
+    const s=document.createElement('style');s.id='css-jig-demo2';
+    s.textContent =
+      '.jgd-board{position:relative;width:100%;aspect-ratio:1;border-radius:14px;'+
+        'overflow:hidden;border:1px solid rgba(180,165,255,.22);'+
+        'box-shadow:0 18px 40px -16px rgba(4,6,22,.9),inset 0 1px 0 rgba(205,195,255,.18)}'+
+      // Kayma animasyonu: transform geçişi. Oyunda da aynı yaklaşım.
+      '.jgd-tile{position:absolute;top:0;left:0;background-repeat:no-repeat;'+
+        'border-radius:6px;outline:1px solid rgba(8,8,22,.5);'+
+        'transition:transform .34s cubic-bezier(.34,1.4,.64,1)}'+
+      '.jgd-tile::after{content:attr(data-num);position:absolute;top:2px;left:2px;'+
+        'min-width:13px;height:13px;padding:0 3px;border-radius:4px;'+
+        'background:rgba(8,8,20,.72);color:#fff;'+
+        'font:700 9px/13px system-ui,sans-serif;text-align:center}'+
+      '.jgd-goal{position:absolute;right:8px;top:8px;width:44px;height:44px;'+
+        'border-radius:8px;background-size:cover;z-index:5;'+
+        'border:1px solid rgba(205,195,255,.35);box-shadow:0 6px 16px -6px #000c}'+
+      '.jgd-dust{position:absolute;border-radius:50%;pointer-events:none;'+
+        'background:radial-gradient(circle,#EAF0FF,rgba(190,205,255,.6) 55%,transparent);'+
+        'box-shadow:0 0 5px 1px rgba(165,190,255,.4);animation:_jgdDrift linear infinite}'+
+      '@keyframes _jgdDrift{0%{transform:translateY(0);opacity:0}15%{opacity:.7}'+
+        '100%{transform:translateY(-60px);opacity:0}}';
     document.head.appendChild(s);
   }
-  
-  const scene = document.createElement('div');
-  scene.style.cssText='width:86%;max-width:270px;display:flex;flex-direction:column;align-items:center;gap:8px;';
-  
-  // Header - seviye + hamle sayısı
-  const header = document.createElement('div');
-  header.style.cssText='display:flex;align-items:center;justify-content:space-between;width:100%;';
-  header.innerHTML='<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">Seviye 2-5</span><span id="sl-moves" style="font-size:12px;color:rgba(255,255,255,0.3);font-weight:600;">Hamle: 0</span><span style="font-size:12px;color:rgba(255,255,255,0.25);">⏱ 0:00</span>';
-  scene.appendChild(header);
-  
-  // Grid container
-  const gridWrap = document.createElement('div');
-  gridWrap.style.cssText='position:relative;width:100%;aspect-ratio:1;background:rgba(0,0,0,0.3);border-radius:10px;overflow:hidden;border:2px solid rgba(255,255,255,0.08);';
-  
-  // Create tiles: indices 0..14 are tiles, 15 is empty
-  const tileSize = 100/G; // percentage
-  const tiles = []; // {el, idx (current position), home (correct position)}
-  // Shuffle: create a solvable permutation
-  const perm = [];
-  for(let i=0;i<G*G-1;i++) perm.push(i);
-  perm.push(-1); // -1 = empty
-  // Fisher-Yates shuffle (simple, may not always be solvable but it's just a demo)
-  for(let i=perm.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [perm[i],perm[j]]=[perm[j],perm[i]];
+
+  for(let i=0;i<10;i++){
+    const d=document.createElement('div'); const sz=1.5+Math.random()*2;
+    d.className='jgd-dust';
+    d.style.cssText+='width:'+sz+'px;height:'+sz+'px;left:'+(6+Math.random()*88)+'%;'+
+      'top:'+(30+Math.random()*60)+'%;animation-duration:'+(4000+Math.random()*3500)+'ms;'+
+      'animation-delay:'+(-Math.random()*6000)+'ms';
+    el.appendChild(d);
   }
-  // Ensure empty is at last position for simplicity
-  const emptyIdx = perm.indexOf(-1);
-  [perm[emptyIdx],perm[G*G-1]]=[perm[G*G-1],perm[emptyIdx]];
-  
-  let emptyPos = G*G-1; // current position of empty slot
-  
-  for(let pos=0;pos<G*G;pos++){
-    const tileId = perm[pos];
-    if(tileId===-1) { tiles.push(null); continue; } // empty slot
-    
-    const t = document.createElement('div');
-    const homeRow = Math.floor(tileId/G), homeCol = tileId%G;
-    const curRow = Math.floor(pos/G), curCol = pos%G;
-    
-    // Each tile shows a piece of the "photo" using gradient
-    const c1 = IMG_COLORS[homeRow][homeCol];
-    const c2Row = Math.min(homeRow+1,G-1);
-    const c2 = IMG_COLORS[c2Row][Math.min(homeCol+1,G-1)];
-    
-    t.style.cssText = 'position:absolute;width:'+tileSize+'%;height:'+tileSize+'%;border-radius:4px;transition:left 0.25s cubic-bezier(.25,.1,.25,1),top 0.25s cubic-bezier(.25,.1,.25,1);overflow:hidden;box-sizing:border-box;border:1px solid rgba(255,255,255,0.08);cursor:pointer;';
-    t.style.left = (curCol*tileSize)+'%';
-    t.style.top = (curRow*tileSize)+'%';
-    t.style.background = 'linear-gradient(150deg,'+c1+' 0%,'+c2+' 100%)';
-    
-    // Tile number overlay (subtle)
-    const num = document.createElement('div');
-    num.style.cssText = 'position:absolute;top:2px;left:3px;font-size:9px;color:rgba(255,255,255,0.35);font-weight:700;';
-    num.textContent = (tileId+1);
-    t.appendChild(num);
-    
-    // Glass shine
-    const shine = document.createElement('div');
-    shine.style.cssText='position:absolute;top:0;left:0;width:100%;height:40%;background:linear-gradient(180deg,rgba(255,255,255,0.12),transparent);pointer-events:none;';
-    t.appendChild(shine);
-    
-    gridWrap.appendChild(t);
-    tiles.push({el:t, id:tileId, pos:pos});
+
+  const scene=document.createElement('div');
+  scene.style.cssText='width:76%;max-width:240px;position:relative;z-index:1';
+  const boardEl=document.createElement('div');
+  boardEl.className='jgd-board';
+  const goal=document.createElement('div');
+  goal.className='jgd-goal';
+  goal.style.backgroundImage='url("'+URL+'")';
+  scene.appendChild(boardEl); scene.appendChild(goal); el.appendChild(scene);
+
+  // ── Durum: board[i] = o hücredeki parçanın ev indeksi, boşluk null ──
+  let board=[]; for(let i=0;i<G*G-1;i++) board.push(i); board.push(null);
+  const tiles=new Map();
+  const nbOf=i=>{const c=i%G,r=(i-c)/G,o=[];
+    if(r>0)o.push(i-G); if(r<G-1)o.push(i+G);
+    if(c>0)o.push(i-1); if(c<G-1)o.push(i+1); return o;};
+  const blank=()=>board.indexOf(null);
+
+  function place(t,idx){
+    const c=idx%G,r=(idx-c)/G,p=100/G;
+    t.style.width=p+'%'; t.style.height=p+'%';
+    t.style.transform='translate('+(c*100)+'%,'+(r*100)+'%)';
   }
-  scene.appendChild(gridWrap);
-  
-  // Goal preview (küçük hedef resim)
-  const goalWrap = document.createElement('div');
-  goalWrap.style.cssText='display:flex;align-items:center;gap:8px;width:100%;margin-top:2px;';
-  const goalLabel = document.createElement('span');
-  goalLabel.style.cssText='font-size:11px;color:rgba(255,255,255,0.3);font-weight:600;';
-  goalLabel.textContent='Hedef 👑';
-  goalWrap.appendChild(goalLabel);
-  // Mini goal grid
-  const goalGrid = document.createElement('div');
-  goalGrid.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:1px;width:48px;height:48px;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);';
-  for(let r=0;r<G;r++) for(let c=0;c<G;c++){
-    const gc = document.createElement('div');
-    const c1=IMG_COLORS[r][c], c2=IMG_COLORS[Math.min(r+1,G-1)][Math.min(c+1,G-1)];
-    gc.style.cssText='background:linear-gradient(150deg,'+c1+','+c2+');';
-    goalGrid.appendChild(gc);
-  }
-  goalWrap.appendChild(goalGrid);
-  // Moves + time
-  const info = document.createElement('span');
-  info.style.cssText='font-size:11px;color:rgba(255,255,255,0.25);margin-left:auto;';
-  info.textContent='📌 Kaydır & Tamamla';
-  goalWrap.appendChild(info);
-  scene.appendChild(goalWrap);
-  el.appendChild(scene);
-  
-  let step=0, moves=0, seconds=0;
-  
-  function slideTile(){
-    // Find tiles adjacent to empty
-    const eRow=Math.floor(emptyPos/G), eCol=emptyPos%G;
-    const neighbors=[];
-    if(eRow>0) neighbors.push(emptyPos-G); // up
-    if(eRow<G-1) neighbors.push(emptyPos+G); // down
-    if(eCol>0) neighbors.push(emptyPos-1); // left
-    if(eCol<G-1) neighbors.push(emptyPos+1); // right
-    
-    // Pick random neighbor
-    const fromPos = neighbors[Math.floor(Math.random()*neighbors.length)];
-    const tile = tiles.find(t=>t&&t.pos===fromPos);
-    if(!tile) return;
-    
-    // Slide tile to empty position
-    const toRow=Math.floor(emptyPos/G), toCol=emptyPos%G;
-    tile.el.style.left = (toCol*tileSize)+'%';
-    tile.el.style.top = (toRow*tileSize)+'%';
-    
-    // Update state
-    tile.pos = emptyPos;
-    emptyPos = fromPos;
-    moves++;
-    
-    // Flash green if tile is in correct position
-    if(tile.pos === tile.id){
-      tile.el.style.boxShadow='0 0 12px rgba(34,197,94,0.6),inset 0 0 8px rgba(34,197,94,0.2)';
-      setTimeout(()=>{tile.el.style.boxShadow='none';},600);
+  function build(){
+    boardEl.innerHTML='';
+    tiles.clear();
+    const d=G-1;
+    for(let i=0;i<G*G;i++){
+      const v=board[i]; if(v===null) continue;
+      const t=document.createElement('div');
+      t.className='jgd-tile';
+      t.dataset.num=String(v+1);
+      const c=v%G, r=(v-c)/G;
+      t.style.backgroundImage='url("'+URL+'")';
+      t.style.backgroundSize=(G*100)+'% '+(G*100)+'%';
+      t.style.backgroundPosition=(c/d*100)+'% '+(r/d*100)+'%';
+      place(t,i);
+      boardEl.appendChild(t); tiles.set(v,t);
     }
-    
-    // Update header
-    const movesEl = header.querySelector('#sl-moves') || header.children[1];
-    if(movesEl) movesEl.textContent='Hamle: '+moves;
   }
-  
+  function move(i){
+    const z=blank();
+    board[z]=board[i]; board[i]=null;
+    const t=tiles.get(board[z]); if(t) place(t,z);
+  }
+  // Çözülmüş hâlden geçerli hamlelerle karıştır — demoda da çözülebilir kalsın
+  function scramble(n){
+    let prev=-1;
+    for(let s=0;s<n;s++){
+      const opts=nbOf(blank()).filter(i=>i!==prev);
+      const pick=opts[Math.floor(Math.random()*opts.length)];
+      prev=blank(); move(pick);
+    }
+  }
+  scramble(40); build();
+
+  let step=0, prev=-1;
   function drawFn(){
     step++;
-    // Slide a tile every ~1.2s
-    if(step%36===0) slideTile();
-    // Update timer every ~1s
-    if(step%30===0){
-      seconds++;
-      const m=Math.floor(seconds/60), s=seconds%60;
-      header.children[2].textContent='⏱ '+m+':'+(s<10?'0':'')+s;
+    if(step%18===0){                    // ~0.6 sn'de bir hamle
+      const opts=nbOf(blank()).filter(i=>i!==prev);
+      const pick=opts[Math.floor(Math.random()*opts.length)];
+      prev=blank(); move(pick);
     }
+    if(step%600===0){ scramble(40); build(); }   // ara ara yeniden karıştır
   }
   _demoLoop(state,drawFn);
   return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
