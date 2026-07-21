@@ -1190,7 +1190,10 @@ MiniDemos.demo_jigsawCard = function(gradient) {
   // background-position ile parçalanmış, ve yalnızca BOŞLUĞA DİK KOMŞU
   // parçalar kayıyor. Oyundaki numara rozetleri ve hedef önizlemesi de var.
   const G = 3;                       // kart boyunda 4x4 okunmuyor, 3x3 doğru
-  const URL = 'https://images.unsplash.com/photo-1474044159687-1ee9f3a51722' +
+  // Havuzdaki mou-3: Samanyolu + dağ silueti, mor gökyüzü. Kartın Magic
+  // Night gradyanıyla aynı aile, ve dağ silueti 3x3'e bölününce parçalar
+  // birbirinden net ayrışıyor — küçük kartta okunabilirliğin şartı bu.
+  const URL = 'https://images.unsplash.com/photo-1519681393784-d120267933ba' +
               '?w=600&h=600&fit=crop&q=80';
 
   if(!document.getElementById('css-jig-demo2')){
