@@ -13,8 +13,8 @@ const REEL_GAMES = [
   { id:'wordSearch', name:'Kelime Avı', emoji:'📝', category:'puzzle', desc:'Gizli kelimeleri bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
   { id:'sudoku', name:'Sudoku', emoji:'#️⃣', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
   { id:'mazeGame', name:'Labirent', emoji:'🌀', category:'puzzle', desc:'Çıkışı bul, zamana karşı yarış!', difficulty:'Orta', gradient:['#059669','#065f46'], playable:true },
-  { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#8b5cf6','#4c1d95'], playable:true },
-  { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🏹', category:'puzzle', desc:'Okları doğru sırayla çıkar!', difficulty:'Kolay', gradient:['#0ea5e9','#0c4a6e'], playable:true },
+  { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#1e2a63','#080b22'], playable:true },
+  { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🔮', category:'puzzle', desc:'Enerji kanallarını doğru sırayla boşalt!', difficulty:'Kolay', gradient:['#2a1a5e','#0d0824'], playable:true },
   { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Zor', gradient:['#e11d48','#881337'], playable:false },
   { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#d97706','#78350f'], playable:false },
 ];
@@ -665,231 +665,420 @@ MiniDemos.demo_waterSort = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
+  // §3.5 mücevher paleti (3-stop): gerçek oyunun sıvı içeriğiyle aynı aile.
   const POTIONS = [
-    {color:'#a855f7', glow:'rgba(168,85,247,0.4)', name:'Büyü'},
-    {color:'#22d3ee', glow:'rgba(34,211,238,0.4)', name:'Buz'},
-    {color:'#ef4444', glow:'rgba(239,68,68,0.4)', name:'Ateş'},
-    {color:'#22c55e', glow:'rgba(34,197,94,0.4)', name:'Zehir'},
-    {color:'#fbbf24', glow:'rgba(251,191,36,0.4)', name:'Altın'},
+    {hi:'#c084fc', base:'#a855f7', sh:'#7c3aed', glow:'rgba(168,85,247,.5)'},   // Violet
+    {hi:'#67e8f9', base:'#22d3ee', sh:'#0891b2', glow:'rgba(34,211,238,.5)'},   // Cyan
+    {hi:'#f87171', base:'#ef4444', sh:'#b91c1c', glow:'rgba(239,68,68,.5)'},    // Coral
+    {hi:'#4ade80', base:'#22c55e', sh:'#15803d', glow:'rgba(34,197,94,.5)'},    // Emerald
+    {hi:'#60a5fa', base:'#3b82f6', sh:'#1d4ed8', glow:'rgba(59,130,246,.5)'},   // Azure
   ];
-  const TC=7, LY=4;
-  
-  // Container
-  const scene = document.createElement('div');
-  scene.style.cssText = 'width:92%;max-width:300px;display:flex;flex-direction:column;align-items:center;gap:12px;';
-  
-  // Magical particles background
-  const particles = document.createElement('div');
-  particles.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;';
-  for(let i=0;i<12;i++){
-    const p = document.createElement('div');
-    const sz = 2+Math.random()*4;
-    p.style.cssText = 'position:absolute;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:rgba(168,85,247,0.3);animation:_wsFloat '+(3+Math.random()*4)+'s ease-in-out infinite;left:'+(Math.random()*100)+'%;top:'+(Math.random()*100)+'%;animation-delay:'+(Math.random()*3)+'s;';
-    particles.appendChild(p);
-  }
-  el.appendChild(particles);
-  
-  // Inject float animation
-  if(!document.getElementById('css-ws-demo')){
-    const s=document.createElement('style');s.id='css-ws-demo';
-    s.textContent='@keyframes _wsFloat{0%,100%{transform:translateY(0) scale(1);opacity:0.3}50%{transform:translateY(-30px) scale(1.5);opacity:0.7}}@keyframes _wsPour{0%{transform:scaleY(1)}50%{transform:scaleY(0.3)}100%{transform:scaleY(1)}}@keyframes _wsGlow{0%,100%{box-shadow:0 0 8px rgba(168,85,247,0.2)}50%{box-shadow:0 0 20px rgba(168,85,247,0.5)}}';
+  const TC=6, LY=4;
+
+  if(!document.getElementById('css-ws-demo2')){
+    const s=document.createElement('style');s.id='css-ws-demo2';
+    s.textContent =
+      // Yıldız tozu — büyü laboratuvarı zerreleri
+      '.wsd-mote{position:absolute;border-radius:50%;background:radial-gradient(circle,#EAF0FF,rgba(190,205,255,.6) 55%,transparent);'+
+        'box-shadow:0 0 5px 1px rgba(165,190,255,.4);animation:_wsdDrift linear infinite;pointer-events:none}'+
+      '@keyframes _wsdDrift{0%{transform:translateY(0);opacity:0}15%{opacity:.7}100%{transform:translateY(-60px);opacity:0}}'+
+      '.wsd-crystal{position:absolute;border-radius:50%;filter:blur(26px);mix-blend-mode:screen;pointer-events:none;'+
+        'animation:_wsdPulse 8s ease-in-out infinite}'+
+      '@keyframes _wsdPulse{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:.55;transform:scale(1.12)}}'+
+      // Sıvı katmanı: dikey gradyan gövde. İç highlight + glow inline veriliyor.
+      '.wsd-layer{position:relative;width:100%;transition:height .5s cubic-bezier(.34,1.56,.64,1),'+
+        'opacity .4s ease,transform .5s cubic-bezier(.34,1.56,.64,1);transform-origin:bottom}'+
+      // Meniskus: her sıvı sütununun ÜST katmanının tepesinde yuvarlak kabarma
+      '.wsd-layer.top::after{content:"";position:absolute;top:-3px;left:0;right:0;height:6px;'+
+        'border-radius:50%;background:inherit;filter:brightness(1.15)}'+
+      // Cam parıltısı: sol dikey şerit + üst diagonal sheen
+      '.wsd-gloss{position:absolute;top:6px;left:3px;width:5px;bottom:14px;border-radius:4px;pointer-events:none;'+
+        'background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,.05) 40%,transparent);z-index:3}'+
+      '.wsd-sheen{position:absolute;top:4px;right:5px;width:9px;height:26px;border-radius:50%;pointer-events:none;'+
+        'background:linear-gradient(150deg,rgba(255,255,255,.22),transparent 65%);transform:rotate(18deg);z-index:3}'+
+      // Dökülme akışı: kaynaktan hedefe inen ince sıvı şerit
+      '.wsd-stream{position:absolute;width:4px;border-radius:2px;z-index:20;pointer-events:none;'+
+        'transform-origin:top center;animation:_wsdStream .5s ease-in forwards}'+
+      '@keyframes _wsdStream{0%{transform:scaleY(0)}30%{transform:scaleY(1)}100%{transform:scaleY(1);opacity:.85}}'+
+      // Tamamlama kutlaması: tüp yükselir + parlar
+      '@keyframes _wsdComplete{0%{transform:translateY(0)}30%{transform:translateY(-10px)}100%{transform:translateY(0)}}'+
+      '.wsd-star{position:absolute;pointer-events:none;z-index:25;font-size:10px;'+
+        'animation:_wsdStar .8s ease-out forwards}'+
+      '@keyframes _wsdStar{0%{transform:translate(0,0) scale(.4);opacity:1}100%{transform:translate(var(--sx),var(--sy)) scale(1);opacity:0}}';
     document.head.appendChild(s);
   }
-  
-  // Tubes
-  const tubeWrap = document.createElement('div');
-  tubeWrap.style.cssText = 'display:flex;gap:6px;align-items:flex-end;justify-content:center;width:100%;';
-  const tubes = [];
+
+  // Atmosfer: kristal ışık + yıldız tozu
+  const c1=document.createElement('div');
+  c1.className='wsd-crystal';
+  c1.style.cssText+='width:150px;height:150px;left:6%;top:16%;background:radial-gradient(circle,rgba(126,110,220,.5),transparent 70%)';
+  const c2=document.createElement('div');
+  c2.className='wsd-crystal';
+  c2.style.cssText+='width:120px;height:120px;right:8%;bottom:18%;background:radial-gradient(circle,rgba(96,120,225,.45),transparent 70%);animation-delay:-4s';
+  el.appendChild(c1); el.appendChild(c2);
+  for(let i=0;i<12;i++){
+    const m=document.createElement('div');
+    const sz=1.5+Math.random()*2;
+    m.className='wsd-mote';
+    m.style.cssText+='width:'+sz+'px;height:'+sz+'px;left:'+(6+Math.random()*88)+'%;top:'+(30+Math.random()*60)+'%;'+
+      'animation-duration:'+(4000+Math.random()*3500)+'ms;animation-delay:'+(-Math.random()*6000)+'ms';
+    el.appendChild(m);
+  }
+
+  const scene=document.createElement('div');
+  scene.style.cssText='width:88%;max-width:290px;position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:14px';
+  const tubeWrap=document.createElement('div');
+  tubeWrap.style.cssText='display:flex;gap:8px;align-items:flex-end;justify-content:center;width:100%;position:relative';
+  scene.appendChild(tubeWrap);
+  el.appendChild(scene);
+
+  // Bir katmanın dolgusunu §13 sıvı reçetesine göre yaz
+  function paint(ly, pot, isTop){
+    ly.dataset.color = pot.base;
+    ly.style.background = 'linear-gradient(180deg,'+pot.hi+' 0%,'+pot.base+' 45%,'+pot.sh+' 100%)';
+    ly.style.boxShadow = 'inset 0 2px 3px rgba(255,255,255,.35),inset 0 -3px 5px rgba(0,0,0,.3),0 0 8px '+pot.glow;
+    ly.classList.toggle('top', !!isTop);
+  }
+  function potByBase(base){ return POTIONS.find(p=>p.base===base); }
+
+  // Tüpleri kur. İlk TC-2 dolu (karışık), son 2 boş — çözülebilir his.
+  const tubes=[];
   for(let t=0;t<TC;t++){
-    const tube = document.createElement('div');
-    const isEmpty = t >= TC-2;
-    tube.style.cssText = 'width:34px;height:120px;border-radius:0 0 16px 16px;border:2px solid rgba(255,255,255,0.12);border-top:none;display:flex;flex-direction:column-reverse;padding:3px;gap:1px;background:rgba(0,0,0,0.25);backdrop-filter:blur(4px);position:relative;overflow:hidden;transition:all 0.3s;';
-    // Glass highlight
-    const gloss = document.createElement('div');
-    gloss.style.cssText = 'position:absolute;top:0;left:2px;width:6px;height:100%;background:linear-gradient(180deg,rgba(255,255,255,0.08),transparent);border-radius:0 0 0 12px;pointer-events:none;';
-    tube.appendChild(gloss);
-    const layers = [];
-    if(!isEmpty){
+    const tube=document.createElement('div');
+    const empty = t>=TC-2;
+    tube.style.cssText='position:relative;width:38px;height:128px;border-radius:6px 6px 18px 18px;overflow:hidden;'+
+      'border:1.5px solid rgba(200,205,255,.22);border-top:1.5px solid rgba(200,205,255,.32);'+
+      'background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(10,12,30,.35));'+
+      'backdrop-filter:blur(3px);display:flex;flex-direction:column-reverse;transition:transform .5s cubic-bezier(.34,1.56,.64,1),box-shadow .4s ease';
+    const layers=[];
+    if(!empty){
       for(let l=0;l<LY;l++){
-        const ly = document.createElement('div');
-        const pot = POTIONS[Math.floor(Math.random()*POTIONS.length)];
-        ly.style.cssText = 'height:24%;border-radius:3px;background:linear-gradient(180deg,'+pot.color+' 0%,'+pot.color+'cc 100%);transition:all 0.6s cubic-bezier(.34,1.56,.64,1);position:relative;box-shadow:inset 0 2px 4px rgba(255,255,255,0.2),inset 0 -2px 4px rgba(0,0,0,0.3),0 0 6px '+pot.glow+';';
-        ly.dataset.color = pot.color;
+        const ly=document.createElement('div');
+        ly.className='wsd-layer';
+        ly.style.height='25%';
+        paint(ly, POTIONS[Math.floor(Math.random()*POTIONS.length)], l===LY-1);
         tube.appendChild(ly);
         layers.push(ly);
       }
     }
+    const gloss=document.createElement('div'); gloss.className='wsd-gloss';
+    const sheen=document.createElement('div'); sheen.className='wsd-sheen';
+    tube.appendChild(gloss); tube.appendChild(sheen);
     tubeWrap.appendChild(tube);
-    tubes.push({el:tube, layers, empty:isEmpty});
+    tubes.push({ el:tube, layers, empty });
   }
-  scene.appendChild(tubeWrap);
-  
-  // Level indicator
-  const lvl = document.createElement('div');
-  lvl.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
-  lvl.innerHTML = '<span style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:700;">SEVİYE 42</span><span style="font-size:11px;color:rgba(255,255,255,0.25);">•</span><span style="font-size:11px;color:rgba(168,85,247,0.6);font-weight:700;">✨ 5 İksir</span>';
-  scene.appendChild(lvl);
-  el.appendChild(scene);
-  
+
+  function markTops(){
+    tubes.forEach(t=>t.layers.forEach((ly,i)=>ly.classList.toggle('top', i===t.layers.length-1)));
+  }
+
+  // Kaynağın üst rengini hedefe DÖK: gerçek transfer hissi.
+  function pour(src, dst){
+    const top = src.layers[src.layers.length-1];
+    if(!top) return;
+    const pot = potByBase(top.dataset.color);
+    const dr = dst.el.getBoundingClientRect();
+    const host = el.getBoundingClientRect();
+    // Akış şeridi: hedefin ağzından, hedefteki MEVCUT sıvı yüzeyine kadar.
+    // Sıvı boşluğa düşer — hedef boşsa dibe iner, doluysa yüzeyde durur.
+    // Tüplerin tepesi eşit olduğu için kaynağın Y'si burada hiçbir şey
+    // söylemiyor; belirleyici olan tek şey hedefin doluluğu.
+    const stream=document.createElement('div');
+    stream.className='wsd-stream';
+    const layerPx = dr.height * (25/100);              // .wsd-layer height:25% ile aynı
+    const fillPx  = dst.layers.length * layerPx;       // katman EKLENMEDEN önceki seviye
+    const x = dr.left - host.left + dr.width/2 - 2;
+    const yTop = dr.top - host.top + 6;                // ağzın hemen içi
+    const h = Math.max(6, (dr.bottom - host.top - fillPx) - yTop);
+    stream.style.cssText+='left:'+x+'px;top:'+yTop+'px;height:'+h+'px;'+
+      'background:linear-gradient(180deg,'+pot.hi+','+pot.base+');box-shadow:0 0 8px '+pot.glow;
+    el.appendChild(stream);
+    src.el.style.boxShadow='0 0 16px '+pot.glow;
+    // Kaynaktan çıkar
+    top.style.height='0%'; top.style.opacity='0';
+    setTimeout(()=>{ top.remove(); src.layers.pop(); src.el.style.boxShadow='none'; markTops(); },500);
+    // Hedefe belir
+    setTimeout(()=>{
+      const ly=document.createElement('div');
+      ly.className='wsd-layer'; ly.style.height='0%';
+      paint(ly, pot, true);
+      dst.el.appendChild(ly); dst.layers.push(ly);
+      requestAnimationFrame(()=>{
+        ly.style.height='25%'; markTops();
+        // Seviye yükseldikçe şerit kısalır: ucu hep yüzeyde kalsın, yeni
+        // katmanın içine gömülmesin.
+        stream.style.transition='height .36s ease-in';
+        stream.style.height=Math.max(6, h-layerPx)+'px';
+      });
+      // Hedef tek renk + dolu mu? -> kutlama
+      setTimeout(()=>{ if(isComplete(dst)) celebrate(dst); },520);
+    },260);
+    setTimeout(()=>stream.remove(),620);
+  }
+
+  function isComplete(t){
+    return t.layers.length===LY &&
+      t.layers.every(ly=>ly.dataset.color===t.layers[0].dataset.color);
+  }
+  function celebrate(t){
+    const pot=potByBase(t.layers[0].dataset.color);
+    t.el.style.animation='_wsdComplete .8s cubic-bezier(.34,1.56,.64,1)';
+    t.el.style.boxShadow='0 0 22px '+pot.glow;
+    const r=t.el.getBoundingClientRect(), host=el.getBoundingClientRect();
+    const cx=r.left-host.left+r.width/2, cy=r.top-host.top+8;
+    for(let i=0;i<6;i++){
+      const st=document.createElement('div');
+      st.className='wsd-star'; st.textContent='✦';
+      st.style.color=pot.hi;
+      st.style.left=cx+'px'; st.style.top=cy+'px';
+      const a=(Math.PI*2/6)*i, d=18+Math.random()*16;
+      st.style.setProperty('--sx',Math.cos(a)*d+'px');
+      st.style.setProperty('--sy',(Math.sin(a)*d-10)+'px');
+      el.appendChild(st);
+      setTimeout(()=>st.remove(),800);
+    }
+    setTimeout(()=>{ t.el.style.animation=''; t.el.style.boxShadow=''; },850);
+  }
+
   let step=0;
   function drawFn(){
     step++;
-    if(step%80===0){
-      // Pour animation: pick a random non-empty tube
-      const nonEmpty = tubes.filter(t=>t.layers.length>0);
-      if(nonEmpty.length>0){
-        const src = nonEmpty[Math.floor(Math.random()*nonEmpty.length)];
-        const topLayer = src.layers[src.layers.length-1];
-        if(topLayer){
-          topLayer.style.transform='scaleY(0)';topLayer.style.opacity='0';
-          // Glow the tube
-          src.el.style.boxShadow='0 0 15px rgba(168,85,247,0.4)';
-          setTimeout(()=>{
-            const nc=POTIONS[Math.floor(Math.random()*POTIONS.length)];
-            topLayer.style.background='linear-gradient(180deg,'+nc.color+','+nc.color+'cc)';
-            topLayer.style.boxShadow='inset 0 2px 4px rgba(255,255,255,0.2),inset 0 -2px 4px rgba(0,0,0,0.3),0 0 6px '+nc.glow;
-            topLayer.dataset.color=nc.color;
-            topLayer.style.transform='scaleY(1)';topLayer.style.opacity='1';
-            src.el.style.boxShadow='none';
-          },700);
-        }
-      }
-    }
-    // Random tube glow
-    if(step%50===0){
-      const t=tubes[Math.floor(Math.random()*tubes.length)];
-      t.el.style.borderColor='rgba(168,85,247,0.4)';
-      setTimeout(()=>{t.el.style.borderColor='rgba(255,255,255,0.12)';},500);
+    if(step%70===0){
+      // Kaynak: üstü olan bir tüp. Hedef: boş ya da aynı renkle biten.
+      const srcs=tubes.filter(t=>t.layers.length>0 && !isComplete(t));
+      if(!srcs.length){ resetBoard(); return; }
+      const src=srcs[Math.floor(Math.random()*srcs.length)];
+      const col=src.layers[src.layers.length-1].dataset.color;
+      const dsts=tubes.filter(t=>t!==src && t.layers.length<LY &&
+        (t.layers.length===0 || t.layers[t.layers.length-1].dataset.color===col));
+      if(dsts.length){ pour(src, dsts[Math.floor(Math.random()*dsts.length)]); }
     }
   }
+  function resetBoard(){
+    tubes.forEach((t,ti)=>{
+      t.el.querySelectorAll('.wsd-layer').forEach(l=>l.remove());
+      t.layers=[];
+      if(ti<TC-2){
+        for(let l=0;l<LY;l++){
+          const ly=document.createElement('div');
+          ly.className='wsd-layer'; ly.style.height='25%';
+          paint(ly, POTIONS[Math.floor(Math.random()*POTIONS.length)], l===LY-1);
+          t.el.appendChild(ly); t.layers.push(ly);
+        }
+      }
+    });
+    markTops();
+  }
+
   _demoLoop(state,drawFn);
   return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
 // ———————— 9. Ok Bulmaca Demo ————————
+// Gerçek oyunun görsel diliyle birebir: SVG neon enerji KANALLARI
+// (glow/casing/core/inner/head), kıvrımlı oklar, yılan gibi çıkış
+// (uç ilerler, gövde kendi izini takip ederek düzleşir), ışık izi.
+// Eski emoji-ok + kelebek demosu tamamen kaldırıldı — o mekaniği de
+// görsel dili de artık yansıtmıyordu.
 MiniDemos.demo_arrowPuzzle = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  
-  // Kelebek şekli - 10x10 grid'de ok pattern (Amaze GO tarzı)
-  const G=10;
-  // 1=up,2=down,3=left,4=right, 0=empty
-  const BUTTERFLY = [
-    [0,0,0,4,4,4,4,0,0,0],
-    [0,0,4,1,1,1,1,4,0,0],
-    [0,4,1,1,0,0,1,1,4,0],
-    [4,1,1,0,0,0,0,1,1,4],
-    [4,1,0,0,2,2,0,0,1,4],
-    [4,1,0,0,1,1,0,0,1,4],
-    [4,1,1,0,0,0,0,1,1,4],
-    [0,4,1,1,0,0,1,1,4,0],
-    [0,0,4,1,1,1,1,4,0,0],
-    [0,0,0,4,4,4,4,0,0,0],
+  const NS = 'http://www.w3.org/2000/svg';
+  // §3.5 mücevher paleti — 1. hüzme (Violet). Gerçek oyunla aynı hex'ler.
+  const J = { hi:'#c084fc', base:'#a855f7', sh:'#7c3aed', glow:'rgba(168,85,247,.45)', ink:'#070B1E' };
+  // Kanal stroke oranları (hücre birimi) — oyundakilerin aynısı.
+  const W = { glow:0.5, casing:0.3, core:0.19, inner:0.075 };
+  const EXIT_MS = 620;
+
+  // Kıvrımlı oklar: cells uçtan kuyruğa, dir = uçtan dışarı bakan yön.
+  // 8x8 tahtada dengeli yerleşim (demo — çözülebilirlik gerekmez, his verir).
+  const GRID = 8;
+  const ARROWS = [
+    { cells:[[2,1],[2,2],[2,3],[3,3]], dir:[0,-1] },   // yukarı, L sağa
+    { cells:[[6,1],[6,2],[5,2],[5,3]], dir:[0,-1] },   // yukarı, S
+    { cells:[[1,4],[2,4],[2,5]],       dir:[-1,0] },   // sola, köşe
+    { cells:[[4,5],[4,4],[5,4]],       dir:[0,1]  },   // aşağı, köşe
+    { cells:[[6,6],[5,6],[5,5],[6,5]], dir:[1,0]  },   // sağa, U
+    { cells:[[3,7],[3,6],[2,6],[2,7]], dir:[0,1]  },   // aşağı, U
   ];
-  const ARROWS_SYM = {1:'↑',2:'↓',3:'←',4:'→'};
-  const ARROW_CLR = {1:'#22d3ee',2:'#a855f7',3:'#22c55e',4:'#f97316'};
-  
-  if(!document.getElementById('css-arrow-demo')){
-    const s=document.createElement('style');s.id='css-arrow-demo';
-    s.textContent='@keyframes _arExit{0%{transform:scale(1);opacity:1}100%{opacity:0}}';
+
+  if(!document.getElementById('css-arrow-demo2')){
+    const s=document.createElement('style');s.id='css-arrow-demo2';
+    s.textContent =
+      '.ard-svg{width:100%;height:100%;overflow:visible;will-change:transform;'+
+        'animation:_ardBreath 9s ease-in-out infinite}'+          // hafif kamera nefesi = büyük tahta hissi
+      '@keyframes _ardBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}'+
+      '.ard-arrow path{fill:none;stroke-linecap:round;stroke-linejoin:round}'+
+      '.ard-glow{opacity:.5}.ard-arrow:not(.exiting){transition:opacity .5s ease}'+
+      '.ard-arrow.exiting .ard-glow,.ard-arrow.exiting .ard-casing,'+
+        '.ard-arrow.exiting .ard-core,.ard-arrow.exiting .ard-inner{'+
+        'transition:stroke-dashoffset '+EXIT_MS+'ms cubic-bezier(.22,1,.36,1)}'+
+      '.ard-arrow.exiting .ard-head{transition:transform '+EXIT_MS+'ms cubic-bezier(.22,1,.36,1)}'+
+      '.ard-arrow.exiting{animation:_ardFade '+EXIT_MS+'ms ease forwards}'+
+      '@keyframes _ardFade{0%,55%{opacity:1}100%{opacity:0}}'+
+      '.ard-wake{fill:none;stroke:'+J.glow+';stroke-width:'+(W.core*0.85)+';stroke-linecap:round;'+
+        'animation:_ardWake '+EXIT_MS+'ms cubic-bezier(.22,1,.36,1) forwards}'+
+      '@keyframes _ardWake{0%{opacity:.85}70%{opacity:.3}100%{opacity:0}}'+
+      '.ard-dust{position:absolute;border-radius:50%;background:radial-gradient(circle,#EAF0FF,rgba(190,205,255,.6) 55%,transparent);'+
+        'box-shadow:0 0 5px 1px rgba(165,190,255,.5);animation:_ardDrift linear infinite;pointer-events:none}'+
+      '@keyframes _ardDrift{0%{transform:translateY(0);opacity:0}15%{opacity:.8}100%{transform:translateY(-70px);opacity:0}}'+
+      '.ard-crystal{position:absolute;border-radius:50%;filter:blur(24px);mix-blend-mode:screen;pointer-events:none;'+
+        'animation:_ardPulse 7s ease-in-out infinite}'+
+      '@keyframes _ardPulse{0%,100%{opacity:.35;transform:scale(1)}50%{opacity:.6;transform:scale(1.15)}}';
     document.head.appendChild(s);
   }
-  
-  const scene = document.createElement('div');
-  scene.style.cssText = 'width:90%;max-width:280px;display:flex;flex-direction:column;align-items:center;gap:8px;';
-  
-  // Level header
-  const header = document.createElement('div');
-  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 4px;';
-  header.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">← SEVİYE 27</span><span style="font-size:12px;color:rgba(255,255,255,0.3);">🦋 Kelebek</span><span style="font-size:14px;">⭐⭐⭐⭐</span>';
-  scene.appendChild(header);
-  
-  const gridEl = document.createElement('div');
-  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:2px;width:100%;aspect-ratio:1;background:rgba(255,255,255,0.02);border-radius:12px;padding:4px;';
-  const cellEls = [];
-  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
-    const c = document.createElement('div');
-    const v = BUTTERFLY[y][x];
-    c.style.cssText = 'border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.5s cubic-bezier(.34,1.56,.64,1);user-select:none;aspect-ratio:1;';
-    if(v>0){
-      c.textContent = ARROWS_SYM[v];
-      c.dataset.dir = v;
-      c.dataset.active = '1';
-      const clr = ARROW_CLR[v];
-      c.style.background = clr+'20';
-      c.style.border = '1px solid '+clr+'40';
-      c.style.color = clr;
-      c.style.textShadow = '0 0 6px '+clr+'60';
-    } else {
-      c.style.background = 'rgba(255,255,255,0.02)';
-      c.dataset.active = '0';
-    }
-    gridEl.appendChild(c);
-    cellEls.push(c);
-  }
-  scene.appendChild(gridEl);
-  
-  // Progress dots
-  const dots = document.createElement('div');
-  dots.style.cssText = 'display:flex;gap:4px;margin-top:4px;';
-  for(let i=0;i<5;i++){
+
+  // Kristal ışık (blur küreler) + yıldız tozu — Magic Night atmosferi.
+  const c1=document.createElement('div');
+  c1.className='ard-crystal';
+  c1.style.cssText+='width:160px;height:160px;left:8%;top:12%;background:radial-gradient(circle,rgba(126,110,220,.55),transparent 70%)';
+  const c2=document.createElement('div');
+  c2.className='ard-crystal';
+  c2.style.cssText+='width:130px;height:130px;right:6%;bottom:14%;background:radial-gradient(circle,rgba(96,120,225,.5),transparent 70%);animation-delay:-3.5s';
+  el.appendChild(c1); el.appendChild(c2);
+  for(let i=0;i<14;i++){
     const d=document.createElement('div');
-    d.style.cssText = 'width:6px;height:6px;border-radius:50%;background:'+(i<2?'#22d3ee':'rgba(255,255,255,0.15)')+';transition:background 0.3s;';
-    dots.appendChild(d);
+    const sz=1.5+Math.random()*2.2;
+    d.className='ard-dust';
+    d.style.cssText+='width:'+sz+'px;height:'+sz+'px;left:'+(5+Math.random()*90)+'%;top:'+(20+Math.random()*70)+'%;'+
+      'animation-duration:'+(4000+Math.random()*4000)+'ms;animation-delay:'+(-Math.random()*6000)+'ms';
+    el.appendChild(d);
   }
-  scene.appendChild(dots);
-  el.appendChild(scene);
-  
-  let step=0, removeOrder=[];
-  // Pre-compute removal order (outside-in)
-  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
-    if(BUTTERFLY[y][x]>0) removeOrder.push({y,x,dir:BUTTERFLY[y][x]});
+
+  // SVG sahne
+  const scene=document.createElement('div');
+  scene.style.cssText='width:78%;max-width:250px;aspect-ratio:1;position:relative;z-index:1;'+
+    'border-radius:20px;padding:8px;'+
+    'background:linear-gradient(180deg,rgba(126,110,220,.14),rgba(20,18,54,.5) 70%);'+
+    'border:1px solid rgba(180,165,255,.16);box-shadow:0 20px 44px -18px rgba(4,6,22,.9),inset 0 1px 0 rgba(205,195,255,.2)';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('class','ard-svg');
+  svg.setAttribute('viewBox','0 0 '+GRID+' '+GRID);
+  scene.appendChild(svg); el.appendChild(scene);
+
+  // Izgara (çok kısık, oyundaki gibi)
+  const grid=document.createElementNS(NS,'g');
+  grid.setAttribute('stroke','rgba(180,170,255,.07)');
+  grid.setAttribute('stroke-width','.02');
+  for(let i=0;i<=GRID;i++){
+    for(const [x1,y1,x2,y2] of [[i,0,i,GRID],[0,i,GRID,i]]){
+      const ln=document.createElementNS(NS,'line');
+      ln.setAttribute('x1',x1);ln.setAttribute('y1',y1);ln.setAttribute('x2',x2);ln.setAttribute('y2',y2);
+      grid.appendChild(ln);
+    }
   }
-  // Shuffle slightly for visual interest
-  removeOrder.sort(()=>Math.random()-0.5);
-  let rmIdx=0;
-  
+  svg.appendChild(grid);
+  const layer=document.createElementNS(NS,'g');
+  svg.appendChild(layer);
+
+  // ── Geometri (oyundaki mantığın kompakt hali) ──
+  function bodyPath(cells){
+    return cells.map((c,i)=>(i?'L':'M')+(c[0]+.5)+' '+(c[1]+.5)).join(' ');
+  }
+  function trackPath(cells,dir,ext){
+    const tx=cells[0][0]+.5, ty=cells[0][1]+.5;
+    let p='M'+(tx+dir[0]*ext)+' '+(ty+dir[1]*ext);
+    for(const c of cells) p+='L'+(c[0]+.5)+' '+(c[1]+.5);
+    return p;
+  }
+  function headPath(cells,dir){
+    const cx=cells[0][0]+.5, cy=cells[0][1]+.5;
+    const t=.5,b=-.05,w=.17, px=-dir[1],py=dir[0];
+    return 'M'+(cx+dir[0]*t)+' '+(cy+dir[1]*t)+
+      'L'+(cx+px*w+dir[0]*b)+' '+(cy+py*w+dir[1]*b)+
+      'L'+(cx-px*w+dir[0]*b)+' '+(cy-py*w+dir[1]*b)+'Z';
+  }
+  function mkPath(cls,w,stroke,d){
+    const p=document.createElementNS(NS,'path');
+    p.setAttribute('class',cls);p.setAttribute('d',d);
+    p.setAttribute('stroke',stroke);p.setAttribute('stroke-width',w);
+    return p;
+  }
+
+  const nodes=[];   // {g, arrow, strokes, head}
+  function build(){
+    layer.innerHTML='';
+    nodes.length=0;
+    ARROWS.forEach((a,i)=>{
+      const g=document.createElementNS(NS,'g');
+      g.setAttribute('class','ard-arrow');
+      const d=bodyPath(a.cells);
+      const glow=mkPath('ard-glow',W.glow,J.glow,d);
+      const casing=mkPath('ard-casing',W.casing,J.ink,d);
+      const core=mkPath('ard-core',W.core,J.sh,d);
+      const inner=mkPath('ard-inner',W.inner,J.hi,d);
+      const head=document.createElementNS(NS,'path');
+      head.setAttribute('class','ard-head');
+      head.setAttribute('d',headPath(a.cells,a.dir));
+      head.setAttribute('fill',J.hi);head.setAttribute('stroke',J.ink);head.setAttribute('stroke-width','.05');
+      [glow,casing,core,inner,head].forEach(n=>g.appendChild(n));
+      layer.appendChild(g);
+      nodes.push({ g, arrow:a, strokes:[glow,casing,core,inner], head });
+    });
+  }
+  build();
+
+  function exit(node){
+    const { g, arrow, strokes, head } = node;
+    const bodyLen=arrow.cells.length-1||0.001;
+    const ext=GRID+bodyLen;
+    const track=trackPath(arrow.cells,arrow.dir,ext);
+    // İz
+    const wake=mkPath('ard-wake',W.core*0.85,J.glow,track);
+    wake.style.strokeDasharray='0 '+(ext+bodyLen+1);
+    wake.style.strokeDashoffset=-(ext+bodyLen);
+    g.insertBefore(wake,g.firstChild);
+    requestAnimationFrame(()=>{
+      wake.style.transition='stroke-dasharray '+EXIT_MS+'ms cubic-bezier(.22,1,.36,1),stroke-dashoffset '+EXIT_MS+'ms cubic-bezier(.22,1,.36,1)';
+      wake.style.strokeDasharray=ext+' '+(ext+bodyLen+1);
+      wake.style.strokeDashoffset=-bodyLen;
+    });
+    // Gövde: kendi rayında kayar ve düzleşir
+    strokes.forEach(p=>{
+      p.setAttribute('d',track);
+      p.style.strokeDasharray=bodyLen+' '+(ext+bodyLen+1);
+      p.style.strokeDashoffset=-ext;
+    });
+    void svg.getBBox();
+    g.classList.add('exiting');
+    strokes.forEach(p=>{ p.style.strokeDashoffset='0'; });
+    head.style.transform='translate('+(arrow.dir[0]*ext)+'px,'+(arrow.dir[1]*ext)+'px)';
+  }
+
+  function restore(node){
+    const { g, arrow, strokes, head } = node;
+    g.classList.remove('exiting');
+    g.style.opacity='0';
+    const wake=g.querySelector('.ard-wake'); if(wake) wake.remove();
+    const d=bodyPath(arrow.cells);
+    strokes.forEach(p=>{
+      p.style.transition='none';
+      p.setAttribute('d',d);
+      p.style.strokeDasharray='none';
+      p.style.strokeDashoffset='0';
+    });
+    head.style.transition='none';
+    head.setAttribute('d',headPath(arrow.cells,arrow.dir));
+    head.style.transform='none';
+    void svg.getBBox();
+    strokes.forEach(p=>{ p.style.transition=''; });
+    head.style.transition='';
+    g.style.transition='opacity .5s ease';
+    g.style.opacity='1';
+  }
+
+  let step=0, idx=0, order=nodes.map((_,i)=>i);
   function drawFn(){
     step++;
-    if(step%40===0 && rmIdx<removeOrder.length){
-      const {y,x,dir} = removeOrder[rmIdx];
-      const cell = cellEls[y*G+x];
-      if(cell.dataset.active==='1'){
-        const dirMap = {1:'translateY(-120px)',2:'translateY(120px)',3:'translateX(-120px)',4:'translateX(120px)'};
-        cell.style.transform = dirMap[dir];
-        cell.style.opacity = '0';
-        cell.style.border = 'none';
-        setTimeout(()=>{
-          cell.textContent='';
-          cell.style.transform='scale(1)';
-          cell.style.opacity='1';
-          cell.style.background='rgba(34,197,94,0.08)';
-          cell.dataset.active='0';
-        },500);
+    // Her ~1.3sn'de bir sonraki oku yılan-çıkışıyla çıkar
+    if(step%40===0){
+      if(idx<order.length){ exit(nodes[order[idx]]); idx++; }
+      else if(step%120===0){
+        // hepsi çıktı — kısa bekle, sonra staggered geri belir
+        order.sort(()=>Math.random()-0.5); idx=0;
+        nodes.forEach((n,i)=>setTimeout(()=>restore(n),i*90));
       }
-      rmIdx++;
-    }
-    // Reset when all removed
-    if(rmIdx>=removeOrder.length && step%120===0){
-      rmIdx=0;
-      removeOrder.sort(()=>Math.random()-0.5);
-      cellEls.forEach((c,i)=>{
-        const y=Math.floor(i/G),x=i%G,v=BUTTERFLY[y][x];
-        if(v>0){
-          c.style.transform='scale(0)';
-          setTimeout(()=>{
-            c.textContent=ARROWS_SYM[v];
-            c.dataset.dir=v;c.dataset.active='1';
-            const clr=ARROW_CLR[v];
-            c.style.background=clr+'20';c.style.border='1px solid '+clr+'40';
-            c.style.color=clr;c.style.textShadow='0 0 6px '+clr+'60';
-            c.style.transform='scale(1)';c.style.opacity='1';
-          },50+Math.random()*300);
-        } else {
-          c.style.background='rgba(255,255,255,0.02)';
-        }
-      });
     }
   }
   _demoLoop(state,drawFn);
