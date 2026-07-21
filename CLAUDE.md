@@ -131,6 +131,18 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   asked for 32 arrows on an 80-cell board (~112 cells needed), the generator returned
   `null`, and the game **crashed at level 19**. Never write `res.board` without the retry
   guard. The numbers (`MAX_FILL` 0.85, avg 3.5 cells/arrow) are measured, not guessed.
+- **Arrow levels come from TWO sources: `HAND_LEVELS` first, generator second.**
+  `startLevel` returns early when `HAND_LEVELS[level]` exists, so `paramsFor` and
+  the generator chain never run for those levels. Handcrafted levels exist because
+  the generator makes good boards but cannot *teach* — which idea is introduced in
+  which order is a design decision. Authoring format is absolute cells, tip first,
+  plus the direction the tip faces; `ensureHandShape` converts to canonical form
+  and registers the silhouette in `SHAPES` at runtime (ids `hand0`, `hand1`, …).
+  Those runtime shapes are in no tier, exactly like `sp12`–`sp20`. **Never author a
+  level by editing `SHAPES` directly** — write cells and let the loader do it.
+  Validate any new level with the Node harness before shipping: it checks cell
+  collisions, adjacency, solvability, and wave depth. A level that looks fine can
+  still be unsolvable, and nothing in the UI would tell you.
 - **Arrow has THREE generators and the order in `startLevel` is load-bearing.**
   `generateSlide` (Üreteç C) is tried first, then `generateReverse`, then
   `generateForward`. All three share the *same* validity condition — an arrow's

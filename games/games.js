@@ -6087,6 +6087,48 @@ PuzzleGames.arrowPuzzle = (() => {
     b.arrows.delete(arrow.id);
   }
 
+  // ───────── Elle tasarlanmış seviyeler ─────────
+  // Üreteç iyi tahta üretiyor ama ÖĞRETEMİYOR: hangi fikrin hangi sırada
+  // tanıtılacağı bir tasarım kararı, rastgeleliğin işi değil. İlk
+  // seviyeler bu yüzden elle yazılıyor. Tanımlı seviye yoksa startLevel
+  // üretece düşer — ikisi bir arada yaşar, biri diğerinin yerine geçmez.
+  //
+  // BİÇİM: cells = MUTLAK hücreler, UÇTAN kuyruğa, ardışık komşu.
+  //        dir   = ucun DIŞARI baktığı yön (0 yukarı, 1 sağ, 2 aşağı, 3 sol).
+  // Kanonik şekle çevirme ve şekil kütüphanesine kaydetme otomatik;
+  // seviye yazarken kütüphaneyi düşünmek gerekmiyor.
+  const HAND_SHAPE_IDS = {};
+  function canonicalOffsets(cells, dir) {
+    const inv = (4 - dir) % 4;           // dünya → kanonik (rotate'in tersi)
+    const t = cells[0];
+    const out = new Array(cells.length);
+    for (let i = 0; i < cells.length; i++) {
+      out[i] = rotate(cells[i][0] - t[0], cells[i][1] - t[1], inv);
+    }
+    return out;
+  }
+  // Aynı silüet iki kez kaydedilmesin diye imzayla eşleniyor.
+  function ensureHandShape(cells, dir) {
+    const off = canonicalOffsets(cells, dir);
+    const sig = off.map(o => o[0] + ',' + o[1]).join(';');
+    if (HAND_SHAPE_IDS[sig]) return HAND_SHAPE_IDS[sig];
+    const id = 'hand' + Object.keys(HAND_SHAPE_IDS).length;
+    const shape = { id, offsets: off };
+    SHAPES.push(shape);
+    SHAPE_BY_ID[id] = shape;
+    HAND_SHAPE_IDS[sig] = id;
+    return id;
+  }
+  function buildHandLevel(def) {
+    const b = makeBoard(def.cols, def.rows);
+    for (let i = 0; i < def.snakes.length; i++) {
+      const s = def.snakes[i];
+      placeArrow(b, { id: i, shapeId: ensureHandShape(s.cells, s.dir),
+                      dir: s.dir, anchor: s.cells[0] });
+    }
+    return b;
+  }
+
   // ───────── Çıkış testi — YILAN MODELİ ─────────
   // Ok kendi izini takip ederek çıkar: uç yönü boyunca ilerler, gövde
   // ucun geçtiği yoldan gelir ve giderken düzleşir. Dolayısıyla ÇIKIŞI
@@ -7164,6 +7206,58 @@ PuzzleGames.arrowPuzzle = (() => {
   // Ölçüm (24 deneme/kademe): %75 doluluğa kadar üretim 22-24/24,
   // %85'te 18-20/24. Tavan .85 — kalan başarısızlıkları startLevel'ın
   // yeniden deneme döngüsü topluyor.
+  // ───────── Elle tasarlanmış açılış ─────────
+  // Referansın öğretme sırası: seviye 1 yalnızca "dokun, gitsin"i öğretir
+  // (çoğu yılan serbest), sonra sıralamanın önemi gelir ve zincir adım
+  // adım derinleşir. Tahta 9x11 — referansın ~10x12'sine yakın ama küçük
+  // telefonlarda hücre 32px kalıyor (10x12'de 29.7px'e düşüyordu).
+  // Derinlik = greedy çözümün DALGA sayısı; her dalgada o an serbest olan
+  // her şey çıkar. Ölçüm Node koşumunda doğrulanıyor.
+  const HAND_LEVELS = {
+    // Derinlik 2 · 7 yılan · başta 5 serbest
+    // Öğretilen: dokununca ok kendi izinden çıkar; iki yılan başkası
+    // gitmeden gidemez (E'yi B, F'yi A kilitliyor).
+    1: { cols: 9, rows: 11, snakes: [
+      { dir: 0, cells: [[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[1,7],[1,8],[1,9],[2,9],[3,9],[4,9]] },
+      { dir: 0, cells: [[3,2],[3,3],[3,4],[3,5],[3,6],[3,7]] },
+      { dir: 0, cells: [[5,1],[5,2],[5,3],[5,4]] },
+      { dir: 0, cells: [[7,2],[7,3],[7,4],[7,5],[7,6]] },
+      { dir: 3, cells: [[5,6],[6,6],[6,7]] },
+      { dir: 3, cells: [[3,8],[4,8],[5,8]] },
+      { dir: 1, cells: [[8,9],[7,9],[6,9]] },
+    ]},
+    // Derinlik 3 · 8 yılan · yoğunluk 0.39
+    // Öğretilen: ZİNCİR. Bir sütunda üç uzun yılan sırayla birbirini
+    // bekliyor. Yılanlar kısalmıyor — zorluk sıradan geliyor, seyreklikten
+    // değil (referansın tahtaları da hep dolu).
+    2: { cols: 9, rows: 11, snakes: [
+      { dir: 0, cells: [[2,1],[2,2],[2,3],[3,3],[4,3]] },
+      { dir: 0, cells: [[2,5],[2,6],[2,7],[3,7],[4,7]] },
+      { dir: 0, cells: [[2,9],[2,10],[3,10],[4,10],[5,10]] },
+      { dir: 0, cells: [[6,1],[6,2],[6,3],[6,4],[6,5],[7,5],[8,5]] },
+      { dir: 1, cells: [[8,7],[7,7],[6,7],[6,8]] },
+      { dir: 3, cells: [[0,8],[1,8],[1,7],[1,6]] },
+      { dir: 0, cells: [[5,0],[5,1],[5,2],[4,2],[3,2]] },
+      { dir: 1, cells: [[8,9],[7,9],[6,9],[6,10]] },
+    ]},
+    // Derinlik 4 · 11 yılan · yoğunluk 0.43
+    // Öğretilen: zincir uzuyor VE ikinci bir eksende de var. Oyuncu artık
+    // "hangisi serbest"i değil "hangi sırayla"yı okumak zorunda.
+    3: { cols: 9, rows: 11, snakes: [
+      { dir: 0, cells: [[3,0],[3,1],[4,1],[5,1]] },
+      { dir: 0, cells: [[3,3],[3,4],[4,4],[5,4]] },
+      { dir: 0, cells: [[3,6],[3,7],[4,7],[5,7]] },
+      { dir: 0, cells: [[3,9],[3,10],[4,10],[5,10]] },
+      { dir: 1, cells: [[7,2],[6,2],[6,3],[6,4]] },
+      { dir: 1, cells: [[7,5],[6,5],[6,6],[6,7]] },
+      { dir: 0, cells: [[8,4],[8,5],[8,6],[8,7]] },
+      { dir: 3, cells: [[1,2],[2,2],[2,3],[2,4]] },
+      { dir: 3, cells: [[1,6],[2,6],[2,7],[2,8]] },
+      { dir: 3, cells: [[1,9],[2,9],[2,10]] },
+      { dir: 2, cells: [[7,9],[7,8],[6,8],[6,9]] },
+    ]},
+  };
+
   const MAX_FILL = 0.85;             // olculdu: pratik uretim siniri
 
   function paramsFor(n) {
@@ -7184,6 +7278,14 @@ PuzzleGames.arrowPuzzle = (() => {
 
   function startLevel() {
     cleared = false;
+    // Elle tasarlanmış seviye varsa o kazanır; yoksa üreteç devreye girer.
+    const hand = HAND_LEVELS[level];
+    if (hand) {
+      board = buildHandLevel(hand);
+      levelTotal = board.arrows.size;
+      buildBoard();
+      return;
+    }
     const p = paramsFor(level);
     const seed = phHashSeed('arrow-' + level);
     // Yoğunluğun ölçülmüş sınırına yakın oynuyoruz, o yüzden tek deneme
@@ -7452,6 +7554,7 @@ PuzzleGames.arrowPuzzle = (() => {
       cellsOf, makeBoard, cellsFree, placeArrow, removeArrow,
       canExit, blockersOf, freeArrows, solveOrder, isSolvable, metrics,
       generateForward, generateReverse, generateSlide, validTips,
+      HAND_LEVELS, buildHandLevel,
     },
   };
 })();
