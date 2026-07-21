@@ -160,6 +160,20 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   still asks for a target arrow count. They exist because they are the search's
   natural parameters and bolting them on later would mean rewriting the generator.
   Not dead code — unshipped capability.
+- **`tools/level-metrics.js` is the official design-validation tool for Arrow.**
+  Reference levels and our own levels are measured by the **same code** — measuring them
+  separately would make the comparison meaningless. It is plain Node, zero dependencies,
+  and it does not run the game: it loads `games.js` in a `vm` sandbox with DOM stubs and
+  reads the exported engine. This is the project's first Node script; it is tooling, not
+  a build step, so the zero-dependency / no-build rule in §6 still holds.
+  Three modes: no args measures our campaign, a file path measures an ASCII
+  transcription, `--ascii <n>` prints a level. **Transcription format:** uppercase = the
+  snake's head cell, lowercase = body, `.` = empty. Direction is *derived*, not written
+  (the body's first cell is always directly behind the tip) — except for folded snakes
+  whose head touches their own body twice, where a `# X=up|right|down|left` line is
+  required; the tool says so by name when it hits one. **No new level ships without
+  being measured first** — guessing the progression is what produced a campaign whose
+  wave depth is flat at 2 from level 4 to 100.
 - **Generated levels (4+) run the packer in FILL mode, not target-count mode.**
   `startLevel` calls `generateSlide` with `{ fill: true, preferLong: true }` first, so
   `paramsFor(...).arrows` is **not** what decides the arrow count — the board size does.
