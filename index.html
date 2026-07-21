@@ -376,8 +376,20 @@
     // updateViaCache:'none' — tarayıcının sw.js'i HTTP cache'inden
     // servis etmesini engeller; sürüm güncellemesi bir cache'lenmiş
     // SW dosyası yüzünden takılırsa hata ayıklaması cehennem olur.
+    //
+    // NATIVE'DE KAYIT YOK (Capacitor/APK). Sebep: APK içindeyken tüm
+    // dosyalar ZATEN yerel — SW hiçbir şey hızlandırmaz, sadece bir
+    // bayatlama katmanı ekler. Somut tehlike: kullanıcı yeni APK
+    // kurar ama APP_VERSION bump'ı unutulmuşsa SW eski cache kovasını
+    // servis etmeye devam eder; yani "güncellemeyi kurdum, hiçbir şey
+    // değişmedi" durumu. Web'de bu sadece bayat kod demek, APK'da
+    // teşhisi imkânsız bir hata raporu demek. Cache'lemeyi native
+    // katmana bırakıyoruz.
     // ============================================================
-    if ('serviceWorker' in navigator) {
+    const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform
+                         && window.Capacitor.isNativePlatform());
+
+    if ('serviceWorker' in navigator && !IS_NATIVE) {
       window.addEventListener('load', function () {
         navigator.serviceWorker
           .register('sw.js?v=' + APP_VERSION, { updateViaCache: 'none' })

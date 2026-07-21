@@ -1,0 +1,19 @@
+# Capacitor bagimliliklari — package.json'dan yeniden kurulur.
+node_modules/
+
+# www/ TURETILMIS bir klasordur: tools/build-www.js her calistiginda
+# silinip yeniden olusturulur. Depoya girerse iki kopya olur ve
+# hangisinin guncel oldugu belirsizlesir. Kaynak her zaman depo kokudur.
+www/
+
+# Android yerel derleme ciktisi ve makineye ozgu yollar.
+# NOT: android/ klasorunun KENDISI depoya girer — ikonlar, izinler ve
+# AndroidManifest orada yasar ve bizim elimizle duzenlenir.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/app/release/
+*.keystore
+*.jks

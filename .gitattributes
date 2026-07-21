@@ -1,0 +1,5 @@
+# gradlew bir Unix kabuk betigidir ve LF ile kalmak ZORUNDADIR.
+# Windows'ta gelistiriyoruz, git de varsayilan olarak checkout'ta CRLF
+# yaziyor. Depo Mac/Linux'ta klonlanirsa CRLF'li gradlew
+# "bad interpreter: /bin/sh^M" ile calismaz.
+gradlew text eol=lf

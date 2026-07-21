@@ -10,13 +10,30 @@ PuzzleHub is a Turkish-language, mobile-first casual puzzle hub: a tab-based she
 
 **Current stage: pre-launch prototype.** Ads, in-app payments, the leaderboard, and Plus-subscription validation are all intentionally mocked right now. That is a staging decision, not a defect — see Section 8 before "fixing" any of it.
 
-**Tech stack: vanilla JavaScript, HTML, CSS. No build step. No framework. No bundler. No package manager.** Every file is served as-is. This is a deliberate choice to preserve, not a gap to close.
+**Tech stack: vanilla JavaScript, HTML, CSS. No framework. No bundler. No transpiler.** Every
+file is served as-is. This is a deliberate choice to preserve, not a gap to close.
+
+**Amended 2026-07-21 — the app is now also packaged as a native Android app via Capacitor**,
+an explicit owner decision taken so that real AdMob and Play Billing are reachable later
+(the mocked systems in §8 eventually need native APIs, and TWA constrains them). What this
+did and did *not* change:
+
+- **Added:** `package.json`, `node_modules/`, a `www/` staging folder, and `android/`.
+  There is now one build command — `npm run sync` — but it only *copies files*.
+- **Unchanged:** no bundling, no transpiling, no minification, no framework. The browser
+  still receives the exact bytes in the repo. The web/PWA path works exactly as before and
+  remains the primary development surface.
+
+So the rule in §6 stands with one carve-out: the zero-dependency principle applies to
+**runtime** code. Capacitor is packaging, not a runtime dependency of any game.
 
 Full product vision lives in `VISION.md` (to be written). This section is a working summary only.
 
 ---
 
 ## 2. How to Run / Preview
+
+### Web (primary surface — develop here)
 
 It's static files — open or serve `index.html`, nothing to compile.
 
@@ -48,6 +65,27 @@ fetch during install can be answered from the HTTP cache — the version bump wo
 fresh cache bucket and then fill it with **stale files**, shipping old code under a new
 version number. This was observed in practice, not theorized: a bump to 1.1.0 activated a
 new worker and a new bucket while still serving the previous `games.js`.
+
+### Android (Capacitor)
+
+Requires **JDK 17+** and the **Android SDK** (installed with Android Studio). Neither is
+needed to work on the web surface.
+
+| Command | Does |
+|---|---|
+| `npm run build` | repo → `www/` (copy only) |
+| `npm run sync` | `build` + push `www/` into `android/` |
+| `npm run android` | `sync` + open Android Studio |
+| `npm run apk` | `sync` + build a debug APK |
+
+**Never run `npx cap sync` directly** — it copies `www/` without regenerating it, so it
+happily ships whatever stale snapshot is sitting there. Always go through `npm run sync`.
+
+`tools/build-www.js` copies an explicit whitelist and **cross-checks it against
+`SHELL_ASSETS` in `sw.js`**, failing the build if the two lists disagree. A file added to
+the app but missed in one of the two lists is the hardest deployment bug in this project to
+diagnose (the web build works, the APK opens to a blank screen), so the guard is
+load-bearing — don't remove it when adding a file, update both lists.
 
 ---
 
@@ -96,6 +134,21 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   To ship an update, bump that one line; nothing else. Do **not** re-add `?v=` query strings
   to `<link>`/`<script>` tags: the shell is precached without query strings and
   `cache.match()` compares them, so a stray `?v=` silently misses every cached entry.
+- **`www/` is generated output — never edit it, never commit it.** `tools/build-www.js`
+  deletes and rebuilds it on every run. Editing a file there means editing a copy that the
+  next build silently overwrites, and the change never reaches the repo. The source of truth
+  is always the repo root. It is gitignored for exactly this reason.
+- **The service worker is deliberately NOT registered inside the APK.** `index.html` skips
+  registration when `Capacitor.isNativePlatform()` is true. Inside the APK every asset is
+  already local, so the SW buys nothing and adds a staleness layer: if `APP_VERSION` isn't
+  bumped, a user who installs a *new APK* keeps running the old cached code. On the web
+  that's stale code; in an APK it's an unreproducible bug report. Caching there is the
+  native layer's job. Don't "fix" the missing registration.
+- **Network-dependent content is a real gap in the packaged app.** Google Fonts and the
+  sliding puzzle's Unsplash images are still fetched over the network, so a first launch
+  with no connection shows fallback fonts and no puzzle image. This is the same behavior as
+  today's PWA, so it isn't a regression — but "installed app" raises the expectation.
+  Self-hosting the fonts and bundling a starter image set is deferred, not overlooked.
 - **A new game must be registered in four places:** `PUZZLE_GAMES` and `GAME_MAP` (`app.js`), `REEL_GAMES` and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or visible-but-broken.
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
@@ -242,7 +295,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 **Philosophy**
 - Match effort to stage. Don't harden, generalize, or productionize a system (payments, ads, leaderboard, subscription validation) that is deliberately mocked right now, unless asked.
 - Favor the existing pattern over inventing a new one. If a new game or feature fits the `PuzzleGames` / `injectStyle` / `GameAudio` conventions already in place, use them rather than starting a parallel pattern.
-- No new frameworks, bundlers, or external dependencies without an explicit decision. Zero-dependency is a choice here, not an oversight.
+- No new frameworks, bundlers, or external runtime dependencies without an explicit decision. Zero-dependency is a choice here, not an oversight. Capacitor (2026-07-21) is the one approved exception and it is packaging-only — see §1. Adding a Capacitor *plugin* is a new decision each time, not covered by that approval.
 - Simplicity over abstraction. Three similar small games beat one clever "generalized engine" built to anticipate hypothetical future games that don't exist yet.
 
 **Audio policy (production)**
