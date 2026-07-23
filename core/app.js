@@ -448,6 +448,53 @@ function goBack() {
   switchTab(currentTab || 'home');
 }
 
+// ==================== DONANIM GERİ TUŞU (Android) ====================
+//
+// Capacitor 7'nin BridgeActivity'si donanım geri tuşunu ele almaz: AndroidX
+// varsayılanı Activity'yi doğrudan bitirir — yani oyunun ortasında geri'ye
+// basan oyuncu TÜM uygulamadan çıkardı.
+//
+// Native taraf (MainActivity.java) geri tuşunu buradaki __phHandleBack'e
+// delege eder; biz uygulama içinde bir adım geri gideriz. Ana ekran kökünde
+// iki kez basış (2 sn içinde) native köprü PHNativeBack.exit() ile uygulamadan
+// çıkar. history.pushState'e GÜVENİLMİYOR: eski WebView'lerde (ör. Android 9)
+// pushState girişleri WebView.canGoBack() geçmişine yansımıyor.
+let _backExitPrimed = false;
+let _backExitTimer = null;
+
+function __phHandleBack() {
+  // 1) Ödüllü reklam overlay'i açıksa geri'yi yoksay (mock akışı bozmayalım)
+  if (document.querySelector('.ad-overlay')) return;
+
+  // 2) Kazanma/kaybetme ekranı görünürse oyundan çık
+  const go = document.getElementById('game-over');
+  if (go && go.style.display === 'flex') { exitGame(); return; }
+
+  // 3) Oyun / Plus / Mağaza alt ekranları → bir üst ekrana dön
+  if (currentScreen === 'screen-game') { exitGame(); return; }
+  if (currentScreen === 'screen-plus') { closePlusPage(); return; }
+  if (currentScreen === 'screen-shop') { closeShop(); return; }
+
+  // 4) Ana dışı sekme (Keşfet/Skorlar/Profil) → Ana sekmeye dön
+  if (currentTab !== 'home') { switchTab('home'); return; }
+
+  // 5) Ana ekran kökü → çıkmak için iki kez geri
+  if (_backExitPrimed) {
+    _backExitPrimed = false;
+    clearTimeout(_backExitTimer);
+    if (window.PHNativeBack && typeof PHNativeBack.exit === 'function') {
+      PHNativeBack.exit();
+    }
+    return;
+  }
+  _backExitPrimed = true;
+  showToast("↩︎ Çıkmak için tekrar geri'ye basın");
+  clearTimeout(_backExitTimer);
+  _backExitTimer = setTimeout(() => { _backExitPrimed = false; }, 2000);
+}
+// Native köprünün erişebilmesi için global'e bağla.
+window.__phHandleBack = __phHandleBack;
+
 // ==================== RENDER: ANA SAYFA ====================
 
 function renderHome() {

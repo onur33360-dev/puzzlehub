@@ -409,6 +409,33 @@
           window.location.reload();
         });
       });
+    } else if (IS_NATIVE && 'serviceWorker' in navigator) {
+      // APK içinde service worker OLMAMALI (bkz. CLAUDE.md). Yukarıdaki guard
+      // yeni kaydı önler ama guard'dan ÖNCEKİ bir build'in kaydı WebView'de
+      // KALICIDIR: aktif SW, kabuk kodunu (app.js dahil) cache-first servis
+      // etmeye devam eder ve yeni APK bayat kod çalıştırır — teşhisi imkânsız
+      // bir hata. index.html network-first geldiği için bu blok taze çalışır;
+      // mevcut kaydı kaldırır, ph-* cache kovalarını siler ve BİR KEZ yeniler.
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        var hadSW = regs.length > 0 || !!navigator.serviceWorker.controller;
+        if (!hadSW) return;
+        Promise.all(regs.map(function (r) { return r.unregister(); }))
+          .then(function () {
+            return (window.caches && caches.keys)
+              ? caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                })
+              : null;
+          })
+          .then(function () {
+            // Tek seferlik yenileme — döngüyü sessionStorage bayrağı engeller.
+            if (!sessionStorage.getItem('ph_sw_purged')) {
+              sessionStorage.setItem('ph_sw_purged', '1');
+              window.location.reload();
+            }
+          })
+          .catch(function (err) { console.error('SW temizleme başarısız:', err); });
+      });
     }
   </script>
 </body>
