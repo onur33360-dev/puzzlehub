@@ -1070,16 +1070,25 @@ MiniDemos.demo_arrowPuzzle = function(gradient) {
     g.style.opacity='1';
   }
 
-  let step=0, idx=0, order=nodes.map((_,i)=>i);
+  // "Sürekli canlı" koreografi: eskiden tüm oklar çıkıp grid uzun süre BOŞ
+  // kalıyordu (cihazda gözlemlendi). Artık her seferinde tek ok çıkar ve bir
+  // süre sonra geri belirir; tahtada her an en az yarısı kalır — hero asla
+  // boşalmaz, sürekli hareket ama hiç boşluk.
+  let step=0;
+  const present = nodes.map(()=>true);
   function drawFn(){
     step++;
-    // Her ~1.3sn'de bir sonraki oku yılan-çıkışıyla çıkar
-    if(step%40===0){
-      if(idx<order.length){ exit(nodes[order[idx]]); idx++; }
-      else if(step%120===0){
-        // hepsi çıktı — kısa bekle, sonra staggered geri belir
-        order.sort(()=>Math.random()-0.5); idx=0;
-        nodes.forEach((n,i)=>setTimeout(()=>restore(n),i*90));
+    if(step%36===0){
+      const live = nodes.map((_,i)=>i).filter(i=>present[i]);
+      if(live.length > nodes.length/2){          // yarıdan azına düşürme
+        const i = live[Math.floor(Math.random()*live.length)];
+        present[i] = false;
+        exit(nodes[i]);
+        setTimeout(()=>{
+          if(!nodes[i].g.isConnected) return;    // demo yok edildi — dokunma
+          restore(nodes[i]);
+          present[i] = true;
+        }, EXIT_MS + 1400);
       }
     }
   }
@@ -1372,9 +1381,19 @@ window.ReelsEngine = (function() {
     return picked;
   }
 
+  // İlk kart her zaman görsel olarak zengin, atmosferli bir demo olsun —
+  // Discover'ın ilk izlenimi "wow" olmalı, seyrek bir demoyla açılmamalı.
+  const HERO_FIRST = ['waterSort', 'arrowPuzzle', 'jigsawCard', 'blockPuzzle'];
+
   function _generateBatch(count) {
     const batch = [];
     for (let i = 0; i < count; i++) {
+      // Yalnızca en baştaki kart (ilk batch'in ilk elemanı) küratörlü.
+      if (_globalIdx === 0 && i === 0) {
+        const heroes = REEL_GAMES.filter(g => HERO_FIRST.includes(g.id) && g.playable);
+        const pick = heroes[Math.floor(Math.random() * heroes.length)];
+        if (pick) { _recentIds.push(pick.id); batch.push(pick); continue; }
+      }
       batch.push(_pickNextGame());
     }
     return batch;
@@ -1393,25 +1412,27 @@ window.ReelsEngine = (function() {
       .reel-demo-inner{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
       .reel-demo-overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,0.25) 100%);z-index:2;pointer-events:none}
 
-      .reel-info{position:absolute;bottom:0;left:0;right:0;padding:20px 16px 28px;background:linear-gradient(transparent,rgba(0,0,0,0.75) 25%,rgba(0,0,0,0.88));z-index:10;animation:reelInfoIn 0.5s ease backwards}
+      .reel-info{position:absolute;bottom:0;left:0;right:0;padding:24px 20px 30px;background:linear-gradient(transparent,rgba(0,0,0,0.72) 22%,rgba(0,0,0,0.9));z-index:10;animation:reelInfoIn 0.5s ease backwards}
 
       .reel-game-emoji{font-size:36px;display:inline-block;margin-right:8px;vertical-align:middle;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.4))}
       .reel-game-name{font-family:'Outfit',sans-serif;font-size:28px;font-weight:800;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,0.5);line-height:1.2;display:inline;vertical-align:middle}
-      .reel-desc{font-size:14px;color:rgba(255,255,255,0.75);margin:8px 0 12px;line-height:1.4}
+      .reel-desc{font-size:14px;color:rgba(255,255,255,0.72);margin:10px 0 16px;line-height:1.45}
 
-      .reel-stats{display:flex;align-items:center;gap:14px;margin-bottom:8px;flex-wrap:wrap}
+      .reel-stats{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
       .reel-stat{display:flex;align-items:center;gap:4px;font-size:12px;color:rgba(255,255,255,0.65);font-weight:600}
       .reel-stat-val{color:#fff;font-weight:700}
       .reel-diff-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.5px}
       .reel-diff-badge.easy{background:rgba(34,197,94,0.2);color:#86efac}
       .reel-diff-badge.medium{background:rgba(234,179,8,0.2);color:#fde047}
       .reel-diff-badge.hard{background:rgba(239,68,68,0.2);color:#fca5a5}
-      .reel-highscore{font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:8px}
+      .reel-highscore{font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:14px}
       .reel-highscore span{color:#fbbf24;font-weight:800}
 
-      .reel-play-btn{width:100%;padding:16px;border-radius:16px;font-family:'Outfit',sans-serif;font-size:18px;font-weight:800;color:#fff;border:none;cursor:pointer;letter-spacing:0.5px;box-shadow:0 4px 24px rgba(0,0,0,0.3);animation:reelBtnPulse 2s ease-in-out infinite;-webkit-tap-highlight-color:transparent;position:relative;overflow:hidden;margin-top:6px}
-      .reel-play-btn::after{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:linear-gradient(45deg,transparent 40%,rgba(255,255,255,0.08) 50%,transparent 60%);animation:reelBtnShine 3s ease-in-out infinite}
-      .reel-play-btn:active{transform:scale(0.97);animation:none}
+      /* Sakin premium CTA: sürekli pulse + shine kaldırıldı (§2.5 restraint —
+         demo/atmosfer/CTA aynı anda yarışmasın). Soft-solid: üst catch-light
+         inline gradyanla, temiz gölge, yalnızca :active geri bildirim. */
+      .reel-play-btn{width:100%;padding:17px;border-radius:16px;font-family:'Outfit',sans-serif;font-size:18px;font-weight:800;color:#fff;border:none;cursor:pointer;letter-spacing:0.3px;box-shadow:0 8px 24px -6px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.22);-webkit-tap-highlight-color:transparent;position:relative;overflow:hidden;margin-top:8px;transition:transform .12s ease}
+      .reel-play-btn:active{transform:scale(0.97)}
 
       .reel-actions{position:absolute;right:12px;bottom:200px;display:flex;flex-direction:column;align-items:center;gap:20px;z-index:15}
       .reel-action-btn{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -1421,14 +1442,12 @@ window.ReelsEngine = (function() {
 
       .reel-action-btn.fav-active .act-icon{background:rgba(239,68,68,0.2);border-color:rgba(239,68,68,0.3)}
 
-      .reel-swipe-hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px;z-index:20;animation:reelSwipeHint 1.8s ease-in-out infinite;pointer-events:none}
+      .reel-swipe-hint{position:absolute;bottom:24%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px;z-index:20;animation:reelSwipeHint 1.8s ease-in-out infinite;pointer-events:none;transition:opacity .6s ease}
       .reel-swipe-hint .hint-arrow{font-size:22px;color:rgba(255,255,255,0.5)}
       .reel-swipe-hint .hint-text{font-size:10px;color:rgba(255,255,255,0.35);font-weight:600;letter-spacing:0.5px}
 
       .reel-card-counter{position:absolute;top:16px;left:16px;z-index:12;padding:4px 12px;border-radius:20px;background:rgba(0,0,0,0.4);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:11px;color:rgba(255,255,255,0.6);font-weight:700;border:1px solid rgba(255,255,255,0.06)}
 
-      @keyframes reelBtnPulse{0%,100%{transform:scale(1);box-shadow:0 4px 24px rgba(0,0,0,0.3)}50%{transform:scale(1.04);box-shadow:0 6px 32px rgba(0,0,0,0.4)}}
-      @keyframes reelBtnShine{0%,100%{transform:translateX(-100%) rotate(0)}50%{transform:translateX(100%) rotate(0)}}
       @keyframes reelInfoIn{0%{opacity:0;transform:translateY(30px)}100%{opacity:1;transform:translateY(0)}}
       @keyframes reelSwipeHint{0%,100%{transform:translateX(-50%) translateY(0);opacity:0.5}50%{transform:translateX(-50%) translateY(-12px);opacity:1}}
       @keyframes reelCardIn{0%{opacity:0;transform:scale(0.95)}100%{opacity:1;transform:scale(1)}}
@@ -1516,7 +1535,9 @@ window.ReelsEngine = (function() {
     // Play button
     const btn = document.createElement('button');
     btn.className = 'reel-play-btn';
-    btn.style.background = 'linear-gradient(135deg,'+game.gradient[0]+','+game.gradient[1]+')';
+    // Soft-solid: oyunun kendi rengini koru ama üste ince bir catch-light
+    // katmanı bindir (§14) — düz gradyan yerine "basılabilir" premium yüzey.
+    btn.style.background = 'linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,0) 26%),linear-gradient(135deg,'+game.gradient[0]+','+game.gradient[1]+')';
     btn.textContent = game.playable ? '▶  OYNA' : '🔒  YAKINDA';
     btn.addEventListener('click', function() {
       if(game.playable) {
@@ -1551,19 +1572,22 @@ window.ReelsEngine = (function() {
     });
     actions.appendChild(favBtn);
 
-    // Category label
-    const catBtn = document.createElement('div');
-    catBtn.className = 'reel-action-btn';
-    catBtn.innerHTML = '<div class="act-icon">🧩</div><span class="act-label">Bulmaca</span>';
-    actions.appendChild(catBtn);
+    // Kategori etiketi butonu kaldırıldı — tıklanamaz/dekoratifti ve sağ
+    // rayı kalabalıklaştırıyordu. Ray artık tek anlamlı eylemle (Favori) sade.
     card.appendChild(actions);
 
-    // Swipe hint on first card only
+    // Swipe hint yalnızca ilk kartta — ve birkaç saniye sonra sönümlenir.
+    // Sürekli hareket eden bir ipucu bırakmak "premium = sadelik" ile çelişir;
+    // amacını (ilk kez kaydırmayı öğretmek) görünce kaybolmalı.
     if(idx === 0) {
       const hint = document.createElement('div');
       hint.className = 'reel-swipe-hint';
-      hint.innerHTML = '<span class="hint-arrow">⬆</span><span class="hint-text">KAYDIR</span>';
+      hint.innerHTML = '<span class="hint-arrow">⬆</span><span class="hint-text">Kaydır</span>';
       card.appendChild(hint);
+      setTimeout(() => {
+        hint.style.opacity = '0';
+        setTimeout(() => hint.remove(), 700);
+      }, 4200);
     }
 
     return { card, demoArea, gameId: game.id, game };
@@ -1683,6 +1707,17 @@ window.ReelsEngine = (function() {
 
     // İlk batch'i yükle
     _appendBatch();
+
+    // WOW — hero asla boş görünmesin: ilk kartın demosunu IntersectionObserver'ı
+    // BEKLEMEDEN hemen başlat. Observer async tetiklendiği için giriş anında
+    // hero bir kare boş kalıyordu (cihazda gözlemlendi). active=true set edildiği
+    // için observer'ın ilk geri çağrısı bu kartı atlar — çift başlatma olmaz.
+    if (_cards.length) {
+      const first = _cards[0];
+      first.active = true;
+      first.card.style.willChange = 'transform';
+      _startDemo(first);
+    }
   }
 
   function _startDemo(item) {
