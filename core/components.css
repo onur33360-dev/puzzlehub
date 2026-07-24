@@ -423,9 +423,17 @@
    yazması, dört oyun sonra dört farklı buton hiyerarşisi ve dört farklı
    kapatma davranışı demekti. Ortak bileşen bunu bir kez çözer. */
 
+/* Ortak giriş animasyonu — HER oyunun game-over'ı AYNI şekilde belirir:
+   scrim yumuşak fade, kutu spring ile scale-in. #game-over display:none→flex
+   olduğunda kendiliğinden oynar. (game-over birleştirme kapsamı.) */
+@keyframes go-box-in {
+  0%   { transform: scale(.92) translateY(10px); }
+  100% { transform: scale(1) translateY(0); }
+}
 .game-over-overlay { /* konumlandırma style.css'te; buradan yalnızca yüzey diline çekiliyor */
   background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(76,42,122,.5), transparent 60%),
               rgba(7,5,20,.9) !important;
+  animation: fadeIn var(--ph-duration-fast) ease;
 }
 
 .game-over-box {
@@ -437,6 +445,7 @@
   border: 1px solid rgba(180,165,255,.2) !important;
   box-shadow: 0 30px 70px -24px rgba(0,0,0,.95),
               inset 0 1px 0 rgba(205,195,255,.22) !important;
+  animation: go-box-in var(--ph-duration-medium) var(--ph-ease-spring);
 }
 
 /* İşaret — karikatür emoji yerine sahnenin diline ait bir mühür.
@@ -521,4 +530,6 @@
   /* Can kaybı animasyonu kapanır ama .lost'un statik hâli kalır:
      kaç can kaldığı bilgidir, hareket değil — kaybolmamalı. */
   .ph-heart.losing, .ph-heart.gaining { animation: none; }
+  /* Game-over girişi de kapanır — kutu/scrim anında görünür. */
+  .game-over-box, .game-over-overlay { animation: none; }
 }

@@ -1712,7 +1712,16 @@ PuzzleGames.memoryGame = (() => {
         cards[a].done = cards[b].done = true; matched++; flipped = []; locked = false;
         GameAudio.play('match'); GameAudio.haptic(12);
         render();
-        if (matched === EMOJIS.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Harika! 🧠', `${moves} hamlede tamamladın!`); }
+        if (matched === EMOJIS.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Eşleştirme Tamamlandı', 'Tüm kartları eşledin.', {
+          accent: 'var(--ph-jewel-2-shadow)',
+          accentLight: 'var(--ph-jewel-2-highlight)',
+          accentGlow: 'var(--ph-jewel-2-glow)',
+          mark: '✦',
+          stats: [
+            { label: 'Hamle', value: moves },
+            { label: 'Eşleşme', value: matched + '/' + EMOJIS.length },
+          ],
+        }); }
       } else {
         GameAudio.play('error'); setTimeout(() => { cards[a].up = cards[b].up = false; flipped = []; locked = false; render(); }, 800);
       }
@@ -1800,7 +1809,16 @@ PuzzleGames.wordSearch = (() => {
       updateGameScore(found.length * 100);
       GameAudio.play('match'); GameAudio.haptic(12);
       render();
-      if (found.length === placed.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Tebrikler! 📝', 'Tüm kelimeleri buldun!'); }
+      if (found.length === placed.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Kelimeler Bulundu', 'Gizli kelimelerin hepsini buldun.', {
+          accent: 'var(--ph-jewel-4-shadow)',
+          accentLight: 'var(--ph-jewel-4-highlight)',
+          accentGlow: 'var(--ph-jewel-4-glow)',
+          mark: '✦',
+          stats: [
+            { label: 'Kelime', value: found.length + '/' + placed.length },
+            { label: 'Skor', value: (found.length * 100).toLocaleString() },
+          ],
+        }); }
     } else { render(); }
   }
   function highlightSel(y1,x1,y2,x2) {
@@ -2668,7 +2686,16 @@ PuzzleGames.sudoku = (() => {
     render();
     // Devam kancası: reklam/elmas akışı tamamlanırsa oyuncu bir canla
     // kaldığı yerden sürer — tahta korunur, sıfırlanmaz.
-    showGameOver(false, 'Büyü Tükendi', 'Tüm canların tükendi. Tekrar denemek ister misin?', {
+    const filled = board.filter(x => x !== 0).length;
+    showGameOver(false, 'Büyü Tükendi', 'Canların tükendi.', {
+      accent: 'var(--ph-jewel-5-shadow)',
+      accentLight: 'var(--ph-jewel-5-highlight)',
+      accentGlow: 'var(--ph-jewel-5-glow)',
+      mark: '✧',
+      stats: [
+        { label: 'Dolu', value: filled + '/81' },
+        { label: 'Kalan', value: 81 - filled },
+      ],
       onContinue: () => {
         lives.gain(1);
         dead = false;
@@ -2704,21 +2731,33 @@ PuzzleGames.sudoku = (() => {
 
     if (!board.includes(0)) {
       const secs = Math.floor((Date.now()-startTime)/1000);
-      updateGameScore(Math.max(5000 - secs*10, 500));
+      const finalScore = Math.max(5000 - secs*10, 500);
+      updateGameScore(finalScore);
       GameAudio.play('win'); GameAudio.haptic('win');
       phAtmosphereFlare(atmoEl, 2.2, 620);
 
-      let title = 'Sudoku Çözüldü! 🧩';
-      let msg = `${secs} saniyede tamamladın!`;
+      let title = 'Sudoku Çözüldü';
+      let msg = 'Tabloyu tamamladın.';
+      let stat2 = { label: 'Skor', value: finalScore.toLocaleString() };
       if (isDaily && typeof DailyChallenge !== 'undefined') {
         // complete() aynı gün içinde idempotent — günlüğü tekrar
         // çözmek seriyi ikiye katlamaz.
         const st = DailyChallenge.complete('sudoku');
-        title = 'Günlük Tamamlandı! 🗓️';
-        msg = `${secs} saniye · 🔥 ${st.streak} günlük seri`;
+        title = 'Günlük Tamamlandı';
+        msg = 'Bugünün bulmacasını çözdün.';
+        stat2 = { label: 'Seri', value: st.streak, record: true };
         if (typeof renderDailyChallenge === 'function') renderDailyChallenge();
       }
-      showGameOver(true, title, msg);
+      showGameOver(true, title, msg, {
+        accent: 'var(--ph-jewel-5-shadow)',
+        accentLight: 'var(--ph-jewel-5-highlight)',
+        accentGlow: 'var(--ph-jewel-5-glow)',
+        mark: '✦',
+        stats: [
+          { label: 'Süre', value: secs + ' sn' },
+          stat2,
+        ],
+      });
     }
   }
 
@@ -3993,7 +4032,14 @@ PuzzleGames.blockPuzzle = (() => {
           if (!anyPieceFits()) {
             snd('crystalOver');
             haptic([100,50,100]);
-            setTimeout(()=>showGameOver(false,'Oyun Bitti 💥','Skor: '+score.toLocaleString()+'\nEn Yüksek: '+highScore.toLocaleString()),300);
+            setTimeout(()=>showGameOver(false,'Yer Kalmadı','Sığacak blok kalmadı.',{
+              accent:'var(--ph-jewel-1-shadow)',accentLight:'var(--ph-jewel-1-highlight)',accentGlow:'var(--ph-jewel-1-glow)',
+              mark:'✧',
+              stats:[
+                {label:'Skor',value:score.toLocaleString()},
+                {label:'En İyi',value:highScore.toLocaleString(),record:score>=highScore&&score>0},
+              ],
+            }),300);
           }
         }, 500);
       }, 200);
@@ -4001,7 +4047,14 @@ PuzzleGames.blockPuzzle = (() => {
       if (!anyPieceFits()) {
         snd('crystalOver');
         haptic([100,50,100]);
-        setTimeout(()=>showGameOver(false,'Oyun Bitti 💥','Skor: '+score.toLocaleString()+'\nEn Yüksek: '+highScore.toLocaleString()),300);
+        setTimeout(()=>showGameOver(false,'Yer Kalmadı','Sığacak blok kalmadı.',{
+              accent:'var(--ph-jewel-1-shadow)',accentLight:'var(--ph-jewel-1-highlight)',accentGlow:'var(--ph-jewel-1-glow)',
+              mark:'✧',
+              stats:[
+                {label:'Skor',value:score.toLocaleString()},
+                {label:'En İyi',value:highScore.toLocaleString(),record:score>=highScore&&score>0},
+              ],
+            }),300);
       }
     }
   }
@@ -4249,7 +4302,14 @@ PuzzleGames.mazeGame = (() => {
     render();
     if(playerX===endX&&playerY===endY){
       GameAudio.play('win'); GameAudio.haptic(25);
-      showGameOver(true,'Çıkışı Buldun! 🌀',`${secs} saniye, ${moveCount} adım`);
+      showGameOver(true,'Çıkışı Buldun','Labirentin çıkışına ulaştın.',{
+        accent:'var(--ph-jewel-4-shadow)',accentLight:'var(--ph-jewel-4-highlight)',accentGlow:'var(--ph-jewel-4-glow)',
+        mark:'✦',
+        stats:[
+          {label:'Süre',value:secs+' sn'},
+          {label:'Adım',value:moveCount},
+        ],
+      });
     }
   }
   function render() {
@@ -4689,7 +4749,14 @@ PuzzleGames.screwPuzzle = (() => {
       if(nxt < LEVELS.length) localStorage.setItem('ph_screw_level',nxt.toString());
       setTimeout(()=>{
         if(nxt>=LEVELS.length) {
-          showGameOver(true,'Tebrikler! 🏆','Tüm seviyeleri tamamladın!\nSkor: '+score);
+          showGameOver(true,'Oyun Tamamlandı','Tüm bölümleri bitirdin.',{
+            accent:'var(--ph-jewel-7-shadow)',accentLight:'var(--ph-jewel-7-highlight)',accentGlow:'var(--ph-jewel-7-glow)',
+            mark:'✦',
+            stats:[
+              {label:'Skor',value:score.toLocaleString()},
+              {label:'Bölüm',value:(level+1)},
+            ],
+          });
         } else {
           const ov = document.createElement('div'); ov.className='sp2-overlay';
           ov.innerHTML=`<h2>✅ Seviye ${level+1} Tamam!<br><span style="font-size:18px;color:#fbbf24">+${bonus} bonus</span></h2>`;
@@ -4704,7 +4771,14 @@ PuzzleGames.screwPuzzle = (() => {
       const cc={}; slots.forEach(c=>{cc[c]=(cc[c]||0)+1;});
       if(!Object.values(cc).some(v=>v>=3)) {
         snd('lose'); haptic(100);
-        setTimeout(()=>showGameOver(false,'Oyun Bitti! 😔','Slotlar doldu!\nSkor: '+score),300);
+        setTimeout(()=>showGameOver(false,'Slotlar Doldu','Boş slot kalmadı.',{
+          accent:'var(--ph-jewel-7-shadow)',accentLight:'var(--ph-jewel-7-highlight)',accentGlow:'var(--ph-jewel-7-glow)',
+          mark:'✧',
+          stats:[
+            {label:'Skor',value:score.toLocaleString()},
+            {label:'Bölüm',value:(level+1)},
+          ],
+        }),300);
       }
     }
   }
@@ -7188,9 +7262,12 @@ PuzzleGames.arrowPuzzle = (() => {
       accent: 'var(--ph-jewel-1-shadow)',
       accentLight: 'var(--ph-jewel-1-highlight)',
       accentGlow: 'var(--ph-jewel-1-glow)',
-      mark: '✦',
+      mark: '✧',
       noDiamond: true,
-      stats: [{ label: 'Seviye', value: level }],
+      stats: [
+        { label: 'Seviye', value: level },
+        { label: 'En İyi', value: phHighScore('arrowPuzzle') || '—' },
+      ],
       onContinue: () => {
         lives.reset();
         dead = false;
