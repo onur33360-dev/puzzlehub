@@ -39,7 +39,13 @@
   --font-display: 'Outfit', 'Inter', sans-serif;
 }
 
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+/* -webkit-tap-highlight-color GLOBAL: Android WebView, <div onclick> gibi
+   buton olmayan tıklanabilir öğelere her dokunuşta varsayılan yarı-saydam
+   gri/mavi kutu çiziyordu (elmas göstergesi, günlük ödül/favori/mağaza
+   kartları, oyun hücreleri). Eskiden yalnızca `button` ve birkaç öğede
+   kapalıydı; native his için her yerde kapatılıyor. :active (scale) geri
+   bildirimi zaten var. */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 
 html { font-size:16px; -webkit-font-smoothing:antialiased; }
 
@@ -569,7 +575,10 @@ a { color:inherit; text-decoration:none; }
 }
 .game-over-emoji { font-size:56px; }
 .game-over-title { font-size:24px; font-weight:900; }
-.game-over-msg { font-size:15px; color:var(--text-secondary); }
+/* pre-line: bazı oyunlar mesajı "Skor: X\nEn Yüksek: Y" gibi \n ile
+   yazıyor; textContent varsayılan white-space'te \n boşluğa çöker ve tek
+   satıra yapışır. pre-line satır sonlarını korur, fazladan boşlukları çökertir. */
+.game-over-msg { font-size:15px; color:var(--text-secondary); white-space:pre-line; }
 .go-btn {
   width:100%; padding:14px; border-radius:var(--radius-md);
   font-size:15px; font-weight:800; transition:all .15s;
@@ -1121,4 +1130,23 @@ a { color:inherit; text-decoration:none; }
   font-weight: 800;
   color: #c084fc;
   white-space: nowrap;
+}
+
+/* ========== DOKUNMATİK :hover YAPIŞMASI ========== */
+/* Android WebView'de bir öğeye dokununca :hover tetikleniyor ve highlight
+   BİR SONRAKİ dokunuşa kadar takılı kalıyor — kart/satır "seçili kalmış"
+   gibi görünüyor. Gerçek fare olmayan (hover:none) cihazlarda hover-türevi
+   stiller taban değerlerine geri döndürülür; dokunma geri bildirimi zaten
+   :active (scale) ile veriliyor. Bu blok mevcut kuralları DEĞİŞTİRMEZ,
+   sadece dokunmatikte üzerine yazar — tek satır silinerek geri alınabilir. */
+@media (hover: none) {
+  .cat-card:hover { box-shadow: none; }
+  .random-game-btn:hover { border-color: rgba(255,255,255,0.15); background: var(--bg-card); }
+  .mission-card:hover { background: var(--bg-card); }
+  .lider-row:hover { background: var(--bg-card); }
+  .setting-row:hover { background: var(--bg-card); }
+  .btn-back:hover { background: var(--bg-card); }
+  .filter-pill:hover:not(.active) { background: var(--bg-card); }
+  .fav-badge:hover { background: rgba(255,255,255,0.06); transform: none; }
+  .game-card:hover { transform: none; box-shadow: none; }
 }

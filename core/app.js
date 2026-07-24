@@ -47,7 +47,10 @@ const SETTINGS = [
   { icon:'📊', label:'İstatistikler', action:'İstatistikler yakında!' },
   { icon:'⭐', label:'Puanla', action:'Uygulama puanlama yakında!' },
   { icon:'📤', label:'Paylaş', action:'Paylaşım yakında!' },
-  { icon:'ℹ️', label:'Hakkında', action:'GameHup v1.0.0 — İskelet sürümü' },
+  // Sürüm tek kaynaktan (index.html APP_VERSION) okunur; burada sabit
+  // yazmak bump'ta kaydırır. typeof guard'ı app.js'in izole yüklendiği
+  // (test) durumda ReferenceError'ı önler.
+  { icon:'ℹ️', label:'Hakkında', action:'PuzzleHub v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.27.1') },
 ];
 
 const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
