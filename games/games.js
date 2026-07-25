@@ -3095,7 +3095,7 @@ PuzzleGames.blockPuzzle = (() => {
   // Tavanlar toplam üzerinden uygulanıyor, hücre başına değil: 4 satırlık
   // bir temizleme 32 hücre eder ve hücre başına sabit sayı verilseydi
   // bütçe dörde katlanırdı.
-  const SHARD_CAP = 48;   // kristal kıymığı
+  const SHARD_CAP = 24;   // kristal kıymığı — bütçe kısıldı 48→24 (perf: patlama burst fill-rate)
   const DUST_CAP  = 14;   // yıldız tozu (kalıntı)
   const GLYPH_CAP = 8;    // rün glifi (combo 2+)
 
@@ -3348,7 +3348,7 @@ PuzzleGames.blockPuzzle = (() => {
       // Tahtanın gerçek merkezi, wrapEl uzayında (bkz. cellCenter).
       const mid = (G - 1) / 2 | 0;
       const p = cellCenter(mid, mid);
-      if (p) sparkTrail(p.x, p.y, '#c084fc', level*4);
+      if (p) sparkTrail(p.x, p.y, '#c084fc', Math.min(10, level*2)); // kıvılcım tavan (perf: level*4 → cap 10)
     }
   }
 
@@ -3528,9 +3528,11 @@ PuzzleGames.blockPuzzle = (() => {
          patlar. Animasyon süresi ile patlama gecikmesi (100ms) arasındaki
          fark o duraklamadır. */
       .bp-c.charging{animation:bpCharging .06s ease-out forwards}
+      /* filter:brightness kaldırıldı (perf): temizlenen her hücrede paint tetikliyordu.
+         Şarj artık sadece transform:scale ile (compositor-only). */
       @keyframes bpCharging{
-        0%{filter:brightness(1);transform:scale(1)}
-        100%{filter:brightness(2.6) saturate(.5);transform:scale(1.09)}}
+        0%{transform:scale(1)}
+        100%{transform:scale(1.09)}}
 
       /* KRİSTAL KIYMIĞI — nokta değil, kırılmış taş parçası. Açılı
          clip-path + dönerek savrulma + hafif yerçekimi. Kıymığın nokta
@@ -3708,7 +3710,8 @@ PuzzleGames.blockPuzzle = (() => {
       @keyframes bpFloat{0%{transform:translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translateY(-65px) scale(1.4);opacity:0}}
       @keyframes bpCombo{0%{transform:translate(-50%,-50%) scale(0) rotate(-5deg);opacity:0}20%{transform:translate(-50%,-50%) scale(1.4) rotate(2deg);opacity:1}50%{transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1}100%{transform:translate(-50%,-50%) scale(.6) rotate(-2deg);opacity:0}}
       @keyframes bpFlash{0%{filter:brightness(1);box-shadow:none}35%{filter:brightness(3);box-shadow:0 0 16px rgba(255,255,255,.4)}70%{filter:brightness(2)}100%{filter:brightness(1);box-shadow:none}}
-      @keyframes bpEnergy{0%{transform:scale(1);opacity:1;filter:brightness(1)}30%{transform:scale(1.15);filter:brightness(2.5)}60%{transform:scale(1.1);opacity:.6;filter:brightness(2)}100%{transform:scale(0);opacity:0;filter:brightness(3)}}
+      /* filter:brightness kaldırıldı (perf): burst'te tüm temizlenen hücrelerde paint. transform+opacity kaldı (compositor-only). */
+      @keyframes bpEnergy{0%{transform:scale(1);opacity:1}30%{transform:scale(1.15)}60%{transform:scale(1.1);opacity:.6}100%{transform:scale(0);opacity:0}}
       @keyframes bpPlaceIn{
         0%{transform:translateY(-9px) scale(1.14);opacity:.5}
         45%{transform:translateY(0) scale(.93);opacity:1}
@@ -4195,12 +4198,12 @@ PuzzleGames.blockPuzzle = (() => {
       });
 
       // Kıymık bütçesi combo ile büyür ama SERT tavanı aşamaz.
-      shatterShards(idxs, jewelOf, Math.min(SHARD_CAP, 22 + combo*6 + lines.length*6));
+      shatterShards(idxs, jewelOf, Math.min(SHARD_CAP, 10 + combo*3 + lines.length*4)); // bütçe ~yarıya kısıldı (perf)
 
       // ── COMBO TIRMANIŞI ──
       // Her basamakta YENİ BİR EFEKT TÜRÜ giriyor; "aynı şeyden daha çok"
       // değil. Ekran dolmuyor, dil büyüyor.
-      if (combo >= 2) runeGlyphs(idxs, jewel, 3 + combo);
+      if (combo >= 2) runeGlyphs(idxs, jewel, 2 + Math.min(combo, 3)); // glif tavan (perf)
       if (combo >= 3) cameraBreath();
       if (combo >= 4) runeCircle(jewel);
 
