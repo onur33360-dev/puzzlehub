@@ -700,6 +700,14 @@ function playGame(name, opts) {
   _currentGameOpts = opts || null;
   _beforeGameScreen = currentScreen;
 
+  // Discover'dan oyuna geçince reels demolarını DURDUR. playGame switchTab'ı
+  // çağırmadığı için buraya gelene kadar ReelsEngine.cleanup() hiç tetiklenmiyordu:
+  // bir demo rAF döngüsü arka planda çalışmaya devam edip (cihazda ölçüldü:
+  // oyun ekranında ~46 rAF çağrısı/sn) oyunla main-thread için yarışıyor, ayrıca
+  // tekrar Discover'a girince init() cleanup'sız çalışıp öksüz döngüler biriktiriyordu.
+  // cleanup() idempotent: reels aktif değilse zararsızdır.
+  if (window.ReelsEngine) ReelsEngine.cleanup();
+
   // Tab bar gizle
   document.getElementById('bottom-tabs').style.display = 'none';
 
@@ -962,4 +970,3 @@ function showToast(msg) {
     document.removeEventListener('click', _firstTouch);
   }, { once: true });
 })();
-

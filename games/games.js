@@ -2923,11 +2923,40 @@ PuzzleGames.blockPuzzle = (() => {
   // olmak zorunda. Eski kod boardEl'e göre hesaplayıp wrapEl'e koyuyordu;
   // ölçüldü: parçacıklar 21px sola, 77px yukarı düşüyordu (kaide iç boşluğu
   // + üst bar kadar). Efektin doğru yerde doğması, güzelliğinden önce gelir.
+  // Izgara geometrisi CACHE'i. Eskiden cellCenter her çağrıda hücre + wrapEl
+  // için 2 getBoundingClientRect yapıyordu; efektler DOM'a partikül eklerken
+  // aralara giren bu okumalar tarayıcıyı her seferinde zorla senkron layout'a
+  // sokuyordu (layout thrashing). Tam tahta temizlemede yüzlerce reflow üst
+  // üste binip tek kareyi ~500ms'ye çıkarıyordu (A51'de ölçüldü: 9-11 fps).
+  // Artık geometri hamle başına BİR kez ölçülüp aritmetikle dağıtılıyor:
+  // ölçüm ardışık okumalardan oluşur (aralarında yazma yok) → tek reflow.
+  // Grid uniform olduğu için hücre merkezi = köşe + sütun/satır × adım + yarım.
+  // Cache renderBoard()'ta ve window resize'da düşürülür (bkz. aşağısı).
+  let _geom = null;
+  function measureGeom() {
+    if (!boardEl || !boardEl.children.length) { _geom = null; return; }
+    const w = wrapEl.getBoundingClientRect();
+    const c0 = boardEl.children[0].getBoundingClientRect();
+    const cw = c0.width, ch = c0.height;
+    const cx = (G > 1 && boardEl.children[1]) ? boardEl.children[1].getBoundingClientRect() : null;
+    const cy = (G > 1 && boardEl.children[G]) ? boardEl.children[G].getBoundingClientRect() : null;
+    _geom = {
+      wLeft: w.left, wTop: w.top, ox: c0.left, oy: c0.top, cw, ch,
+      sx: cx ? cx.left - c0.left : cw,   // yatay adım (hücre + boşluk)
+      sy: cy ? cy.top - c0.top : ch      // dikey adım
+    };
+  }
   function cellCenter(y, x) {
     const el = boardEl.children[y*G+x];
-    if (!el) return null;
-    const r = el.getBoundingClientRect(), w = wrapEl.getBoundingClientRect();
-    return { x: r.left - w.left + r.width/2, y: r.top - w.top + r.height/2, size: r.width };
+    if (!el) return null;                // hücre yoksa (eski davranış korunur)
+    if (!_geom) measureGeom();
+    if (!_geom) return null;
+    const g = _geom;
+    return {
+      x: g.ox + x * g.sx + g.cw / 2 - g.wLeft,
+      y: g.oy + y * g.sy + g.ch / 2 - g.wTop,
+      size: g.cw
+    };
   }
 
   // Izgarayı takip eden enerji dalgası. Yarıçap sınırlı (RUNE_R): tüm tahtayı
@@ -3359,8 +3388,12 @@ PuzzleGames.blockPuzzle = (() => {
          tahtanın "yüzey" gibi okunmasını sağlayan şey. */
       .bp-c{aspect-ratio:1;border-radius:5px;position:relative;
         background:rgba(8,10,30,.5);
-        box-shadow:inset 0 1px 3px rgba(0,0,0,.55),inset 0 -1px 0 rgba(180,165,255,.07);
-        transition:box-shadow var(--ph-duration-fast) var(--ph-ease-standard)}
+        /* transition:box-shadow KALDIRILDI (perf): önizleme pv-ok/pv-no her hücre
+           değişiminde box-shadow'u geçiş süresi boyunca canlandırıp SÜRDÜRÜLEN bir
+           repaint yaratıyordu; hızlı sürüklemede hücreler hızla değiştikçe spike'lar
+           üst üste biniyordu (ölçüldü Y6: P95 150→31ms, overlay max 83→17ms).
+           Önizleme artık anında değişiyor — bir drag göstergesi için doğrusu da bu. */
+        box-shadow:inset 0 1px 3px rgba(0,0,0,.55),inset 0 -1px 0 rgba(180,165,255,.07)}
       /* ── KRİSTAL ──
          Water Sort'un sıvısı akar ve çalkalanır; buranın maddesi KATI.
          Aynı evren, farklı hâl. Üç katman:
@@ -3420,7 +3453,10 @@ PuzzleGames.blockPuzzle = (() => {
          plastikten ayıran detay. */
       .bp-crystal::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
         background:linear-gradient(128deg, transparent 33%, rgba(255,255,255,.62) 37.5%, rgba(255,255,255,.14) 41%, transparent 45%)}
-      .bp-c.pv-ok{background:rgba(34,197,94,.28)!important;box-shadow:inset 0 0 0 2px rgba(74,222,128,.7),0 0 14px rgba(34,197,94,.35)}
+      /* pv-ok'un dış glow'u (0 0 14px) KALDIRILDI (perf): blur'lu dış gölge her
+         önizleme hücresinde pahalı boyaydı; inset kenarlık + arka plan yeterli
+         gösterge ve çok daha ucuz. pv-no'da zaten glow yoktu. */
+      .bp-c.pv-ok{background:rgba(34,197,94,.28)!important;box-shadow:inset 0 0 0 2px rgba(74,222,128,.7)}
       .bp-c.pv-no{background:rgba(239,68,68,.16)!important;box-shadow:inset 0 0 0 2px rgba(248,113,113,.45)}
       .bp-c.flash{animation:bpFlash .18s ease}
       .bp-c.energy{animation:bpEnergy .24s ease forwards}
@@ -3575,12 +3611,13 @@ PuzzleGames.blockPuzzle = (() => {
                       dağılması. Gözü yormaz çünkü asla beyaza çıkmaz.
          Güç çekirdeğin PARLAKLIĞINDAN gelir, süresinden değil. */
       .bp-scene-flash{position:absolute;inset:0;pointer-events:none;z-index:3;
-        mix-blend-mode:screen;
+        /* mix-blend-mode:screen kaldırıldı (perf): tam ekran flaş her karede backdrop
+           yeniden harmanlıyordu; dark sahnede normal alfa ~aynı okunuyor. */
         animation:bpSceneFlash var(--bp-ffd,90ms) cubic-bezier(.1,.8,.3,1) forwards}
       /* Ani yükseliş (%8'de zirve) + hızlı düşüş = DARBE. Sabit bir tepeden
          sönmek "flaş" değil "aydınlatma" gibi okunuyor. */
       @keyframes bpSceneFlash{0%{opacity:0}8%{opacity:var(--bp-ffi,.5)}100%{opacity:0}}
-      .bp-scene-flash.after{mix-blend-mode:screen;animation-duration:var(--bp-ffd,300ms)}
+      .bp-scene-flash.after{animation-duration:var(--bp-ffd,300ms)}
 
       /* ── ŞOK DALGASI ──
          Tahtadan çıkıp TÜM SAHNEYİ kat eden halka. Patlamanın tahtayla
@@ -3590,7 +3627,8 @@ PuzzleGames.blockPuzzle = (() => {
          ile ölçeklenince KALINLAŞIYOR, oysa gerçek şok dalgası yayıldıkça
          incelir. Gradyan bandı ölçekle orantılı kalır. */
       .bp-shock{position:absolute;border-radius:50%;pointer-events:none;z-index:2;
-        mix-blend-mode:screen;
+        /* mix-blend-mode:screen kaldırıldı (perf): 2.4× ekran halka her karede
+           backdrop harmanlıyordu; parlak halka dark sahnede ~aynı görünüyor. */
         animation:bpShock .46s cubic-bezier(.1,.75,.25,1) forwards}
       @keyframes bpShock{
         0%{transform:translate(-50%,-50%) scale(.08);opacity:0}
@@ -3602,7 +3640,9 @@ PuzzleGames.blockPuzzle = (() => {
          bu dikey kaçış, "serbest kaldı" hissini veren şey: enerjinin
          gidecek bir yeri var. */
       .bp-column{position:absolute;pointer-events:none;z-index:204;
-        transform-origin:50% 100%;mix-blend-mode:screen;filter:blur(6px);
+        /* mix-blend-mode:screen kaldırıldı (perf). filter:blur(6px) 2. pasa bırakıldı
+           (yanları yumuşatıyor; kaldırınca sertleşir, yatay fade ile telafi gerekir). */
+        transform-origin:50% 100%;filter:blur(6px);
         animation:bpColumn .52s cubic-bezier(.15,.8,.3,1) forwards}
       @keyframes bpColumn{
         0%{transform:translateX(-50%) scaleY(.04) scaleX(.7);opacity:0}
@@ -3649,7 +3689,11 @@ PuzzleGames.blockPuzzle = (() => {
          SONRA tanımlı (aşağıya bak) — ikisi aynı özgüllükte olduğu için
          sıra belirleyici. */
       .bp-tc{border-radius:4px;width:15px;height:15px;position:relative}
-      .bp-ghost{position:fixed;pointer-events:none;z-index:var(--ph-z-floating);display:grid;gap:3px;filter:drop-shadow(0 10px 26px rgba(0,0,0,.55));will-change:left,top;transition:none}
+      /* drop-shadow blur 26px→9px (perf): büyük blur, hareket eden ghost'ta eski
+         WebView tarafından HER KARE yeniden rasterize ediliyordu — ~6ms/kare
+         (ölçüldü Y6: sürüklemede 39→52fps). Küçük blur derinlik hissini korur,
+         maliyeti düşürür. Bkz. aynı sınıf sorun: .ph-beam ve pv-ok glow. */
+      .bp-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:var(--ph-z-floating);display:grid;gap:3px;filter:drop-shadow(0 6px 9px rgba(0,0,0,.5));will-change:transform;transition:none}
       .bp-ghost .bp-gc{border-radius:5px;position:relative}
       /* Hayalet de aynı kristal — elindeki taş, tahtadakiyle aynı malzeme
          olmalı. Ek olarak daha güçlü dış parıltı: havada, ışığı serbest. */
@@ -3731,6 +3775,7 @@ PuzzleGames.blockPuzzle = (() => {
       if (j) d.style.cssText = jewelVars(j);
       boardEl.appendChild(d);
     }
+    _geom = null;   // tahta yeniden kuruldu → geometri cache'i bir sonraki cellCenter'da tazelensin
   }
 
   // Üç yuva HER ZAMAN çizilir ve HER ZAMAN aynı yerdedir (flex:1). Parça
@@ -3862,19 +3907,31 @@ PuzzleGames.blockPuzzle = (() => {
 
   function posGhost(cx, cy) {
     if (!drag) return;
-    drag.ghost.style.left = (cx - drag.ghostW/2) + 'px';
-    drag.ghost.style.top = (cy - drag.ghostH - 40) + 'px';
+    // transform ile konumlandırma. Eskiden left/top yazılıyordu: ikisi de LAYOUT
+    // tetikler, yani her pointermove'da reflow + filter:drop-shadow'un yeniden
+    // çizimi olurdu — zayıf/eski GPU'da (Huawei Y6) sürüklerken kasmanın ana
+    // kaynağı buydu. translate compositor-only: ghost bir kez rasterize edilip
+    // (will-change:transform) yalnızca kaydırılıyor. Ghost position:fixed + left/top:0
+    // olduğu için translate doğrudan viewport koordinatı.
+    drag.ghost.style.transform =
+      'translate(' + (cx - drag.ghostW/2).toFixed(1) + 'px,' + (cy - drag.ghostH - 40).toFixed(1) + 'px)';
   }
 
   function showPreview(cx, cy) {
     if (!drag) return;
-    clearPreview();
     const {piece, cs} = drag;
     const gx = cx - drag.ghostW/2;
     const gy = cy - drag.ghostH - 40;
     // Izgara orijini grabPiece'te ilk hücreden ölçüldü (bkz. oradaki not).
     const col = Math.round((gx - drag.originX) / (cs+3));
     const row = Math.round((gy - drag.originY) / (cs+3));
+    // Hedef hücre DEĞİŞMEDİYSE DOM'a hiç dokunma. Eskiden her pointermove'da
+    // (aynı hücrede gezerken bile) tüm önizleme silinip yeniden kuruluyordu —
+    // her seferinde önizleme hücrelerinin box-shadow'u yeniden boyanıyordu.
+    // Y6'da sürükleme kasmasının ikinci kaynağı buydu; hareketlerin çoğu aynı
+    // hücre içinde olduğu için bu erken çıkış repaint'lerin büyük kısmını eler.
+    if (row === drag.row && col === drag.col) return;
+    clearPreview();
     const wasValid = drag.valid;
     drag.row = row; drag.col = col;
     drag.valid = canPlace(piece.shape, row, col);
@@ -4229,6 +4286,10 @@ PuzzleGames.blockPuzzle = (() => {
     renderBoard();
     renderTray(true);
     renderScoreBar(false);
+
+    // Ekran dönünce/yeniden boyutlanınca hücre geometrisi değişir → cache'i düş.
+    // clearEvs() cleanup'ta kaldırır (shared _listeners).
+    addEv(window, 'resize', () => { _geom = null; });
   }
 
   function cleanup() {

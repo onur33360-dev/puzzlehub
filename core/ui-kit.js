@@ -186,7 +186,12 @@ function phAtmosphereFlare(layer, b, durMs) {
   if (!layer) return;
   layer.classList.remove('ph-flare');
   void layer.offsetWidth;                      // animasyonu yeniden başlat
-  if (b) layer.style.setProperty('--ph-flare-b', b);
+  if (b) {
+    layer.style.setProperty('--ph-flare-b', b);
+    // Parlama artık filter:brightness yerine opacity-overlay ile veriliyor (perf,
+    // bkz. components.css .ph-atmo::after). b (parlaklık) → overlay opaklığına eşlenir.
+    layer.style.setProperty('--ph-flare-o', Math.min(0.92, (b - 1) * 0.4).toFixed(3));
+  }
   if (durMs) layer.style.setProperty('--ph-flare-dur', durMs + 'ms');
   layer.classList.add('ph-flare');
   setTimeout(() => layer.classList.remove('ph-flare'), (durMs || 520) + 40);
