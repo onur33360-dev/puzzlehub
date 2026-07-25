@@ -970,3 +970,94 @@ function showToast(msg) {
     document.removeEventListener('click', _firstTouch);
   }, { once: true });
 })();
+
+// ==================== FPS ÖLÇER (dev aracı) ====================
+// Cihazda gerçek performansı okumak için hafif bir overlay. Kapalıyken hiçbir
+// maliyeti yok (rAF durur). pointer-events:none olduğu için oyunun hiçbir alanını
+// bloke etmez — sadece görsel katman. Aç/kapa: iki parmakla ~800ms basılı tutma
+// (tek parmaklı oyun girdileriyle çakışmaz) veya konsoldan window.PHFps.toggle().
+window.PHFps = (function () {
+  const KEY = 'ph_fpsmeter';
+  let el = null, rafId = 0, visible = false;
+  // Pencere biriktiricileri (~500ms'de bir özetlenip sıfırlanır)
+  let frames = 0, sumMs = 0, maxMs = 0, lastT = 0, winStart = 0;
+  let jank = 0, peak = 0; // jank kümülatif; peak = görülen en yüksek fps (yenileme hızı tahmini)
+
+  injectStyle('fpsm-style', `
+    #fpsm{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);left:50%;
+      transform:translateX(-50%);z-index:2147483647;pointer-events:none;
+      font:600 12px/1.15 ui-monospace,Menlo,Consolas,monospace;
+      background:rgba(10,6,20,.72);color:#e8e2f5;padding:5px 10px;border-radius:10px;
+      text-align:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+      box-shadow:0 2px 10px rgba(0,0,0,.4);letter-spacing:.2px;white-space:nowrap}
+    #fpsm .fpsm-big{font-size:15px;font-weight:800}
+    #fpsm .fpsm-sub{opacity:.75;font-size:10px;margin-top:1px}
+    #fpsm.fpsm-good .fpsm-big{color:#67e8a0}
+    #fpsm.fpsm-mid  .fpsm-big{color:#f5c451}
+    #fpsm.fpsm-bad  .fpsm-big{color:#f56b6b}
+  `);
+
+  function snap(v) { // en yakın yaygın yenileme hızına oturt (renk eşiği için)
+    for (const r of [60, 90, 120, 144]) if (Math.abs(v - r) <= 8) return r;
+    return v;
+  }
+  function tick(t) {
+    if (lastT) {
+      const dt = t - lastT;
+      frames++; sumMs += dt; if (dt > maxMs) maxMs = dt;
+      const exp = peak ? 1000 / peak : 16.7;
+      if (dt > exp * 1.5) jank++; // yarım kareden fazla gecikme = hitch
+    } else { winStart = t; }
+    lastT = t;
+    const elapsed = t - winStart;
+    if (elapsed >= 500 && frames > 0) {
+      const fps = Math.round(frames * 1000 / elapsed);
+      const avg = (sumMs / frames);
+      peak = snap(Math.max(peak, fps));
+      const ratio = peak ? fps / peak : 1;
+      el.className = ratio >= 0.92 ? 'fpsm-good' : ratio >= 0.6 ? 'fpsm-mid' : 'fpsm-bad';
+      el.innerHTML = `<div class="fpsm-big">${fps} fps</div>` +
+        `<div class="fpsm-sub">avg ${avg.toFixed(1)} · max ${Math.round(maxMs)} · jank ${jank}</div>`;
+      frames = 0; sumMs = 0; maxMs = 0; winStart = t;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+  function show() {
+    if (visible) return;
+    visible = true;
+    el = document.getElementById('fpsm');
+    if (!el) { el = document.createElement('div'); el.id = 'fpsm'; el.textContent = '…'; document.body.appendChild(el); }
+    el.style.display = 'block';
+    frames = 0; sumMs = 0; maxMs = 0; lastT = 0; jank = 0; // temiz başla
+    rafId = requestAnimationFrame(tick);
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}
+  }
+  function hide() {
+    visible = false;
+    cancelAnimationFrame(rafId); rafId = 0;
+    if (el) el.style.display = 'none';
+    try { localStorage.removeItem(KEY); } catch (e) {}
+  }
+  function toggle() { visible ? hide() : show(); }
+
+  // İki parmakla basılı tutma jesti (sadece gözlemci — oyun girdisini çalmaz)
+  const active = new Map();
+  let holdTimer = null;
+  function cancelHold() { clearTimeout(holdTimer); holdTimer = null; }
+  addEventListener('pointerdown', e => {
+    active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    cancelHold();
+    if (active.size === 2) holdTimer = setTimeout(toggle, 800);
+  }, { capture: true, passive: true });
+  addEventListener('pointermove', e => {
+    const p = active.get(e.pointerId); if (!p) return;
+    if (Math.abs(e.clientX - p.x) > 24 || Math.abs(e.clientY - p.y) > 24) cancelHold(); // kayma = iptal
+  }, { capture: true, passive: true });
+  function up(e) { active.delete(e.pointerId); if (active.size < 2) cancelHold(); }
+  addEventListener('pointerup', up, { capture: true, passive: true });
+  addEventListener('pointercancel', up, { capture: true, passive: true });
+
+  try { if (localStorage.getItem(KEY) === '1') show(); } catch (e) {}
+  return { toggle, show, hide };
+})();
+
