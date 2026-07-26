@@ -129,6 +129,7 @@ load-bearing — don't remove it when adding a file, update both lists.
 
 - **Screens:** `div.screen` siblings toggled via an `.active` class. No router. `showScreen()` / `switchTab()` in `app.js`.
 - **Games:** `PuzzleGames` registry object. Each game is a self-contained IIFE exposing `{ init(container), cleanup() }`. Each injects its own scoped `<style>` at runtime via the shared `injectStyle(id, css)` helper.
+- **Rendering is per-game, not global.** Most games render with DOM + CSS. `blockPuzzle` renders its board and all of its effects on **Canvas 2D** (2026-07-26) because DOM hit a GPU fill-rate wall on low/mid Android WebViews — see the canvas landmines in Section 5. The shell (Home / Discover / Leaderboard / Profile) and light games stay DOM; new *heavy* games should start on canvas.
 - **Audio:** one global `GameAudio` singleton (`games.js`) — synthesized via Web Audio API — shared by the app shell and every game. See the audio policy in Section 6 before adding any sampled audio file.
 - **Discover feed:** `window.ReelsEngine` (`reels.js`) — infinite scroll, `IntersectionObserver`-driven active-card demo lifecycle (start/pause/destroy), DOM pruned past 24 cards.
 - **State:** no state-management library. State lives in per-game closures plus `localStorage`. UI updates are imperative `innerHTML` template-string re-renders, not reactive/diffed.
@@ -162,6 +163,37 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   with no connection shows fallback fonts and no puzzle image. This is the same behavior as
   today's PWA, so it isn't a regression — but "installed app" raises the expectation.
   Self-hosting the fonts and bundling a starter image set is deferred, not overlooked.
+- **`blockPuzzle` renders on CANVAS, and three of its rules are load-bearing.**
+  The board is one `<canvas>` (crystals drawn into an offscreen cache, rebuilt
+  only when the board changes) plus a second full-scene `<canvas>` (`.bp-fx`) for
+  every particle/explosion effect. Measured on a Galaxy A51: DOM drag was 24 fps
+  (41.7 ms median, worst 209 ms) while the **main thread was idle at 1.1 ms** —
+  the cost was GPU fill-rate + DOM compositing, which is why a year of CSS
+  micro-optimization never reached 60. The rules:
+  1. **Never draw inside `touchmove`.** The move handler only updates state and
+     calls `requestPaint()`; drawing happens once per frame in the rAF callback.
+     Drawing synchronously per move means several paints in one frame.
+  2. **Never repaint the whole board.** `paintBoard()` restores only the previous
+     preview cells from the cache and draws the new ones. `fullRepaint` is set
+     only when the board itself changed (placement, clear, resize).
+  3. **`RENDER_SCALE` must stay.** `pickRenderScale()` lowers buffer resolution on
+     weak devices (A5x → 0.8). This is the only real lever on fill-rate, and it
+     is the thing DOM could not do.
+  Also: the FX loop **stops when no particles are alive** (idle must cost zero),
+  particle glow uses a **pre-rendered sprite** — never `shadowBlur` per particle
+  per frame — and `fxCell()` caches its offset because `runePulse` asks for 64
+  cells at once (otherwise 128 `getBoundingClientRect` calls = layout storm).
+- **Block's tray grab listener belongs on `.bp-slot`, not `.bp-tp`.** The piece
+  element animates in from `scale(0)` with `animationDelay = i*70ms`, so during
+  that window its hit area is literally **zero** — taps on freshly dealt pieces
+  silently died. The slot is unanimated and full-size. Taps that arrive while
+  `locked` (the 90–250 ms placement resolution) are **buffered**, not dropped, and
+  fire when the lock releases if the finger is still down.
+- **Measuring perf on a warm device invalidates the comparison.** Check
+  `dumpsys thermalservice` (`mName=SKIN` / `mStatus`) before trusting numbers:
+  status ≥ 1 means throttling and this project has already produced two
+  contradictory readings that way. Always capture an **idle baseline in the same
+  thermal state** and compare the delta, not the absolute.
 - **A new game must be registered in four places:** `PUZZLE_GAMES` and `GAME_MAP` (`app.js`), `REEL_GAMES` and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or visible-but-broken.
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
