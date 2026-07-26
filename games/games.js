@@ -2840,7 +2840,7 @@ PuzzleGames.blockPuzzle = (() => {
   // translate). Efektler Faz 1'de kapalı (FX) — temiz render ölçümü için.
   // RENDER_SCALE: buffer çözünürlüğü çarpanı (1 = tam/crisp). Önce 1'de ölç;
   // 60fps gelmezse düşür (fill-rate kaldıracı).
-  const FX = false;
+  const FX = true;               // Faz 2: efektler canvas FX katmanında AÇIK
   const GAP = 3;                 // hücreler arası boşluk (CSS px)
   let cv, ctx, bufScale;         // görünen board canvas
   let boardCache, bctx;          // offscreen kristal cache
@@ -2919,6 +2919,7 @@ PuzzleGames.blockPuzzle = (() => {
     const cs = (cssW - (G - 1) * GAP) / G;            // hücre boyutu (CSS px)
     geom = { cssW, cs, step: cs + GAP };
     fullRepaint = true; prevPreview = null;           // buffer sıfırlandı
+    _fxOff = null;                                    // düzen değişti → FX ofseti tazelensin
     return true;
   }
 
@@ -3043,6 +3044,452 @@ PuzzleGames.blockPuzzle = (() => {
     requestAnimationFrame(() => ensureCanvas(cb));
   }
 
+  // ═══════════ FX KATMANI (Faz 2) ═══════════
+  // Tüm patlama/parçacık efektleri TEK bir canvas'ta ve TEK bir rAF
+  // döngüsünde. Eskiden her kıymık/glif/flaş ayrı bir DOM elemanıydı
+  // (yüzlerce eleman, her biri kendi CSS animasyonu + box-shadow/blur ile);
+  // patlamada fps'in 3-9'a düşmesinin sebebi buydu.
+  //
+  // Kritik: parçacık yokken döngü DURUR — idle maliyeti tam sıfır.
+  // Buffer render-scale'e tabi (board ile aynı), yani fill-rate de kontrollü.
+  let fxCv = null, fxCtx = null, fxGeom = null, fxRaf = 0;
+  const fxList = [];
+  let glowSprite = [];
+
+  // Parçacık parıltısı SPRITE olarak bir kez üretilir. Alternatif olan
+  // shadowBlur, parçacık başına kare başına yeniden bulanıklaştırma demek —
+  // canvas'ta da pahalı. Hazır sprite'ı ölçekleyip basmak neredeyse bedava.
+  function glowSpriteFor(j) {
+    if (glowSprite[j]) return glowSprite[j];
+    const S = 48, c = document.createElement('canvas');
+    c.width = c.height = S;
+    const x = c.getContext('2d'), col = JCOL[j] || JCOL[1];
+    const g = x.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+    g.addColorStop(0, 'rgba(255,255,255,.95)');
+    g.addColorStop(0.28, col.hl);
+    g.addColorStop(0.62, col.glow);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+    glowSprite[j] = c;
+    return c;
+  }
+
+  function fxEnsure() {
+    if (fxCv || !container) return;
+    fxCv = document.createElement('canvas');
+    fxCv.className = 'bp-fx';
+    container.appendChild(fxCv);
+    fxCtx = fxCv.getContext('2d');
+    fxResize();
+  }
+  function fxResize() {
+    if (!fxCv || !container) return;
+    const r = container.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const s = Math.min(window.devicePixelRatio || 1, 3) * RENDER_SCALE;
+    fxCv.width = Math.round(r.width * s);
+    fxCv.height = Math.round(r.height * s);
+    fxCv.style.width = r.width + 'px';
+    fxCv.style.height = r.height + 'px';
+    fxCtx.setTransform(s, 0, 0, s, 0, 0);
+    fxGeom = { w: r.width, h: r.height };
+    _fxOff = null;
+  }
+  // Hücre merkezi — FX CANVAS uzayında (cellCenter wrapEl uzayında çalışır;
+  // efektler artık container'ı kaplayan fx canvas'a çiziliyor).
+  // Offset CACHE'li: runePulse tek seferde 64 hücre sorabiliyor ve her biri
+  // 2 getBoundingClientRect demek olurdu — layout okuma fırtınası. Ofset
+  // yalnızca düzen değişince değişir; sizeCanvas/fxResize'da düşürülüyor.
+  let _fxOff = null;
+  function fxCell(y, x) {
+    if (!cv || !geom || !fxCv) return null;
+    if (!_fxOff) {
+      const b = cv.getBoundingClientRect(), f = fxCv.getBoundingClientRect();
+      _fxOff = { x: b.left - f.left, y: b.top - f.top };
+    }
+    return {
+      x: _fxOff.x + x * geom.step + geom.cs / 2,
+      y: _fxOff.y + y * geom.step + geom.cs / 2,
+      size: geom.cs
+    };
+  }
+  function fxAdd(o) {
+    fxEnsure();
+    if (!fxCtx) return;
+    o.t0 = performance.now() + (o.delay || 0);
+    fxList.push(o);
+    if (!fxRaf) fxRaf = requestAnimationFrame(fxTick);
+  }
+  function fxTick(now) {
+    fxRaf = 0;
+    if (!fxCtx || !fxGeom) return;
+    fxCtx.clearRect(0, 0, fxGeom.w, fxGeom.h);
+    for (let i = fxList.length - 1; i >= 0; i--) {
+      const o = fxList[i];
+      const el = now - o.t0;
+      if (el < 0) continue;                       // gecikmeli efekt henüz başlamadı
+      const p = el / o.dur;
+      if (p >= 1) { fxList.splice(i, 1); continue; }
+      o.draw(fxCtx, p, now);
+    }
+    if (fxList.length) fxRaf = requestAnimationFrame(fxTick);
+    else fxCtx.clearRect(0, 0, fxGeom.w, fxGeom.h);   // son kare: tuvali temiz bırak
+  }
+  function fxClear() {
+    if (fxRaf) { cancelAnimationFrame(fxRaf); fxRaf = 0; }
+    fxList.length = 0;
+    if (fxCtx && fxGeom) fxCtx.clearRect(0, 0, fxGeom.w, fxGeom.h);
+  }
+  const easeOut = p => 1 - Math.pow(1 - p, 3);
+
+  // ── ŞARJ (1. VURUŞ) ──
+  // Temizlenecek hücreler patlamadan önce beyaza yaklaşır. Beklenti anı;
+  // bu vuruş olmadan patlama "birden oldu" gibi okunuyor.
+  function fxCharge(idxs, dur) {
+    const cells = idxs.map(i => fxCell(Math.floor(i / G), i % G)).filter(Boolean);
+    if (!cells.length) return;
+    fxAdd({ dur, draw(c, p) {
+      c.save();
+      c.globalAlpha = Math.min(1, p * 1.4) * 0.85;
+      c.fillStyle = '#fff';
+      for (const q of cells) {
+        const gr = 1 + p * 0.06, s = q.size * gr;
+        rrect(c, q.x - s / 2, q.y - s / 2, s, s, s * 0.14);
+        c.fill();
+      }
+      c.restore();
+    }});
+  }
+
+  // ── KRİSTAL KIYMIKLARI — İKİ POPÜLASYON ──
+  // Tasarım DOM sürümünden birebir korundu: birkaç İRİ parça (olayın
+  // gövdesi) + çok sayıda kırıntı (dokusu), yerçekimiyle düşen, dönen.
+  // Fark: yüzlerce DOM elemanı yerine tek canvas döngüsünde tek dizi.
+  function shatterShards(cellIdxs, jewelOf, budget) {
+    const parts = [];
+    const bigCount = Math.max(2, Math.min(6, Math.round(cellIdxs.length / 3)));
+    const pool = [...cellIdxs];
+    const push = (i, big) => {
+      const q = fxCell(Math.floor(i / G), i % G);
+      if (!q) return;
+      const ang = Math.random() * Math.PI * 2;
+      parts.push({
+        x: q.x, y: q.y, big,
+        j: jewelOf(i) || 1,
+        ang, dist: big ? 34 + Math.random() * 54 : 20 + Math.random() * 52,
+        // Yerçekimi: kıymık savrulur AMA düşer. İri parça daha ağır.
+        fall: big ? 26 : 14,
+        sz: big ? 13 + Math.random() * 10 : 3 + Math.random() * 4,
+        rot: Math.random() * Math.PI * 4 - Math.PI * 2,
+        dur: big ? 600 + Math.random() * 220 : 400 + Math.random() * 200,
+      });
+    };
+    for (let k = 0; k < bigCount && pool.length; k++) {
+      push(pool.splice((Math.random() * pool.length) | 0, 1)[0], true);
+    }
+    const small = Math.max(0, budget - bigCount);
+    const per = Math.max(1, Math.min(5, Math.round(small / (cellIdxs.length || 1))));
+    let spent = 0;
+    for (const i of cellIdxs) {
+      if (spent >= small) break;
+      for (let k = 0; k < per && spent < small; k++, spent++) push(i, false);
+    }
+    if (!parts.length) return;
+    const total = Math.max(...parts.map(s => s.dur));
+    fxAdd({ dur: total, draw(c, p, now) {
+      for (const s of parts) {
+        const sp = (now - this.t0) / s.dur;
+        if (sp >= 1) continue;
+        const e = easeOut(sp);
+        const x = s.x + Math.cos(s.ang) * s.dist * e;
+        const y = s.y + Math.sin(s.ang) * s.dist * e + s.fall * sp * sp;
+        const col = JCOL[s.j] || JCOL[1];
+        c.save();
+        c.globalAlpha = 1 - sp * sp;
+        c.translate(x, y);
+        c.rotate(s.rot * sp);
+        if (s.big) {
+          const g = c.createLinearGradient(-s.sz / 2, -s.sz / 2, s.sz / 2, s.sz / 2);
+          g.addColorStop(0, col.hl); g.addColorStop(0.55, col.base); g.addColorStop(1, col.sh);
+          c.fillStyle = g;
+        } else {
+          c.fillStyle = col.hl;
+        }
+        const w = s.sz, h = s.sz * (s.big ? 1.15 : 1.5);
+        rrect(c, -w / 2, -h / 2, w, h, Math.min(w, h) * 0.22);
+        c.fill();
+        c.restore();
+      }
+    }});
+  }
+
+  // ── SAHNE FLAŞI ── Dünyayı aydınlatır, tahtayı değil. Çekirdek (kısa,
+  // neredeyse beyaz) + artçı (uzun, sönük, mücevher renginde).
+  function sceneFlash(jewel, intensity) {
+    const col = JCOL[jewel] || JCOL[1];
+    const mk = (peak, dur, inner, outer, ry) => fxAdd({ dur, draw(c, p) {
+      if (!fxGeom) return;
+      // Ani yükseliş (%8'de zirve) + hızlı düşüş = DARBE.
+      const a = p < 0.08 ? (p / 0.08) * peak : peak * (1 - (p - 0.08) / 0.92);
+      if (a <= 0) return;
+      const w = fxGeom.w, h = fxGeom.h, cx = w / 2, cy = h * 0.52;
+      const g = c.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * ry);
+      g.addColorStop(0, inner); g.addColorStop(0.42, outer); g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.save(); c.globalAlpha = a; c.fillStyle = g; c.fillRect(0, 0, w, h); c.restore();
+    }});
+    mk(Math.min(intensity, 0.92), 90, 'rgba(255,255,255,.95)', col.hl, 0.62);
+    mk(Math.min(intensity * 0.55, 0.5), 300, col.hl, col.glow, 0.8);
+  }
+
+  // ── ŞOK DALGASI ── Tahtadan çıkıp tüm sahneyi kat eden halka.
+  function shockwave(jewel) {
+    const mid = (G - 1) / 2 | 0, q = fxCell(mid, mid);
+    if (!q || !fxGeom) return;
+    const col = JCOL[jewel] || JCOL[1];
+    const rMax = Math.max(fxGeom.w, fxGeom.h) * 0.55;
+    fxAdd({ dur: 460, draw(c, p) {
+      const e = easeOut(p);
+      const r = rMax * (0.04 + e * 1.1);
+      c.save();
+      c.globalAlpha = p < 0.1 ? p / 0.1 * 0.95 : 0.95 * (1 - (p - 0.1) / 0.9);
+      // Yayıldıkça İNCELEN halka (gerçek şok dalgası gibi).
+      c.lineWidth = Math.max(1, q.size * 0.5 * (1 - e * 0.75));
+      c.strokeStyle = col.hl;
+      c.beginPath(); c.arc(q.x, q.y, r, 0, Math.PI * 2); c.stroke();
+      c.globalAlpha *= 0.55; c.lineWidth *= 0.35; c.strokeStyle = '#fff';
+      c.beginPath(); c.arc(q.x, q.y, r, 0, Math.PI * 2); c.stroke();
+      c.restore();
+    }});
+  }
+
+  // ── IŞIK SÜTUNU ── Temizlenen çizgiden yukarı kaçan enerji.
+  function lightColumn(line, jewel) {
+    const mid = (G - 1) / 2 | 0;
+    const q = line.type === 'row' ? fxCell(line.idx, mid) : fxCell(mid, line.idx);
+    if (!q || !geom) return;
+    const col = JCOL[jewel] || JCOL[1];
+    const w0 = line.type === 'row' ? geom.cssW * 0.82 : q.size * 2.1;
+    const h0 = q.y + 40;
+    fxAdd({ dur: 520, draw(c, p) {
+      const e = easeOut(p);
+      const sy = 0.04 + e * 0.96, sx = 0.7 + e * 0.55;
+      c.save();
+      c.globalAlpha = p < 0.16 ? p / 0.16 * 0.9 : 0.9 * (1 - (p - 0.16) / 0.84);
+      c.translate(q.x, q.y);
+      c.scale(sx, sy);
+      const g = c.createLinearGradient(0, 0, 0, -h0);
+      g.addColorStop(0, '#fff'); g.addColorStop(0.22, col.hl);
+      g.addColorStop(0.55, col.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g;
+      c.fillRect(-w0 / 2, -h0, w0, h0);
+      c.restore();
+    }});
+  }
+
+  // ── EKSEN SÜPÜRMESİ ── Enerji rastgele değil ÇİZGİ boyunca boşalıyor.
+  function axisSweep(line, jewel) {
+    const mid = (G - 1) / 2 | 0;
+    const q = line.type === 'row' ? fxCell(line.idx, mid) : fxCell(mid, line.idx);
+    if (!q || !geom) return;
+    const col = JCOL[jewel] || JCOL[1];
+    const row = line.type === 'row';
+    const long = geom.cssW * 1.05, thick = q.size * 0.9;
+    fxAdd({ dur: 380, draw(c, p) {
+      c.save();
+      c.globalAlpha = p < 0.2 ? p / 0.2 : 1 - (p - 0.2) / 0.8;
+      c.translate(q.x, q.y);
+      const w = row ? long : thick, h = row ? thick : long;
+      const g = row ? c.createLinearGradient(-w / 2, 0, w / 2, 0)
+                    : c.createLinearGradient(0, -h / 2, 0, h / 2);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, col.hl);
+      g.addColorStop(0.5, '#fff'); g.addColorStop(0.65, col.hl);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g; c.fillRect(-w / 2, -h / 2, w, h);
+      c.restore();
+    }});
+  }
+
+  // ── RÜN GLİFLERİ (combo 2+) ── Nokta değil YAZI: levhadan kaçan büyü.
+  const GLYPHS = ['ᚦ','ᛝ','ᛟ','ᚨ','ᛉ','ᛊ','ᛃ','ᛒ'];
+  function runeGlyphs(cellIdxs, jewel, count) {
+    const n = Math.min(count, GLYPH_CAP), col = JCOL[jewel] || JCOL[1], parts = [];
+    for (let k = 0; k < n; k++) {
+      const i = cellIdxs[(Math.random() * cellIdxs.length) | 0];
+      const q = fxCell(Math.floor(i / G), i % G);
+      if (!q) continue;
+      parts.push({
+        x: q.x + (Math.random() * 20 - 10), y: q.y,
+        ch: GLYPHS[(Math.random() * GLYPHS.length) | 0],
+        sz: (15 + Math.random() * 9) | 0,
+        dx: Math.random() * 40 - 20,
+        r0: (Math.random() * 40 - 20) * Math.PI / 180,
+        r1: (Math.random() * 50 - 25) * Math.PI / 180,
+        dur: (560 + Math.random() * 220) | 0,
+      });
+    }
+    if (!parts.length) return;
+    const total = Math.max(...parts.map(s => s.dur));
+    fxAdd({ dur: total, draw(c, p, now) {
+      c.save();
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = col.hl;
+      for (const s of parts) {
+        const sp = (now - this.t0) / s.dur;
+        if (sp >= 1) continue;
+        c.save();
+        c.globalAlpha = sp < 0.2 ? sp / 0.2 : 1 - (sp - 0.2) / 0.8;
+        c.translate(s.x + s.dx * sp, s.y - 46 * easeOut(sp));
+        c.rotate(s.r0 + (s.r1 - s.r0) * sp);
+        c.font = '600 ' + s.sz + 'px serif';
+        c.fillText(s.ch, 0, 0);
+        c.restore();
+      }
+      c.restore();
+    }});
+  }
+
+  // ── YILDIZ TOZU (3. VURUŞ: KALINTI) ── Olay bitti, izi duruyor.
+  function stardust(cellIdxs, jewel, count) {
+    const n = Math.min(count, DUST_CAP), parts = [];
+    for (let k = 0; k < n; k++) {
+      const i = cellIdxs[(Math.random() * cellIdxs.length) | 0];
+      const q = fxCell(Math.floor(i / G), i % G);
+      if (!q) continue;
+      parts.push({
+        x: q.x, y: q.y, sz: 1.5 + Math.random() * 2,
+        dx: Math.random() * 54 - 27, dy: -30 - Math.random() * 40,
+        dur: (760 + Math.random() * 380) | 0,
+      });
+    }
+    if (!parts.length) return;
+    const sp0 = glowSpriteFor(jewel), total = Math.max(...parts.map(s => s.dur));
+    fxAdd({ dur: total, draw(c, p, now) {
+      for (const s of parts) {
+        const sp = (now - this.t0) / s.dur;
+        if (sp >= 1) continue;
+        const e = easeOut(sp), r = s.sz * 3.2;
+        c.save();
+        c.globalAlpha = (1 - sp) * 0.9;
+        c.drawImage(sp0, s.x + s.dx * e - r, s.y + s.dy * e - r, r * 2, r * 2);
+        c.restore();
+      }
+    }});
+  }
+
+  // ── RÜN ÇEMBERİ (combo 4+) ── Seyrek olduğu için çıktığında OLAY olur.
+  function runeCircle(jewel) {
+    const mid = (G - 1) / 2 | 0, q = fxCell(mid, mid);
+    if (!q || !geom) return;
+    const col = JCOL[jewel] || JCOL[1], d = geom.cssW * 0.78;
+    fxAdd({ dur: 660, draw(c, p) {
+      const e = easeOut(p);
+      c.save();
+      c.globalAlpha = (p < 0.15 ? p / 0.15 : 1 - (p - 0.15) / 0.85) * 0.9;
+      c.strokeStyle = col.glow; c.lineWidth = 3;
+      c.beginPath(); c.arc(q.x, q.y, (d / 2) * (0.35 + e * 0.65), 0, Math.PI * 2); c.stroke();
+      c.restore();
+    }});
+  }
+
+  // ── IŞIK DALGASI ── Küçük beyaz halka (çizgi başına).
+  function lightWave(cx, cy) {
+    fxAdd({ dur: 600, draw(c, p) {
+      const e = easeOut(p);
+      c.save();
+      c.globalAlpha = (1 - p) * 0.55;
+      c.strokeStyle = '#fff'; c.lineWidth = 3;
+      c.beginPath(); c.arc(cx, cy, 140 * e, 0, Math.PI * 2); c.stroke();
+      c.restore();
+    }});
+  }
+
+  // ── TEMAS KIVILCIMLARI (yerleştirme) ── Paylaşılan kenardan dik fırlar.
+  // Boşluğa konan taş kıvılcım üretmez: efekt, sıkı yerleştirmenin ödülü.
+  const SPARK_CAP = 14;
+  function contactSparks(edges, jewel) {
+    if (!edges.length) return;
+    const use = edges.slice(0, SPARK_CAP);
+    const perEdge = Math.min(3, Math.max(1, Math.floor(SPARK_CAP / use.length)));
+    const parts = [];
+    for (const { y, x, dy, dx } of use) {
+      const q = fxCell(y, x);
+      if (!q) continue;
+      const half = q.size / 2, ex = q.x + dx * half, ey = q.y + dy * half;
+      for (let k = 0; k < perEdge; k++) {
+        const spread = (Math.random() - 0.5) * q.size * 0.55;
+        parts.push({
+          x: ex + (dx ? 0 : spread), y: ey + (dy ? 0 : spread),
+          vx: dx * (7 + Math.random() * 9), vy: dy * (7 + Math.random() * 9),
+          sz: 2 + Math.random() * 2.5, dur: (260 + Math.random() * 120) | 0,
+        });
+      }
+    }
+    if (!parts.length) return;
+    const sp0 = glowSpriteFor(jewel), total = Math.max(...parts.map(s => s.dur));
+    fxAdd({ dur: total, draw(c, p, now) {
+      for (const s of parts) {
+        const sp = (now - this.t0) / s.dur;
+        if (sp >= 1) continue;
+        const e = easeOut(sp), r = s.sz * 2.6;
+        c.save();
+        c.globalAlpha = 1 - sp;
+        c.drawImage(sp0, s.x + s.vx * e - r, s.y + s.vy * e - r, r * 2, r * 2);
+        c.restore();
+      }
+    }});
+  }
+
+  // ── KAİDE BOŞALMASI (yerleştirme) ── Enerjinin levhaya sızması.
+  function daisDischarge(cells, jewel) {
+    let sx = 0, sy = 0, n = 0, size = 0;
+    for (const c0 of cells) {
+      const q = fxCell(c0.y, c0.x);
+      if (q) { sx += q.x; sy += q.y; size = q.size; n++; }
+    }
+    if (!n) return;
+    const x = sx / n, y = sy / n, R = size * 2.5, col = JCOL[jewel] || JCOL[1];
+    fxAdd({ dur: 480, draw(c, p) {
+      const e = easeOut(p);
+      c.save();
+      c.globalAlpha = (1 - p) * 0.5;
+      const g = c.createRadialGradient(x, y, 0, x, y, R * (0.3 + e * 0.7));
+      g.addColorStop(0, col.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g;
+      c.fillRect(x - R, y - R, R * 2, R * 2);
+      c.restore();
+    }});
+  }
+
+  // ── IZGARA İLETİMİ (yerleştirme) ── Dalga konan taşın gövdesinden yayılır,
+  // yarıçapla sönümlenir; gecikme mesafeyle artar (dışa yayılan dalga).
+  function runePulse(cells, jewel) {
+    const col = JCOL[jewel] || JCOL[1], touched = [];
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      let d = Infinity;
+      for (const c0 of cells) { const t = Math.hypot(y - c0.y, x - c0.x); if (t < d) d = t; }
+      const inten = 0.62 * (1 - d / RUNE_R);
+      if (d <= RUNE_R && inten >= RUNE_MIN_I) {
+        const q = fxCell(y, x);
+        if (q) touched.push({ q, i: inten, delay: d * 26 });
+      }
+    }
+    if (!touched.length) return;
+    const dur = RUNE_R * 26 + 280;
+    fxAdd({ dur, draw(c, p, now) {
+      const el = now - this.t0;
+      c.save();
+      c.fillStyle = col.glow;
+      for (const t of touched) {
+        const sp = (el - t.delay) / 280;
+        if (sp < 0 || sp >= 1) continue;
+        c.globalAlpha = t.i * (sp < 0.3 ? sp / 0.3 : 1 - (sp - 0.3) / 0.7);
+        const s = t.q.size;
+        rrect(c, t.q.x - s / 2, t.q.y - s / 2, s, s, s * 0.14);
+        c.fill();
+      }
+      c.restore();
+    }});
+  }
+
   // ───────── HAPTİK ─────────
   function haptic(ms) { GameAudio.haptic(ms); }
 
@@ -3073,13 +3520,7 @@ PuzzleGames.blockPuzzle = (() => {
     setTimeout(()=>fl.remove(), (dur||300)+50);
   }
 
-  // ───────── IŞIK DALGASI ─────────
-  function lightWave(cx, cy, color) {
-    const w = document.createElement('div');
-    w.style.cssText = `position:absolute;left:${cx}px;top:${cy}px;width:0;height:0;border-radius:50%;pointer-events:none;z-index:195;transform:translate(-50%,-50%);animation:bpWave .6s ease-out forwards;border:3px solid ${color||'rgba(255,255,255,.5)'}`;
-    wrapEl.appendChild(w);
-    setTimeout(()=>w.remove(),650);
-  }
+  // (lightWave artık canvas FX katmanında — bkz. FX KATMANI bölümü.)
 
   // ───────── PARTİKÜLLER ─────────
   function spawnParticles(cx, cy, color, n) {
@@ -3168,46 +3609,7 @@ PuzzleGames.blockPuzzle = (() => {
   // sönük hücreleri tamamen eliyor: onlara stil yazmak boşuna DOM işi.
   const RUNE_R = 2.4;
   const RUNE_MIN_I = 0.07;
-  function runePulse(cells, jewel) {
-    const color = `var(--ph-jewel-${jewel}-glow)`;
-    const touched = new Map();
-    for (let y=0;y<G;y++) for (let x=0;x<G;x++) {
-      // Konan hücrelerin HERHANGİ birine olan en kısa mesafe: dalga tek bir
-      // noktadan değil, parçanın tüm gövdesinden yayılır.
-      let d = Infinity;
-      cells.forEach(c => { const t = Math.hypot(y-c.y, x-c.x); if (t < d) d = t; });
-      if (d <= RUNE_R && 0.62 * (1 - d/RUNE_R) >= RUNE_MIN_I) touched.set(y*G+x, d);
-    }
-    touched.forEach((d, i) => {
-      const el = boardEl.children[i];
-      if (!el) return;
-      el.style.setProperty('--bp-rune-c', color);
-      el.style.setProperty('--bp-rune-i', (0.62 * (1 - d/RUNE_R)).toFixed(3));
-      el.style.animationDelay = (d * 26).toFixed(0) + 'ms';
-      el.classList.add('rune');
-    });
-    setTimeout(() => touched.forEach((d, i) => {
-      const el = boardEl.children[i];
-      if (el) { el.classList.remove('rune'); el.style.animationDelay = ''; }
-    }), RUNE_R * 26 + 280);
-  }
-
-  // Enerjinin levhaya sızması — parçanın ağırlık merkezinden.
-  function daisDischarge(cells, jewel) {
-    const first = cellCenter(cells[0].y, cells[0].x);
-    if (!first) return;
-    let sx=0, sy=0, n=0;
-    cells.forEach(c => { const p = cellCenter(c.y,c.x); if(p){ sx+=p.x; sy+=p.y; n++; } });
-    if (!n) return;
-    const size = first.size * 5;
-    const d = document.createElement('div');
-    d.className = 'bp-discharge';
-    d.style.cssText = `left:${(sx/n).toFixed(1)}px;top:${(sy/n).toFixed(1)}px;` +
-      `width:${size.toFixed(0)}px;height:${size.toFixed(0)}px;` +
-      `background:radial-gradient(circle, var(--ph-jewel-${jewel}-glow) 0%, transparent 68%)`;
-    wrapEl.appendChild(d);
-    setTimeout(()=>d.remove(), 480);
-  }
+  // (runePulse ve daisDischarge artık canvas FX katmanında.)
 
   // Yeni kristalin MEVCUT kristallere değdiği kenarlar. Kendi parçasının
   // hücreleri sayılmaz — taşın kendi içindeki birleşimler temas değildir.
@@ -3224,42 +3626,7 @@ PuzzleGames.blockPuzzle = (() => {
     return out;
   }
 
-  // Temas kıvılcımları: paylaşılan kenarın ortasından, kenara DİK fırlar.
-  // Boşluğa konan taş hiç kıvılcım üretmez — efekt, sıkı yerleştirmenin
-  // ödülü, yani oyunun asıl becerisinin. Toplam sayı sınırlı: dar bir
-  // boşluğa giren 4 hücrelik taş 8 temas üretebiliyor.
-  const SPARK_CAP = 14;
-  function contactSparks(edges, jewel) {
-    if (!edges.length) return;
-    const use = edges.slice(0, SPARK_CAP);
-    // Kenar başına ÜST SINIR ayrıca gerekli: yalnızca toplamı sınırlamak,
-    // az sayıda temasta kenar başına 7 kıvılcım düşürüyordu — o artık
-    // "temas" değil "patlama" gibi okunuyor. Temas kıvılcımı SEYREK olmalı;
-    // çokluğu değil, VARLIĞI ödül. Yoğunluk temas SAYISINDAN gelsin.
-    const perEdge = Math.min(3, Math.max(1, Math.floor(SPARK_CAP / use.length)));
-    use.forEach(({y,x,dy,dx}) => {
-      const c = cellCenter(y,x);
-      if (!c) return;
-      const half = c.size/2;
-      const ex = c.x + dx*half, ey = c.y + dy*half;   // paylaşılan kenarın ortası
-      for (let k=0;k<perEdge;k++) {
-        const spread = (Math.random()-.5) * c.size * .55;   // kenar boyunca dağıl
-        const px = ex + (dx ? 0 : spread), py = ey + (dy ? 0 : spread);
-        const dist = 7 + Math.random()*9;
-        const sz = 2 + Math.random()*2.5;
-        const s = document.createElement('div');
-        s.className = 'bp-spark';
-        s.style.cssText = `left:${px.toFixed(1)}px;top:${py.toFixed(1)}px;` +
-          `width:${sz.toFixed(1)}px;height:${sz.toFixed(1)}px;` +
-          `background:var(--ph-jewel-${jewel}-highlight);` +
-          `box-shadow:0 0 ${(sz*2.5).toFixed(1)}px var(--ph-jewel-${jewel}-glow);` +
-          `--bp-sx:${(dx*dist).toFixed(1)}px;--bp-sy:${(dy*dist).toFixed(1)}px;` +
-          `--bp-spark-dur:${(260+Math.random()*120)|0}ms`;
-        wrapEl.appendChild(s);
-        setTimeout(()=>s.remove(), 420);
-      }
-    });
-  }
+  // (contactSparks artık canvas FX katmanında.)
 
   // ── ŞARJ ──
   // En dolu satır/sütunun doluluğu. Bu sayı oyuncuya GÖSTERİLMEZ; yalnızca
@@ -3304,213 +3671,9 @@ PuzzleGames.blockPuzzle = (() => {
   // Gerçekte kırılan bir taş birkaç İRİ parça + çok sayıda kırıntı verir;
   // gözün "kırıldı" diye okuduğu şey bu boyut dağılımı. İri parçalar yavaş
   // ve takip edilebilir (olayın gövdesi), kırıntılar hızlı ve çok (dokusu).
-  function shard(p, j, opts) {
-    const ang = opts.ang, dist = opts.dist, sz = opts.sz;
-    const s = document.createElement('div');
-    s.className = 'bp-shard' + (opts.big ? ' big' : '');
-    s.style.cssText =
-      `left:${p.x.toFixed(1)}px;top:${p.y.toFixed(1)}px;` +
-      `width:${sz.toFixed(1)}px;height:${(sz*(opts.big?1.15:1.5)).toFixed(1)}px;` +
-      `background:linear-gradient(150deg, var(--ph-jewel-${j}-highlight), var(--ph-jewel-${j}-base) 55%, var(--ph-jewel-${j}-shadow));` +
-      `--bp-shg:var(--ph-jewel-${j}-glow);` +
-      `--bp-shx:${(Math.cos(ang)*dist).toFixed(1)}px;` +
-      // Yerçekimi. Kıymık savrulur AMA düşer; tam simetrik dağılım
-      // "havai fişek" gibi okunuyor, "kırıldı" gibi değil. İri parça daha
-      // ağır: daha çok düşer.
-      `--bp-shy:${(Math.sin(ang)*dist + (opts.big?26:14)).toFixed(1)}px;` +
-      `--bp-shr:${(Math.random()*720-360).toFixed(0)}deg;` +
-      `--bp-shd:${opts.dur|0}ms`;
-    wrapEl.appendChild(s);
-    setTimeout(()=>s.remove(), opts.dur + 220);
-  }
-  function shatterShards(cellIdxs, jewelOf, budget) {
-    // İri parçalar bütçenin küçük bir kısmı — çokluğu değil VARLIĞI iş
-    // görüyor. Hepsi iri olsaydı patlama hantallaşır, hiçbiri olmasaydı
-    // toz bulutuna dönerdi.
-    const bigCount = Math.max(2, Math.min(6, Math.round(cellIdxs.length / 3)));
-    const pool = [...cellIdxs];
-    for (let k=0; k<bigCount && pool.length; k++) {
-      const i = pool.splice((Math.random()*pool.length)|0, 1)[0];
-      const p = cellCenter(Math.floor(i/G), i%G);
-      if (!p) continue;
-      shard(p, jewelOf(i) || 1, {
-        big: true,
-        ang: Math.random()*Math.PI*2,
-        dist: 34 + Math.random()*54,
-        sz: 13 + Math.random()*10,
-        dur: 600 + Math.random()*220,
-      });
-    }
-    const small = Math.max(0, budget - bigCount);
-    const n = cellIdxs.length || 1;
-    const per = Math.max(1, Math.min(5, Math.round(small / n)));
-    let spent = 0;
-    for (const i of cellIdxs) {
-      if (spent >= small) break;
-      const p = cellCenter(Math.floor(i/G), i%G);
-      if (!p) continue;
-      const j = jewelOf(i) || 1;
-      for (let k=0; k<per && spent<small; k++, spent++) {
-        shard(p, j, {
-          ang: Math.random()*Math.PI*2,
-          dist: 20 + Math.random()*52,
-          sz: 3 + Math.random()*4,
-          dur: 400 + Math.random()*200,
-        });
-      }
-    }
-  }
-
-  // Şok dalgası — tahtadan çıkıp TÜM SAHNEYİ kat eder. Patlamanın oyun
-  // alanıyla sınırlı kalmadığını söyleyen katman. Konteynere eklenir.
-  function shockwave(jewel) {
-    if (!container) return;
-    const mid = (G-1)/2|0;
-    const p = cellCenter(mid, mid);
-    const cr = container.getBoundingClientRect();
-    const wr = wrapEl.getBoundingClientRect();
-    if (!p) return;
-    const d = Math.max(cr.width, cr.height) * 1.1;
-    const el = document.createElement('div');
-    el.className = 'bp-shock';
-    el.style.cssText =
-      `left:${(wr.left - cr.left + p.x).toFixed(1)}px;top:${(wr.top - cr.top + p.y).toFixed(1)}px;` +
-      `width:${d.toFixed(0)}px;height:${d.toFixed(0)}px;` +
-      `background:radial-gradient(circle, transparent 58%, var(--ph-jewel-${jewel}-highlight) 68%, rgba(255,255,255,.85) 72%, transparent 80%)`;
-    container.appendChild(el);
-    setTimeout(()=>el.remove(), 520);
-  }
-
-  // Işık sütunu — temizlenen çizgiden yukarı kaçan enerji.
-  function lightColumn(line, jewel) {
-    const mid = (G-1)/2|0;
-    const p = line.type==='row' ? cellCenter(line.idx, mid) : cellCenter(mid, line.idx);
-    if (!p) return;
-    const br = boardEl.getBoundingClientRect();
-    const w = (line.type==='row' ? br.width * .82 : p.size * 2.1);
-    const el = document.createElement('div');
-    el.className = 'bp-column';
-    el.style.cssText =
-      `left:${p.x.toFixed(1)}px;bottom:${(wrapEl.getBoundingClientRect().height - p.y).toFixed(1)}px;` +
-      `width:${w.toFixed(0)}px;height:${(p.y + 40).toFixed(0)}px;` +
-      // Yanların yumuşaklığı radyal gradyana gömülü (filter:blur(6px) kaldırıldı,
-      // perf). Alt-merkezden ışıyan elips: sol/sağ kenarlar doğal olarak sönümlenir.
-      `background:radial-gradient(ellipse 62% 116% at 50% 100%, #fff 0%, var(--ph-jewel-${jewel}-highlight) 26%, var(--ph-jewel-${jewel}-glow) 58%, transparent 78%)`;
-    wrapEl.appendChild(el);
-    setTimeout(()=>el.remove(), 580);
-  }
-
-  // Eksen süpürmesi: enerji rastgele değil, ÇİZGİ boyunca boşalıyor.
-  function axisSweep(line, jewel) {
-    const mid = (G-1)/2|0;
-    const p = line.type==='row' ? cellCenter(line.idx, mid) : cellCenter(mid, line.idx);
-    if (!p) return;
-    const br = boardEl.getBoundingClientRect();
-    const el = document.createElement('div');
-    el.className = 'bp-sweep' + (line.type==='col' ? ' vert' : '');
-    const long = (line.type==='row' ? br.width : br.height) * 1.05;
-    const thick = p.size * 0.9;
-    el.style.cssText =
-      `left:${p.x.toFixed(1)}px;top:${p.y.toFixed(1)}px;` +
-      `width:${(line.type==='row'?long:thick).toFixed(0)}px;` +
-      `height:${(line.type==='row'?thick:long).toFixed(0)}px;` +
-      `background:linear-gradient(${line.type==='row'?'90deg':'180deg'}, transparent, ` +
-        `var(--ph-jewel-${jewel}-highlight) 35%, #fff 50%, var(--ph-jewel-${jewel}-highlight) 65%, transparent)`;
-    wrapEl.appendChild(el);
-    setTimeout(()=>el.remove(), 380);
-  }
-
-  // Rün glifleri — combo 2+. Nokta değil YAZI: levhadan serbest kalan büyü.
-  const GLYPHS = ['ᚦ','ᛝ','ᛟ','ᚨ','ᛉ','ᛊ','ᛃ','ᛒ'];
-  function runeGlyphs(cellIdxs, jewel, count) {
-    const n = Math.min(count, GLYPH_CAP);
-    for (let k=0;k<n;k++) {
-      const i = cellIdxs[(Math.random()*cellIdxs.length)|0];
-      const p = cellCenter(Math.floor(i/G), i%G);
-      if (!p) continue;
-      const el = document.createElement('div');
-      el.className = 'bp-glyph';
-      el.textContent = GLYPHS[(Math.random()*GLYPHS.length)|0];
-      el.style.cssText =
-        `left:${(p.x + (Math.random()*20-10)).toFixed(1)}px;top:${p.y.toFixed(1)}px;` +
-        `color:var(--ph-jewel-${jewel}-highlight);` +
-        // 11-18px denendi ve "rün" değil "leke" gibi okunuyordu. Glif bu
-        // dilin İMZASI — okunacak kadar büyük olmalı, yoksa parçacıktan
-        // farkı kalmıyor ve combo tırmanışının anlamı kayboluyor.
-        `--bp-gs:${(15 + Math.random()*9)|0}px;` +
-        `--bp-gx:${(Math.random()*40-20).toFixed(1)}px;` +
-        `--bp-gr0:${(Math.random()*40-20).toFixed(0)}deg;` +
-        `--bp-gr1:${(Math.random()*50-25).toFixed(0)}deg;` +
-        `--bp-gd:${(560 + Math.random()*220)|0}ms`;
-      wrapEl.appendChild(el);
-      setTimeout(()=>el.remove(), 840);
-    }
-  }
-
-  // Yıldız tozu — 3. vuruş (kalıntı). Patlama bittikten sonra havada kalan
-  // ince parıltı: "olay bitti ama izi duruyor".
-  function stardust(cellIdxs, jewel, count) {
-    const n = Math.min(count, DUST_CAP);
-    for (let k=0;k<n;k++) {
-      const i = cellIdxs[(Math.random()*cellIdxs.length)|0];
-      const p = cellCenter(Math.floor(i/G), i%G);
-      if (!p) continue;
-      const sz = 1.5 + Math.random()*2;
-      const el = document.createElement('div');
-      el.className = 'bp-dust';
-      el.style.cssText =
-        `left:${p.x.toFixed(1)}px;top:${p.y.toFixed(1)}px;` +
-        `width:${sz.toFixed(1)}px;height:${sz.toFixed(1)}px;` +
-        `background:var(--ph-jewel-${jewel}-highlight);` +
-        `box-shadow:0 0 ${(sz*3).toFixed(1)}px var(--ph-jewel-${jewel}-glow);` +
-        `--bp-dx:${(Math.random()*54-27).toFixed(1)}px;` +
-        `--bp-dy:${(-30 - Math.random()*40).toFixed(1)}px;` +
-        `--bp-dd:${(760 + Math.random()*380)|0}ms`;
-      wrapEl.appendChild(el);
-      setTimeout(()=>el.remove(), 1200);
-    }
-  }
-
-  // Rün çemberi — combo 4+. Seyrek olduğu için çıktığında OLAY olur.
-  function runeCircle(jewel) {
-    const mid = (G-1)/2|0;
-    const p = cellCenter(mid, mid);
-    if (!p) return;
-    const d = boardEl.getBoundingClientRect().width * 0.78;
-    const el = document.createElement('div');
-    el.className = 'bp-circle';
-    el.style.cssText = `left:${p.x.toFixed(1)}px;top:${p.y.toFixed(1)}px;` +
-      `width:${d.toFixed(0)}px;height:${d.toFixed(0)}px;` +
-      `--bp-cc:var(--ph-jewel-${jewel}-glow)`;
-    wrapEl.appendChild(el);
-    setTimeout(()=>el.remove(), 660);
-  }
-
-  // Sahne flaşı — DÜNYAYI aydınlatır (atmosfer dâhil), tahtayı değil.
-  // Olan şey tahtada değil dünyada oluyor. Süre tavanı 90ms.
-  // İki katman: kısa ve neredeyse beyaz ÇEKİRDEK (darbe karesi) + uzun ve
-  // sönük mücevher rengi ARTÇI (enerjinin dağılması). Güç çekirdeğin
-  // parlaklığından gelir, süresinden değil — bu yüzden çekirdek 90ms'de
-  // kalırken artçı 300ms yaşayabiliyor ve göz yorulmuyor.
-  function sceneFlash(jewel, intensity) {
-    if (!container) return;
-    const core = document.createElement('div');
-    core.className = 'bp-scene-flash';
-    core.style.cssText =
-      `background:radial-gradient(ellipse 72% 52% at 50% 52%, rgba(255,255,255,.95) 0%, ` +
-        `var(--ph-jewel-${jewel}-highlight) 30%, var(--ph-jewel-${jewel}-glow) 55%, transparent 80%);` +
-      `--bp-ffi:${Math.min(intensity, .92).toFixed(2)};--bp-ffd:90ms`;
-    container.appendChild(core);
-    setTimeout(()=>core.remove(), 150);
-
-    const after = document.createElement('div');
-    after.className = 'bp-scene-flash after';
-    after.style.cssText =
-      `background:radial-gradient(ellipse 95% 70% at 50% 55%, var(--ph-jewel-${jewel}-glow) 0%, transparent 76%);` +
-      `--bp-ffi:${Math.min(intensity*0.55, .5).toFixed(2)};--bp-ffd:300ms`;
-    container.appendChild(after);
-    setTimeout(()=>after.remove(), 360);
-  }
+  // (shard/shatterShards/shockwave/lightColumn/axisSweep/runeGlyphs/
+  //  stardust/runeCircle/sceneFlash DOM surumleri kaldirildi — hepsi artik
+  //  canvas FX katmaninda, tek rAF dongusunde. Bkz. FX KATMANI bolumu.)
 
   // Kamera nefesi — combo 3+. SARSINTI DEĞİL.
   function cameraBreath() {
@@ -3586,6 +3749,10 @@ PuzzleGames.blockPuzzle = (() => {
       /* Board artık bir <canvas> (Sprint 1): kare, dais genişliğini doldurur.
          Kristal/soket/preview çizimi canvas'ta (drawCrystalC/paintBoard). */
       .bp-board{position:relative;z-index:1;display:block;width:100%;aspect-ratio:1;touch-action:none}
+      /* FX katmanı (Faz 2): tüm sahneyi kaplar, tüm patlama/parçacık
+         efektleri buraya çizilir. Tek eleman — eskiden her kıymık ayrı bir
+         DOM düğümüydü. Tıklamayı engellemez, board'un üstünde durur. */
+      .bp-fx{position:absolute;left:0;top:0;pointer-events:none;z-index:6}
       /* Boş hücre: düz kare değil, içe gömük karanlık yuva. Kristalin
          oturacağı SOKET — dolu hücreyle arasındaki derinlik farkı,
          tahtanın "yüzey" gibi okunmasını sağlayan şey. */
@@ -4240,15 +4407,15 @@ PuzzleGames.blockPuzzle = (() => {
     // dizisi zaten güncel, ama fonksiyon yalnızca durum okuyor.
     const edges = contactEdges(placedCells);
 
-    // Board güncelle (canvas). Faz 1: place-in "düşme" animasyonu YOK
-    // (DOM hücre sınıfıydı) — kristal doğrudan belirir; Faz 2'de canvas
-    // animasyonu gelir.
+    // Board güncelle (canvas). place-in "düşme" animasyonu Faz 3'e (cila)
+    // bırakıldı: board cache statik, animasyon için hücrenin cache dışında
+    // tutulup FX katmanında canlandırılması gerek.
     renderBoard();
     renderScoreBar(true);
 
-    // ── Yerleştirme enerjisi ── Faz 1'de KAPALI (FX): efektler DOM ve bir
-    // kısmı boardEl.children'a bağlı. Temiz render ölçümü için kapalı;
-    // Faz 2'de canvas parçacık sistemine taşınacak.
+    // ── Yerleştirme enerjisi (Faz 2A) ── Artık canvas FX katmanında.
+    // Sıra kasıtlı: önce yüzeyin altındaki yayılım (en yavaş, en arkada),
+    // sonra ızgara iletimi, en son temas kıvılcımları (en hızlı, en önde).
     if (FX) {
       daisDischarge(placedCells, piece.jewel);
       runePulse(placedCells, piece.jewel);
@@ -4365,10 +4532,14 @@ PuzzleGames.blockPuzzle = (() => {
     return lines;
   }
 
-  // Faz 1: patlama görsel efektleri KAPALI (FX) — bunlar DOM ve büyük kısmı
-  // boardEl.children'a bağlı (charging/energy sınıfları). Faz 2'de canvas
-  // parçacık sistemine taşınacak. Şimdilik MANTIK korunuyor: temizleme sesi,
-  // board dizisini boşalt, canvas'ı yeniden çiz, kısa gecikmeyle geri çağrım.
+  // ══ ZAMANLAMA — ÜÇ VURUŞ, ~460ms ══ (tasarım DOM sürümünden korundu)
+  //   0-70    ŞARJ    — kristal beyaza yaklaşır, büyür (beklenti)
+  //   70-190  PATLAMA — flaş, kıymık, süpürme, sütun, glif, çember
+  //   190-460 KALINTI — kıymıklar düşer, yıldız tozu süzülür
+  // Amatör efektlerde yalnızca orta vuruş vardır; "ucuz" hissi eksik 1. ve
+  // 3. vuruştan gelir. Şarjdan sonraki 40ms'lik TUTUŞ boşa değil: darbeyi
+  // oturtan şey patlamadan hemen önceki durgunluktur.
+  // Fark: hepsi artık tek canvas + tek rAF döngüsü (yüzlerce DOM düğümü değil).
   function animateClear(lines, cb) {
     const cells = new Set();
     lines.forEach(l => {
@@ -4376,38 +4547,64 @@ PuzzleGames.blockPuzzle = (() => {
       else for(let y=0;y<G;y++) cells.add(y*G+l.idx);
     });
     const idxs = [...cells];
+    // Baskın renk: temizlenen hücrelerde en çok geçen mücevher. Patlamanın
+    // "bir rengi" olması, karışık renkli bir bulamaçtan çok daha okunaklı.
     const tally = {};
     idxs.forEach(i => { const j = board[Math.floor(i/G)][i%G]; if (j) tally[j] = (tally[j]||0)+1; });
     const jewel = +Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0] || 1;
-    const jewelOf = i => board[Math.floor(i/G)][i%G];
+    // jewelOf, board temizlenmeden ÖNCE sabitlenmeli: kıymıklar patlama
+    // anında doğuyor ama renklerini okudukları hücreler 160ms sonra sıfırlanıyor.
+    const jcopy = {};
+    idxs.forEach(i => { jcopy[i] = board[Math.floor(i/G)][i%G]; });
+    const jewelOf = i => jcopy[i];
     const intensity = Math.min(lines.length * 2 + combo, 12);
 
-    snd('crystalShatter', {lines: lines.length});
-    if (lines.length >= 2 || combo >= 3) snd('crystalBurst', {power: lines.length + Math.max(0, combo-2)});
-    if (combo > 1) setTimeout(() => snd('crystalCombo', {level: combo}), 110);
-    haptic(38 + intensity*3);
-
-    if (FX) {
-      const power = 0.42 + Math.min(combo,4)*0.10 + (lines.length-1)*0.08;
-      sceneFlash(jewel, power);
-      shockwave(jewel);
-      phAtmosphereFlare(atmoEl, 1.9 + Math.min(combo,4)*0.35, 520);
-      lines.forEach(l => { axisSweep(l, jewel); lightColumn(l, jewel); });
-      screenShake(2.5 + intensity*0.8, 180 + intensity*12);
-      shatterShards(idxs, jewelOf, Math.min(SHARD_CAP, 10 + combo*3 + lines.length*4));
-      if (combo >= 2) runeGlyphs(idxs, jewel, 2 + Math.min(combo, 3));
-      if (combo >= 4) runeCircle(jewel);
-    }
+    // ── 1. VURUŞ: ŞARJ + TUTUŞ ──
+    haptic(14);
+    if (FX) fxCharge(idxs, 100);
 
     setTimeout(() => {
-      lines.forEach(l => {
-        if (l.type==='row') board[l.idx] = Array(G).fill(0);
-        else for(let r=0;r<G;r++) board[r][l.idx]=0;
-      });
-      renderBoard();
-      if (FX) stardust(idxs, jewel, 8 + combo*2);
-      if (cb) cb();
-    }, 160);
+      // ── 2. VURUŞ: PATLAMA ──
+      // Ses ile ışık AYNI KAREDE: ikisi ayrı olay gibi okunmamalı.
+      snd('crystalShatter', {lines: lines.length});
+      if (lines.length >= 2 || combo >= 3) snd('crystalBurst', {power: lines.length + Math.max(0, combo-2)});
+      if (combo > 1) setTimeout(() => snd('crystalCombo', {level: combo}), 110);
+      haptic(38 + intensity*5);
+
+      if (FX) {
+        // Sıra kasıtlı — en geniş katman önce, en ince en son. Göz dünyadan
+        // detaya doğru okuyor: dünya → sahne → çizgi → kıymık → yazı.
+        const power = 0.42 + Math.min(combo,4)*0.10 + (lines.length-1)*0.08;
+        sceneFlash(jewel, power);
+        shockwave(jewel);
+        phAtmosphereFlare(atmoEl, 1.9 + Math.min(combo,4)*0.35, 520);
+        lines.forEach(l => { axisSweep(l, jewel); lightColumn(l, jewel); });
+        screenShake(2.5 + intensity*0.8, 180 + intensity*12);
+        const mid = (G - 1) / 2 | 0;
+        lines.forEach(l => {
+          const p = l.type==='row' ? fxCell(l.idx, mid) : fxCell(mid, l.idx);
+          if (p) lightWave(p.x, p.y);
+        });
+        shatterShards(idxs, jewelOf, Math.min(SHARD_CAP, 10 + combo*3 + lines.length*4));
+        // ── COMBO TIRMANIŞI ── Her basamakta YENİ BİR EFEKT TÜRÜ giriyor;
+        // "aynı şeyden daha çok" değil. Ekran dolmuyor, dil büyüyor.
+        if (combo >= 2) runeGlyphs(idxs, jewel, 2 + Math.min(combo, 3));
+        if (combo >= 3) cameraBreath();
+        if (combo >= 4) runeCircle(jewel);
+      }
+
+      setTimeout(() => {
+        lines.forEach(l => {
+          if (l.type==='row') board[l.idx] = Array(G).fill(0);
+          else for(let r=0;r<G;r++) board[r][l.idx]=0;
+        });
+        renderBoard();
+        // ── 3. VURUŞ: KALINTI ── Tahta temizlendikten SONRA doğar:
+        // olay bitti, izi duruyor. Bu vuruş olmadan patlama "kesilmiş" biter.
+        if (FX) stardust(idxs, jewel, 8 + combo*2);
+        if (cb) cb();
+      }, 140);
+    }, 100);   // 60ms şarj + 40ms TUTUŞ
   }
 
   // ───────── OYUN BİTTİ KONTROLÜ ─────────
@@ -4473,7 +4670,7 @@ PuzzleGames.blockPuzzle = (() => {
 
     // Ekran dönünce/yeniden boyutlanınca canvas'ı yeniden boyutlandır + çiz.
     // clearEvs() cleanup'ta kaldırır (shared _listeners).
-    addEv(window, 'resize', () => { if (sizeCanvas()) { buildBoardCache(); paintBoard(); } });
+    addEv(window, 'resize', () => { if (sizeCanvas()) { buildBoardCache(); paintBoard(); } fxResize(); });
   }
 
   function cleanup() {
@@ -4481,6 +4678,9 @@ PuzzleGames.blockPuzzle = (() => {
     clearEvs();
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
     needsPaint = false; prevPreview = null; fullRepaint = true; geom = null;
+    fxClear();
+    if (fxCv) { fxCv.remove(); fxCv = null; fxCtx = null; fxGeom = null; }
+    glowSprite = [];
     drag = null; locked = false; pendingGrab = null;
     // Sahne yalnızca bu oyun aktifken duruyor — diğer oyunların koyu-tema
     // varsayımına dokunmadan geri alınıyor.
