@@ -2831,6 +2831,218 @@ PuzzleGames.blockPuzzle = (() => {
   let drag = null;
   let aCtx = null;
 
+  // ═══════════ CANVAS RENDERER (Sprint 1) ═══════════
+  // Board artık 64 DOM hücresi değil, TEK bir canvas. Kristaller offscreen
+  // bir cache'e BİR KEZ çizilir (board değişince). Her preview değişiminde
+  // cache blit'lenip üstüne birkaç highlight çizilir — 64 DOM kristalini
+  // yeniden boyamaktan (A51'de sürüklemenin ~24fps'e düşmesinin sebebi buydu)
+  // ~10× ucuz. Ghost DOM kalır (position:fixed, tek küçük katman, ucuz
+  // translate). Efektler Faz 1'de kapalı (FX) — temiz render ölçümü için.
+  // RENDER_SCALE: buffer çözünürlüğü çarpanı (1 = tam/crisp). Önce 1'de ölç;
+  // 60fps gelmezse düşür (fill-rate kaldıracı).
+  const FX = false;
+  const GAP = 3;                 // hücreler arası boşluk (CSS px)
+  let cv, ctx, bufScale;         // görünen board canvas
+  let boardCache, bctx;          // offscreen kristal cache
+  let JCOL = [];                 // jewel renkleri: JCOL[n] = {hl,base,sh,glow}
+  let geom = null;               // {cssW, cs, step}
+
+  // ── RENDER SCALE ──
+  // Roadmap: Day 1'den itibaren var olmalı ve CİHAZA GÖRE seçilmeli.
+  // Ölçüm (A51, canvas board, scale=1): sürükleme 33fps → fill-rate hâlâ sınır.
+  // Cihaz gücünü doğrudan okuyamayız; ekran piksel sayısı + çekirdek sayısı
+  // makul bir vekil: yüksek çözünürlük az çekirdekle birleşince buffer küçülür.
+  // İleride Ayarlar > Grafik (Yüksek/Dengeli/Pil) bu değeri override edecek.
+  function pickRenderScale() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const px = (screen.width * dpr) * (screen.height * dpr);   // fiziksel piksel
+    const cores = navigator.hardwareConcurrency || 4;
+    if (px >= 2.2e6 && cores <= 8) return 0.8;   // A51/A54 sınıfı 1080p
+    if (px >= 1.5e6 && cores <= 4) return 0.65;  // Y6 sınıfı zayıf
+    return 1;
+  }
+  let RENDER_SCALE = 1;
+
+  // ── RENDER LOOP ──
+  // Roadmap kuralı: ASLA touchmove içinde çizme. touchmove yalnızca DURUM
+  // günceller ve bir kare talep eder; çizim rAF'ta tek noktadan olur.
+  // Böylece bir karede birden fazla move gelse bile tek çizim yapılır.
+  let rafId = 0, needsPaint = false;
+  function requestPaint() {
+    needsPaint = true;
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => { rafId = 0; if (needsPaint) { needsPaint = false; paintBoard(); } });
+  }
+
+  // ── DIRTY RECTANGLES ──
+  // Roadmap kuralı: tüm board'u yeniden çizme. Yalnızca değişen hücreler
+  // (eski preview + yeni preview + değişen hücreler) yeniden çizilir; geri
+  // kalan cache'te olduğu gibi kalır. prevPreview, son çizilen preview'u
+  // tutar — temizlenecek alan bu.
+  let prevPreview = null, fullRepaint = true;
+
+  function readJewels() {
+    JCOL = [null];
+    const s = getComputedStyle(document.documentElement);
+    for (let n = 1; n <= JEWELS; n++) {
+      JCOL[n] = {
+        hl:   (s.getPropertyValue(`--ph-jewel-${n}-highlight`) || '#fff').trim(),
+        base: (s.getPropertyValue(`--ph-jewel-${n}-base`)      || '#888').trim(),
+        sh:   (s.getPropertyValue(`--ph-jewel-${n}-shadow`)    || '#444').trim(),
+        glow: (s.getPropertyValue(`--ph-jewel-${n}-glow`)      || 'rgba(255,255,255,.4)').trim(),
+      };
+    }
+  }
+
+  function rrect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  // Canvas buffer'ı CSS boyutuna + render-scale'e göre kur; geometriyi hesapla.
+  function sizeCanvas() {
+    if (!cv) return false;
+    const cssW = cv.clientWidth || cv.getBoundingClientRect().width;
+    if (!cssW) return false;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    bufScale = dpr * RENDER_SCALE;
+    const buf = Math.round(cssW * bufScale);
+    cv.width = buf; cv.height = buf;                 // kare board
+    ctx.setTransform(bufScale, 0, 0, bufScale, 0, 0); // CSS px'te çiz
+    boardCache.width = buf; boardCache.height = buf;
+    bctx.setTransform(bufScale, 0, 0, bufScale, 0, 0);
+    const cs = (cssW - (G - 1) * GAP) / G;            // hücre boyutu (CSS px)
+    geom = { cssW, cs, step: cs + GAP };
+    fullRepaint = true; prevPreview = null;           // buffer sıfırlandı
+    return true;
+  }
+
+  // Boş soket — .bp-c'nin canvas karşılığı (içe gömük karanlık yuva).
+  function drawSocketC(c, px, py, sz) {
+    const r = sz * 0.14;
+    rrect(c, px, py, sz, sz, r);
+    c.fillStyle = 'rgba(8,10,30,.5)';
+    c.fill();
+    c.save(); c.clip();
+    c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 2;
+    rrect(c, px, py - 1.5, sz, sz, r); c.stroke();     // inset 0 1px 3px ~ üst iç gölge
+    c.restore();
+  }
+
+  // Kristal — .bp-crystal reçetesinin canvas karşılığı (4 katman + kenar + glow).
+  // Cache'e bir kez çizildiği için detaylı olabilir (kare başına maliyet yok).
+  function drawCrystalC(c, px, py, sz, jewel) {
+    const col = JCOL[jewel] || JCOL[1];
+    const r = sz * 0.14;
+    // dış glow (box-shadow 0 0 9px glow + 0 3px 14px glow) — önce, altına
+    c.save();
+    c.shadowColor = col.glow; c.shadowBlur = sz * 0.34; c.shadowOffsetY = sz * 0.09;
+    rrect(c, px, py, sz, sz, r); c.fillStyle = col.base; c.fill();
+    c.restore();
+    c.save();
+    rrect(c, px, py, sz, sz, r); c.clip();
+    // 4) taban mücevher gradyanı (linear ~165deg: hl→base→sh)
+    let g = c.createLinearGradient(px + sz * 0.2, py, px + sz * 0.8, py + sz);
+    g.addColorStop(0, col.hl); g.addColorStop(0.52, col.base); g.addColorStop(1, col.sh);
+    c.fillStyle = g; c.fillRect(px, py, sz, sz);
+    // 3) faset — sert duraklı konik gradyan (4 düzlem, keskin çizgiler)
+    if (c.createConicGradient) {
+      const cg = c.createConicGradient(45 * Math.PI / 180, px + sz * 0.5, py + sz * 0.48);
+      cg.addColorStop(0.00, 'rgba(255,255,255,.20)'); cg.addColorStop(0.25, 'rgba(255,255,255,.20)');
+      cg.addColorStop(0.25, 'rgba(0,0,0,.13)');       cg.addColorStop(0.50, 'rgba(0,0,0,.13)');
+      cg.addColorStop(0.50, 'rgba(0,0,0,.24)');       cg.addColorStop(0.75, 'rgba(0,0,0,.24)');
+      cg.addColorStop(0.75, 'rgba(255,255,255,.09)'); cg.addColorStop(1.00, 'rgba(255,255,255,.09)');
+      c.fillStyle = cg; c.fillRect(px, py, sz, sz);
+    }
+    // 2) çekirdek derinliği — merkezi karart
+    let rg = c.createRadialGradient(px + sz * 0.5, py + sz * 0.58, 0, px + sz * 0.5, py + sz * 0.58, sz * 0.55);
+    rg.addColorStop(0, 'rgba(0,0,0,.26)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = rg; c.fillRect(px, py, sz, sz);
+    // 1) hotspot — fasetlerin buluştuğu parlak nokta
+    let hg = c.createRadialGradient(px + sz * 0.27, py + sz * 0.21, 0, px + sz * 0.27, py + sz * 0.21, sz * 0.44);
+    hg.addColorStop(0, 'rgba(255,255,255,.98)'); hg.addColorStop(0.45, 'rgba(255,255,255,.45)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = hg; c.fillRect(px, py, sz, sz);
+    // 5) keskin parlama çizgisi (::after, 128deg dar bant)
+    let sg = c.createLinearGradient(px + sz * 0.1, py + sz, px + sz * 0.9, py);
+    sg.addColorStop(0.30, 'rgba(255,255,255,0)'); sg.addColorStop(0.375, 'rgba(255,255,255,.62)');
+    sg.addColorStop(0.41, 'rgba(255,255,255,.14)'); sg.addColorStop(0.46, 'rgba(255,255,255,0)');
+    c.fillStyle = sg; c.fillRect(px, py, sz, sz);
+    c.restore();
+    // box-shadow inset 0 0 0 1px beyaz + üst yakalama ışığı (keskin kenar)
+    c.save();
+    rrect(c, px + 0.5, py + 0.5, sz - 1, sz - 1, r);
+    c.strokeStyle = 'rgba(255,255,255,.42)'; c.lineWidth = 1; c.stroke();
+    c.restore();
+  }
+
+  // Offscreen cache: tüm board (soketler + kristaller) — board değişince bir kez.
+  function buildBoardCache() {
+    if (!geom) return;
+    bctx.clearRect(0, 0, geom.cssW, geom.cssW);
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      const px = x * geom.step, py = y * geom.step;
+      if (board[y][x]) drawCrystalC(bctx, px, py, geom.cs, board[y][x]);
+      else drawSocketC(bctx, px, py, geom.cs);
+    }
+  }
+
+  // Bir hücreyi cache'ten geri yükle (preview kalkınca altındaki board görünsün).
+  function restoreCell(y, x) {
+    const px = x * geom.step, py = y * geom.step;
+    const s = geom.step;                       // boşluğu da kapsa: kenar artıkları kalmasın
+    ctx.clearRect(px, py, s, s);
+    ctx.drawImage(boardCache, px * bufScale, py * bufScale, s * bufScale, s * bufScale,
+                  px, py, s, s);
+  }
+
+  // Bir hücreye preview highlight çiz.
+  function drawPreviewCell(y, x, ok) {
+    const px = x * geom.step, py = y * geom.step, r = geom.cs * 0.14;
+    rrect(ctx, px, py, geom.cs, geom.cs, r);
+    ctx.fillStyle = ok ? 'rgba(34,197,94,.28)' : 'rgba(239,68,68,.16)';
+    ctx.fill();
+    rrect(ctx, px + 1, py + 1, geom.cs - 2, geom.cs - 2, r);
+    ctx.strokeStyle = ok ? 'rgba(74,222,128,.7)' : 'rgba(248,113,113,.45)';
+    ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  // Tek çizim noktası (yalnızca rAF'tan çağrılır — bkz. requestPaint).
+  // fullRepaint: board değişti (yerleştirme/temizleme/resize) → tam blit.
+  // Aksi hâlde DIRTY: sadece eski preview'u geri yükle + yeni preview'u çiz.
+  function paintBoard() {
+    if (!geom) return;
+    const cur = (drag && drag.previewCells) ? drag.previewCells : null;
+    if (fullRepaint) {
+      ctx.clearRect(0, 0, geom.cssW, geom.cssW);
+      ctx.drawImage(boardCache, 0, 0, geom.cssW, geom.cssW);
+      fullRepaint = false;
+    } else if (prevPreview) {
+      for (const { y, x } of prevPreview) {
+        if (y < 0 || y >= G || x < 0 || x >= G) continue;
+        restoreCell(y, x);
+      }
+    }
+    if (cur) {
+      const ok = drag.valid;
+      for (const { y, x } of cur) {
+        if (y < 0 || y >= G || x < 0 || x >= G) continue;
+        drawPreviewCell(y, x, ok);
+      }
+    }
+    prevPreview = cur ? cur.slice() : null;
+  }
+
+  // Canvas layout'u hazır olana kadar (clientWidth > 0) bekleyip callback'i çağır.
+  function ensureCanvas(cb) {
+    if (sizeCanvas()) { cb(); return; }
+    requestAnimationFrame(() => ensureCanvas(cb));
+  }
+
   // ───────── HAPTİK ─────────
   function haptic(ms) { GameAudio.haptic(ms); }
 
@@ -2932,30 +3144,18 @@ PuzzleGames.blockPuzzle = (() => {
   // ölçüm ardışık okumalardan oluşur (aralarında yazma yok) → tek reflow.
   // Grid uniform olduğu için hücre merkezi = köşe + sütun/satır × adım + yarım.
   // Cache renderBoard()'ta ve window resize'da düşürülür (bkz. aşağısı).
-  let _geom = null;
-  function measureGeom() {
-    if (!boardEl || !boardEl.children.length) { _geom = null; return; }
-    const w = wrapEl.getBoundingClientRect();
-    const c0 = boardEl.children[0].getBoundingClientRect();
-    const cw = c0.width, ch = c0.height;
-    const cx = (G > 1 && boardEl.children[1]) ? boardEl.children[1].getBoundingClientRect() : null;
-    const cy = (G > 1 && boardEl.children[G]) ? boardEl.children[G].getBoundingClientRect() : null;
-    _geom = {
-      wLeft: w.left, wTop: w.top, ox: c0.left, oy: c0.top, cw, ch,
-      sx: cx ? cx.left - c0.left : cw,   // yatay adım (hücre + boşluk)
-      sy: cy ? cy.top - c0.top : ch      // dikey adım
-    };
-  }
+  // Hücre merkezi (wrapEl uzayında) — canvas geometrisinden hesaplanır.
+  // floatText ve (Faz 2'de) efektler bunu kullanır; DOM ölçümü yok, geom
+  // sizeCanvas'ta hazır. cv, dais'in içinde konumlandığı için canvas'ın
+  // ekran dikdörtgeni ile wrapEl'in farkı offset'i verir.
   function cellCenter(y, x) {
-    const el = boardEl.children[y*G+x];
-    if (!el) return null;                // hücre yoksa (eski davranış korunur)
-    if (!_geom) measureGeom();
-    if (!_geom) return null;
-    const g = _geom;
+    if (!cv || !geom) return null;
+    const b = cv.getBoundingClientRect();
+    const w = wrapEl.getBoundingClientRect();
     return {
-      x: g.ox + x * g.sx + g.cw / 2 - g.wLeft,
-      y: g.oy + y * g.sy + g.ch / 2 - g.wTop,
-      size: g.cw
+      x: b.left - w.left + x * geom.step + geom.cs / 2,
+      y: b.top - w.top + y * geom.step + geom.cs / 2,
+      size: geom.cs
     };
   }
 
@@ -3383,7 +3583,9 @@ PuzzleGames.blockPuzzle = (() => {
       /* position/z-index şart: .bp-charge konumlandırılmış (z-index:0) ve
          konumlandırılmış elemanlar, konumlandırılmamış kardeşlerinin ÜSTÜNE
          boyanır — tahta aksi hâlde şarj parıltısının altında kalırdı. */
-      .bp-board{position:relative;z-index:1;display:grid;grid-template-columns:repeat(${G},1fr);gap:3px;width:100%}
+      /* Board artık bir <canvas> (Sprint 1): kare, dais genişliğini doldurur.
+         Kristal/soket/preview çizimi canvas'ta (drawCrystalC/paintBoard). */
+      .bp-board{position:relative;z-index:1;display:block;width:100%;aspect-ratio:1;touch-action:none}
       /* Boş hücre: düz kare değil, içe gömük karanlık yuva. Kristalin
          oturacağı SOKET — dolu hücreyle arasındaki derinlik farkı,
          tahtanın "yüzey" gibi okunmasını sağlayan şey. */
@@ -3767,25 +3969,14 @@ PuzzleGames.blockPuzzle = (() => {
     } return true;
   }
 
-  // ───────── RENDER ─────────
+  // ───────── RENDER (canvas) ─────────
+  // Board durumu değiştiğinde: offscreen kristal cache'ini yeniden kur ve
+  // görünen canvas'a bas. Kristal görseli artık drawCrystalC'de (CSS değil).
   function renderBoard() {
-    boardEl.innerHTML = '';
-    for (let y=0;y<G;y++) for (let x=0;x<G;x++) {
-      const d = document.createElement('div');
-      const j = board[y][x];
-      // 'filled' durum işareti, 'bp-crystal' malzeme — ikisi ayrı tutuluyor
-      // ki malzeme tek yerden değişebilsin (tepsi/hayalet de aynı sınıfı
-      // kullanıyor).
-      d.className = 'bp-c' + (j ? ' filled bp-crystal' : '');
-      d.dataset.y = y; d.dataset.x = x;
-      // Kristalin görünüşü CSS'te tanımlı; buradan yalnızca HANGİ ortak
-      // renk olduğu geçiyor. Eskiden gradyan/gölge her hücrede satır içi
-      // yeniden kuruluyordu — malzemeyi değiştirmek 3 ayrı yeri düzenlemek
-      // demekti.
-      if (j) d.style.cssText = jewelVars(j);
-      boardEl.appendChild(d);
-    }
-    _geom = null;   // tahta yeniden kuruldu → geometri cache'i bir sonraki cellCenter'da tazelensin
+    if (!geom) { if (!sizeCanvas()) return; }
+    buildBoardCache();
+    fullRepaint = true;      // board değişti → tam blit (dirty-rect yetmez)
+    requestPaint();
   }
 
   // Üç yuva HER ZAMAN çizilir ve HER ZAMAN aynı yerdedir (flex:1). Parça
@@ -3809,11 +4000,25 @@ PuzzleGames.blockPuzzle = (() => {
           if (v) c.style.cssText = jewelVars(p.jewel);
           tp.appendChild(c);
         }));
-        const onStart = (e) => { e.preventDefault(); grabPiece(i, e); };
-        addEv(tp, 'touchstart', onStart, {passive:false});
-        addEv(tp, 'mousedown', onStart);
         slot.appendChild(tp);
       }
+      // Dinleyici PARÇANIN değil YUVANIN üzerinde. İki sebep — ikisi de
+      // ölçülmüş kullanıcı şikayeti ("tıklıyorum ama almıyor, özellikle
+      // hızlı alırken"):
+      //  1) .bp-tp.new-in girişi scale(0)'dan başlar ve animationDelay
+      //     i*70ms'dir; o pencerede parçanın dokunma alanı SIFIRDIR
+      //     (transform hit-test'i de küçültür). Yeni parçalar geldiği anda
+      //     yapılan dokunuşlar bu yüzden düşüyordu.
+      //  2) Parça 15px'lik hücrelerden oluşan küçük bir hedef; yuva ise
+      //     flex:1 ile tepsinin üçte biri. Yuvaya bağlamak hedefi büyütür.
+      // Yuva animasyonsuz ve her zaman tam boy olduğu için ikisini de çözer.
+      const onStart = (e) => {
+        if (!pieces[i]) return;              // boş yuva (spent) — sessizce yoksay
+        e.preventDefault();
+        grabPiece(i, e);
+      };
+      addEv(slot, 'touchstart', onStart, {passive:false});
+      addEv(slot, 'mousedown', onStart);
       trayEl.appendChild(slot);
     });
   }
@@ -3865,10 +4070,36 @@ PuzzleGames.blockPuzzle = (() => {
   }
 
   // ───────── SÜRÜKLE-BIRAK ─────────
+  // Yerleştirme çözülürken (locked) gelen dokunuş SESSİZCE DÜŞMEZ, tamponlanır.
+  // Yerleştirme sonrası kilit 90ms (satır yoksa) ile ~250ms (satır temizlemede)
+  // arası sürüyor; hızlı oynayan biri bu pencerede bir sonraki parçaya
+  // dokunduğunda dokunuşu kayboluyordu. Artık kilit açılır açılmaz, parmak
+  // hâlâ ekrandaysa alım gerçekleşiyor.
+  let pendingGrab = null;
+  function setLocked(v) {
+    locked = v;
+    if (v || !pendingGrab) return;
+    const pg = pendingGrab; pendingGrab = null;
+    // Parmak kalktıysa ya da çok zaman geçtiyse alma — geç gelen bir
+    // "hayalet alım" oyuncunun istemediği bir şey.
+    if (!pg.down || performance.now() - pg.t > 600) return;
+    if (pieces[pg.idx]) grabPiece(pg.idx, pg.pt);
+  }
+
   function grabPiece(idx, e) {
-    if (locked || drag) return;
+    if (drag) return;
     const p = pieces[idx];
     if (!p) return;
+    if (locked) {
+      const t = e.touches ? e.touches[0] : e;
+      const pg = { idx, t: performance.now(), down: true, pt: { clientX: t.clientX, clientY: t.clientY } };
+      pendingGrab = pg;
+      // Parmağın kalkışını izle: kalkarsa tamponu geçersiz kıl.
+      const up = () => { pg.down = false; document.removeEventListener('touchend', up); document.removeEventListener('mouseup', up); };
+      document.addEventListener('touchend', up);
+      document.addEventListener('mouseup', up);
+      return;
+    }
 
     snd('crystalPickup');
     haptic(15);
@@ -3884,15 +4115,19 @@ PuzzleGames.blockPuzzle = (() => {
     // hedefi kaydı, yani hiçbir yerleştirme geçerli sayılmıyordu.
     // İlk hücrenin gerçek dikdörtgeni hem boyutu hem ızgara orijinini verir
     // ve düzen değişikliklerinden etkilenmez.
-    const bRect = boardEl.getBoundingClientRect();
-    const c0 = boardEl.children[0].getBoundingClientRect();
-    const cs = c0.width;
-    const originX = c0.left, originY = c0.top;
+    // Geometri artık canvas'tan (geom): hücre boyutu + ekran orijini. DOM
+    // ölçümü yok. Ghost hâlâ DOM (position:fixed) — tek küçük katman, ucuz
+    // translate; canvas'a taşımaya gerek yok, board canvas'ı zaten sürükleme
+    // maliyetini çözüyor (preview blit'i, 64 kristali yeniden boyamak değil).
+    const bRect = cv.getBoundingClientRect();
+    if (!geom) sizeCanvas();
+    const cs = geom ? geom.cs : (bRect.width - (G - 1) * GAP) / G;
+    const originX = bRect.left, originY = bRect.top;
     const cols = p.shape[0].length, rows = p.shape.length;
     const ghost = document.createElement('div');
     ghost.className = 'bp-ghost';
     ghost.style.gridTemplateColumns = `repeat(${cols},${cs}px)`;
-    ghost.style.gap = '3px';
+    ghost.style.gap = GAP + 'px';
     p.shape.flat().forEach(v => {
       const gc = document.createElement('div');
       gc.className = 'bp-gc' + (v ? ' on bp-crystal' : '');
@@ -3901,10 +4136,10 @@ PuzzleGames.blockPuzzle = (() => {
     });
     document.body.appendChild(ghost);
 
-    const ghostW = cols*cs + (cols-1)*3;
-    const ghostH = rows*cs + (rows-1)*3;
+    const ghostW = cols*cs + (cols-1)*GAP;
+    const ghostH = rows*cs + (rows-1)*GAP;
 
-    drag = { idx, piece:p, ghost, bRect, cs, originX, originY, ghostW, ghostH, row:-1, col:-1, valid:false };
+    drag = { idx, piece:p, ghost, bRect, cs, originX, originY, ghostW, ghostH, row:-1, col:-1, valid:false, previewCells:null };
     posGhost(touch.clientX, touch.clientY);
 
     const onMove = (ev) => { ev.preventDefault(); const t=ev.touches?ev.touches[0]:ev; posGhost(t.clientX,t.clientY); showPreview(t.clientX,t.clientY); };
@@ -3933,35 +4168,35 @@ PuzzleGames.blockPuzzle = (() => {
     const gx = cx - drag.ghostW/2;
     const gy = cy - drag.ghostH - 40;
     // Izgara orijini grabPiece'te ilk hücreden ölçüldü (bkz. oradaki not).
-    const col = Math.round((gx - drag.originX) / (cs+3));
-    const row = Math.round((gy - drag.originY) / (cs+3));
-    // Hedef hücre DEĞİŞMEDİYSE DOM'a hiç dokunma. Eskiden her pointermove'da
-    // (aynı hücrede gezerken bile) tüm önizleme silinip yeniden kuruluyordu —
-    // her seferinde önizleme hücrelerinin box-shadow'u yeniden boyanıyordu.
-    // Y6'da sürükleme kasmasının ikinci kaynağı buydu; hareketlerin çoğu aynı
-    // hücre içinde olduğu için bu erken çıkış repaint'lerin büyük kısmını eler.
+    const col = Math.round((gx - drag.originX) / (cs+GAP));
+    const row = Math.round((gy - drag.originY) / (cs+GAP));
+    // Hedef hücre DEĞİŞMEDİYSE hiç dokunma (aynı hücre içinde gezinirken
+    // gereksiz repaint). Değiştiyse preview hücrelerini topla ve canvas'ı
+    // yeniden bas: cache blit + birkaç dikdörtgen (64 DOM kristalini yeniden
+    // boyamak DEĞİL — A51'de sürüklemenin 24fps'e düşmesinin sebebi buydu).
     if (row === drag.row && col === drag.col) return;
-    clearPreview();
     const wasValid = drag.valid;
     drag.row = row; drag.col = col;
     drag.valid = canPlace(piece.shape, row, col);
 
     // Geçerli bölgeye GİRİŞ anı — çıkışta veya içinde gezinirken değil.
-    // Her mousemove'da çalsaydı saniyede onlarca kez tetiklenirdi; ailenin
-    // en kısık sesi olmasının sebebi de bu (bkz. crystalHover).
     if (drag.valid && !wasValid) { snd('crystalHover'); haptic(8); }
 
+    const cells = [];
     piece.shape.forEach((r,dy) => r.forEach((v,dx) => {
       if (!v) return;
       const ry = row+dy, rx = col+dx;
       if (ry<0||ry>=G||rx<0||rx>=G) return;
-      const cell = boardEl.children[ry*G+rx];
-      if (cell) cell.classList.add(drag.valid ? 'pv-ok' : 'pv-no');
+      cells.push({ y: ry, x: rx });
     }));
+    // Roadmap: touchmove içinde ÇİZME — sadece durumu güncelle, kare talep et.
+    drag.previewCells = cells;
+    requestPaint();
   }
 
   function clearPreview() {
-    boardEl.querySelectorAll('.pv-ok,.pv-no').forEach(c => c.classList.remove('pv-ok','pv-no'));
+    if (drag) drag.previewCells = null;
+    requestPaint();
   }
 
   function dropPiece() {
@@ -3981,7 +4216,7 @@ PuzzleGames.blockPuzzle = (() => {
 
   // ───────── YERLEŞTİRME ─────────
   function placePiece(idx, piece, row, col) {
-    locked = true;
+    setLocked(true);
     const placedCells = [];
     piece.shape.forEach((r,dy) => r.forEach((v,dx) => {
       if (v) {
@@ -4005,24 +4240,20 @@ PuzzleGames.blockPuzzle = (() => {
     // dizisi zaten güncel, ama fonksiyon yalnızca durum okuyor.
     const edges = contactEdges(placedCells);
 
-    // Board güncelle ve animasyon
+    // Board güncelle (canvas). Faz 1: place-in "düşme" animasyonu YOK
+    // (DOM hücre sınıfıydı) — kristal doğrudan belirir; Faz 2'de canvas
+    // animasyonu gelir.
     renderBoard();
-    // Gecikme 30→12ms: taş TEK BİR NESNE olarak düşmeli. 4 hücrelik bir
-    // parçada 30ms'lik kademe, hücreleri ayrı ayrı beliren şeyler gibi
-    // gösteriyordu — ağırlık hissinin tersi.
-    placedCells.forEach(({y,x},i) => {
-      const cell = boardEl.children[y*G+x];
-      if (cell) { cell.style.animationDelay = (i*12)+'ms'; cell.classList.add('place-in'); }
-    });
     renderScoreBar(true);
 
-    // ── Yerleştirme enerjisi (Faz 2A) ──
-    // Sıra kasıtlı: önce yüzeyin altındaki yayılım (en yavaş, en arkada),
-    // sonra ızgara iletimi, en son temas kıvılcımları (en hızlı, en önde).
-    // Göz böylece derinlikten yüzeye doğru okuyor.
-    daisDischarge(placedCells, piece.jewel);
-    runePulse(placedCells, piece.jewel);
-    contactSparks(edges, piece.jewel);
+    // ── Yerleştirme enerjisi ── Faz 1'de KAPALI (FX): efektler DOM ve bir
+    // kısmı boardEl.children'a bağlı. Temiz render ölçümü için kapalı;
+    // Faz 2'de canvas parçacık sistemine taşınacak.
+    if (FX) {
+      daisDischarge(placedCells, piece.jewel);
+      runePulse(placedCells, piece.jewel);
+      contactSparks(edges, piece.jewel);
+    }
     updateCharge();
 
     // Temas sesi — görsel kıvılcımların sesli karşılığı. Oturma sesinin
@@ -4064,13 +4295,13 @@ PuzzleGames.blockPuzzle = (() => {
           bumpHighScore();
           renderScoreBar(true);
           afterPlace();
-          locked = false;
+          setLocked(false);
         });
       } else {
         combo = 0;
         renderScoreBar(false);
         afterPlace();
-        locked = false;
+        setLocked(false);
       }
     }, 90);
   }
@@ -4134,115 +4365,49 @@ PuzzleGames.blockPuzzle = (() => {
     return lines;
   }
 
+  // Faz 1: patlama görsel efektleri KAPALI (FX) — bunlar DOM ve büyük kısmı
+  // boardEl.children'a bağlı (charging/energy sınıfları). Faz 2'de canvas
+  // parçacık sistemine taşınacak. Şimdilik MANTIK korunuyor: temizleme sesi,
+  // board dizisini boşalt, canvas'ı yeniden çiz, kısa gecikmeyle geri çağrım.
   function animateClear(lines, cb) {
     const cells = new Set();
     lines.forEach(l => {
       if (l.type==='row') for(let x=0;x<G;x++) cells.add(l.idx*G+x);
       else for(let y=0;y<G;y++) cells.add(y*G+l.idx);
     });
-
     const idxs = [...cells];
-    const intensity = Math.min(lines.length * 2 + combo, 12);
-    // Baskın renk: temizlenen hücrelerde en çok geçen mücevher. Patlamanın
-    // "bir rengi" olması, karışık renkli bir bulamaçtan çok daha okunaklı.
     const tally = {};
     idxs.forEach(i => { const j = board[Math.floor(i/G)][i%G]; if (j) tally[j] = (tally[j]||0)+1; });
     const jewel = +Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0] || 1;
     const jewelOf = i => board[Math.floor(i/G)][i%G];
+    const intensity = Math.min(lines.length * 2 + combo, 12);
 
-    // ══ ZAMANLAMA — ÜÇ VURUŞ, ~460ms ══
-    // Süre UZATILMADI (senin kararın: güç süreden değil yoğunluktan).
-    // Eski dizi 980ms'ti; 420ms'ye indirilmişti; şimdi aynı bütçede çok
-    // daha fazla KATMAN var:
-    //   0-70    ŞARJ    — kristal beyaza yaklaşır, büyür (beklenti)
-    //   70-190  PATLAMA — flaş, kıymık, süpürme, glif, çember, nefes
-    //   190-460 KALINTI — kıymıklar düşer, yıldız tozu süzülür
-    // Amatör efektlerde yalnızca orta vuruş vardır; "ucuz" hissi eksik
-    // 1. ve 3. vuruştan gelir.
+    snd('crystalShatter', {lines: lines.length});
+    if (lines.length >= 2 || combo >= 3) snd('crystalBurst', {power: lines.length + Math.max(0, combo-2)});
+    if (combo > 1) setTimeout(() => snd('crystalCombo', {level: combo}), 110);
+    haptic(38 + intensity*3);
 
-    // ── 1. VURUŞ: ŞARJ + TUTUŞ ──
-    // Şarj 60ms sürer, sonra 40ms HİÇBİR ŞEY OLMAZ. O boşluk boşa değil:
-    // darbeyi oturtan şey tam olarak patlamadan hemen önceki durgunluktur.
-    // Kesintisiz akan bir dizide göz vuruşu yakalayamıyor.
-    haptic(14);
-    idxs.forEach(i => { const el=boardEl.children[i]; if(el) el.classList.add('charging'); });
-
-    setTimeout(() => {
-      // ── 2. VURUŞ: PATLAMA ──
-      // Sıra kasıtlı — en geniş katman önce, en ince en son. Göz dünyadan
-      // detaya doğru okuyor: dünya → sahne → çizgi → kıymık → yazı.
+    if (FX) {
       const power = 0.42 + Math.min(combo,4)*0.10 + (lines.length-1)*0.08;
-
-      // ── SES, GÖRSEL DARBEYLE AYNI KAREDE ──
-      // Eskiden temizleme sesi geri çağrımda çalıyordu, yani patlamadan
-      // 240ms SONRA — göz patlamayı görüp kulak sesi sonra duyuyordu ve
-      // ikisi ayrı olay gibi okunuyordu. Ses ile ışığın aynı anda olması,
-      // "tatmin edici" hissinin yarısı.
-      snd('crystalShatter', {lines: lines.length});
-      // Büyük an: alt ucu dolduran ayrı bir ses. Kırılma tiz/gürültü,
-      // patlama sub/gövde — üst üste binerler ve spektrumu paylaşırlar,
-      // birbirini maskelemezler.
-      if (lines.length >= 2 || combo >= 3) {
-        snd('crystalBurst', {power: lines.length + Math.max(0, combo-2)});
-      }
-      // Combo ödülü ayrı bir VURUŞ olarak geliyor (110ms sonra): patlamayla
-      // aynı anda çalsaydı içinde kaybolurdu. Önce olay, sonra ödül.
-      if (combo > 1) setTimeout(() => snd('crystalCombo', {level: combo}), 110);
-
       sceneFlash(jewel, power);
       shockwave(jewel);
-      // Dünya da tepki verir: atmosfer itilir ve aydınlanır. Patlamanın
-      // tahtayla sınırlı kalmadığını söyleyen ikinci katman (ilki şok
-      // dalgası). Yalnızca satır temizlemede — her hamlede olsaydı ölürdü.
       phAtmosphereFlare(atmoEl, 1.9 + Math.min(combo,4)*0.35, 520);
       lines.forEach(l => { axisSweep(l, jewel); lightColumn(l, jewel); });
       screenShake(2.5 + intensity*0.8, 180 + intensity*12);
-
-      const mid = (G - 1) / 2 | 0;
-      lines.forEach(l => {
-        const p = l.type==='row' ? cellCenter(l.idx, mid) : cellCenter(mid, l.idx);
-        if (p) lightWave(p.x, p.y, '#fff');
-      });
-
-      // Kıymık bütçesi combo ile büyür ama SERT tavanı aşamaz.
-      shatterShards(idxs, jewelOf, Math.min(SHARD_CAP, 10 + combo*3 + lines.length*4)); // bütçe ~yarıya kısıldı (perf)
-
-      // ── COMBO TIRMANIŞI ──
-      // Her basamakta YENİ BİR EFEKT TÜRÜ giriyor; "aynı şeyden daha çok"
-      // değil. Ekran dolmuyor, dil büyüyor.
-      if (combo >= 2) runeGlyphs(idxs, jewel, 2 + Math.min(combo, 3)); // glif tavan (perf)
-      if (combo >= 3) cameraBreath();
+      shatterShards(idxs, jewelOf, Math.min(SHARD_CAP, 10 + combo*3 + lines.length*4));
+      if (combo >= 2) runeGlyphs(idxs, jewel, 2 + Math.min(combo, 3));
       if (combo >= 4) runeCircle(jewel);
+    }
 
-      // Hücreler çözülür — merkeze uzaklığa göre kademeli (dışa yayılan
-      // dalga), toplam yayılma 70ms'de sabit.
-      const cmid = (G - 1) / 2;
-      const dist = i => Math.hypot(Math.floor(i/G) - cmid, (i%G) - cmid);
-      const maxDist = Math.max(...idxs.map(dist)) || 1;
-      idxs.forEach(i => {
-        setTimeout(() => {
-          const el = boardEl.children[i];
-          if (!el) return;
-          el.classList.remove('charging');
-          el.classList.add('energy');
-        }, (dist(i) / maxDist) * 70);
+    setTimeout(() => {
+      lines.forEach(l => {
+        if (l.type==='row') board[l.idx] = Array(G).fill(0);
+        else for(let r=0;r<G;r++) board[r][l.idx]=0;
       });
-
-      haptic(38 + intensity*5);
-
-      setTimeout(() => {
-        lines.forEach(l => {
-          if (l.type==='row') board[l.idx] = Array(G).fill(0);
-          else for(let r=0;r<G;r++) board[r][l.idx]=0;
-        });
-        renderBoard();
-        // ── 3. VURUŞ: KALINTI ──
-        // Tahta temizlendikten SONRA doğar: olay bitti, izi duruyor.
-        // Bu vuruş olmadan patlama "kesilmiş" gibi bitiyor.
-        stardust(idxs, jewel, 8 + combo*2);
-        if (cb) cb();
-      }, 240);
-    }, 100);   // 60ms şarj + 40ms TUTUŞ (bkz. yukarıdaki not)
+      renderBoard();
+      if (FX) stardust(idxs, jewel, 8 + combo*2);
+      if (cb) cb();
+    }, 160);
   }
 
   // ───────── OYUN BİTTİ KONTROLÜ ─────────
@@ -4281,31 +4446,42 @@ PuzzleGames.blockPuzzle = (() => {
         <span class="ph-capsule bp-score">◈ <span class="ph-capsule-num">0</span></span>
         <span class="bp-hi">EN İYİ<b>${highScore.toLocaleString()}</b></span>
       </div>
-      <div class="ph-dais bp-dais"><div class="bp-charge"></div><div class="bp-board"></div></div>
+      <div class="ph-dais bp-dais"><div class="bp-charge"></div><canvas class="bp-board"></canvas></div>
       <div class="bp-tray"></div>
     `;
     container.appendChild(wrapEl);
     boardEl = wrapEl.querySelector('.bp-board');
     trayEl = wrapEl.querySelector('.bp-tray');
 
+    // Canvas board kurulumu (Sprint 1). boardEl artık bir <canvas>.
+    cv = boardEl;
+    ctx = cv.getContext('2d');
+    boardCache = document.createElement('canvas');
+    bctx = boardCache.getContext('2d');
+    RENDER_SCALE = pickRenderScale();
+    readJewels();
+
     // Uygulama başlığındaki skor sayacı bu oyun boyunca gizli: skor
     // oyunun kendi HUD'unda. (Water Sort da aynısını yapıyor.)
     const scoreWrap = document.querySelector('.game-score-wrap');
     if (scoreWrap) scoreWrap.style.display = 'none';
 
-    renderBoard();
+    // Canvas boyutu layout'a bağlı; hazır olana kadar rAF ile bekle.
+    ensureCanvas(() => { buildBoardCache(); paintBoard(); });
     renderTray(true);
     renderScoreBar(false);
 
-    // Ekran dönünce/yeniden boyutlanınca hücre geometrisi değişir → cache'i düş.
+    // Ekran dönünce/yeniden boyutlanınca canvas'ı yeniden boyutlandır + çiz.
     // clearEvs() cleanup'ta kaldırır (shared _listeners).
-    addEv(window, 'resize', () => { _geom = null; });
+    addEv(window, 'resize', () => { if (sizeCanvas()) { buildBoardCache(); paintBoard(); } });
   }
 
   function cleanup() {
     bumpHighScore();          // güvenlik ağı; normalde çoktan yazılmış olur
     clearEvs();
-    drag = null; locked = false;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    needsPaint = false; prevPreview = null; fullRepaint = true; geom = null;
+    drag = null; locked = false; pendingGrab = null;
     // Sahne yalnızca bu oyun aktifken duruyor — diğer oyunların koyu-tema
     // varsayımına dokunmadan geri alınıyor.
     if (container) container.classList.remove('ph-scene');
