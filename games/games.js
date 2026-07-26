@@ -3193,7 +3193,9 @@ PuzzleGames.blockPuzzle = (() => {
     el.style.cssText =
       `left:${p.x.toFixed(1)}px;bottom:${(wrapEl.getBoundingClientRect().height - p.y).toFixed(1)}px;` +
       `width:${w.toFixed(0)}px;height:${(p.y + 40).toFixed(0)}px;` +
-      `background:linear-gradient(0deg, #fff 0%, var(--ph-jewel-${jewel}-highlight) 22%, var(--ph-jewel-${jewel}-glow) 55%, transparent 100%)`;
+      // Yanların yumuşaklığı radyal gradyana gömülü (filter:blur(6px) kaldırıldı,
+      // perf). Alt-merkezden ışıyan elips: sol/sağ kenarlar doğal olarak sönümlenir.
+      `background:radial-gradient(ellipse 62% 116% at 50% 100%, #fff 0%, var(--ph-jewel-${jewel}-highlight) 26%, var(--ph-jewel-${jewel}-glow) 58%, transparent 78%)`;
     wrapEl.appendChild(el);
     setTimeout(()=>el.remove(), 580);
   }
@@ -3213,8 +3215,7 @@ PuzzleGames.blockPuzzle = (() => {
       `width:${(line.type==='row'?long:thick).toFixed(0)}px;` +
       `height:${(line.type==='row'?thick:long).toFixed(0)}px;` +
       `background:linear-gradient(${line.type==='row'?'90deg':'180deg'}, transparent, ` +
-        `var(--ph-jewel-${jewel}-highlight) 35%, #fff 50%, var(--ph-jewel-${jewel}-highlight) 65%, transparent);` +
-      `filter:blur(1px)`;
+        `var(--ph-jewel-${jewel}-highlight) 35%, #fff 50%, var(--ph-jewel-${jewel}-highlight) 65%, transparent)`;
     wrapEl.appendChild(el);
     setTimeout(()=>el.remove(), 380);
   }
@@ -3642,9 +3643,11 @@ PuzzleGames.blockPuzzle = (() => {
          bu dikey kaçış, "serbest kaldı" hissini veren şey: enerjinin
          gidecek bir yeri var. */
       .bp-column{position:absolute;pointer-events:none;z-index:204;
-        /* mix-blend-mode:screen kaldırıldı (perf). filter:blur(6px) 2. pasa bırakıldı
-           (yanları yumuşatıyor; kaldırınca sertleşir, yatay fade ile telafi gerekir). */
-        transform-origin:50% 100%;filter:blur(6px);
+        /* filter:blur(6px) KALDIRILDI (perf): sütun her karede scaleX/scaleY ile
+           animasyonlu — canlı blur her kare yeniden rasterize oluyordu, patlamanın
+           ana GPU maliyetlerinden biri. Yanların yumuşaklığı artık radyal gradyana
+           gömülü (bkz. lightColumn): filter yok, her kare yeniden çizim yok. */
+        transform-origin:50% 100%;
         animation:bpColumn .52s cubic-bezier(.15,.8,.3,1) forwards}
       @keyframes bpColumn{
         0%{transform:translateX(-50%) scaleY(.04) scaleX(.7);opacity:0}
@@ -3691,11 +3694,14 @@ PuzzleGames.blockPuzzle = (() => {
          SONRA tanımlı (aşağıya bak) — ikisi aynı özgüllükte olduğu için
          sıra belirleyici. */
       .bp-tc{border-radius:4px;width:15px;height:15px;position:relative}
-      /* drop-shadow blur 26px→9px (perf): büyük blur, hareket eden ghost'ta eski
-         WebView tarafından HER KARE yeniden rasterize ediliyordu — ~6ms/kare
-         (ölçüldü Y6: sürüklemede 39→52fps). Küçük blur derinlik hissini korur,
-         maliyeti düşürür. Bkz. aynı sınıf sorun: .ph-beam ve pv-ok glow. */
-      .bp-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:var(--ph-z-floating);display:grid;gap:3px;filter:drop-shadow(0 6px 9px rgba(0,0,0,.5));will-change:transform;transition:none}
+      /* drop-shadow TAMAMEN KALDIRILDI (perf): 9px'e indirilmişti ama hareket
+         eden, will-change:transform'lu ghost'ta filter YİNE her kare yeniden
+         rasterize oluyordu — A54'te sürüklemede +12ms/kare (boşta 16.7ms →
+         sürüklerken 29ms; framestats ile ölçüldü, ana iş parçacığı 1.1ms yani
+         maliyet tamamen GPU'da). "Kaldırma" gölgesi artık hücrelerin
+         box-shadow'una gömülü: box-shadow, promoted katmanın raster'ına BİR KEZ
+         pişip transform ile kaydırılıyor (filter gibi her kare yeniden çizilmez). */
+      .bp-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:var(--ph-z-floating);display:grid;gap:3px;will-change:transform;transition:none}
       .bp-ghost .bp-gc{border-radius:5px;position:relative}
       /* Hayalet de aynı kristal — elindeki taş, tahtadakiyle aynı malzeme
          olmalı. Ek olarak daha güçlü dış parıltı: havada, ışığı serbest. */
@@ -3704,7 +3710,8 @@ PuzzleGames.blockPuzzle = (() => {
         inset 0 1px 0 rgba(255,255,255,.95),
         inset 0 -2px 5px -1px rgba(0,0,0,.55),
         0 0 20px -2px var(--bp-glow),
-        0 0 40px -6px var(--bp-glow)}
+        0 0 40px -6px var(--bp-glow),
+        0 6px 8px -3px rgba(0,0,0,.5)}
       @keyframes bpPop{0%{transform:translate(0,0) rotate(0) scale(1);opacity:1}100%{transform:translate(var(--ptx),var(--pty)) rotate(var(--rot)) scale(0);opacity:0}}
       @keyframes bpSpark{0%{transform:translate(0,0) scale(1);opacity:1}40%{opacity:1}100%{transform:translate(var(--sx),var(--sy)) scale(0);opacity:0}}
       @keyframes bpFloat{0%{transform:translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translateY(-65px) scale(1.4);opacity:0}}
@@ -5240,11 +5247,16 @@ PuzzleGames.waterSort = (() => {
         transition-duration:220ms;
         transition-timing-function:cubic-bezier(.45,0,.2,1.25);
       }
-      /* will-change YALNIZCA dökme boyunca: sürekli açık bırakmak 10 tüpün
-         her birine kalıcı bir compositor katmanı ayırtır (gövde odadan ~8 kat
-         geniş, bedeli boşuna ödenir). Dökmeler sıralı olduğu için aynı anda
-         en fazla bir tüpte açık kalır. */
-      .wsrt-tube.wsrt-pouring .wsrt-body{will-change:transform}
+      /* will-change BİLEREK KULLANILMIYOR (kaldırıldı — perf + görsel bug).
+         Dökme başında gövdeye will-change:transform eklemek onu YENİ bir
+         compositor katmanına yükseltiyordu — ama gövde, filter'lı bir atanın
+         (.wsrt-tube-inner: saturate/brightness) İÇİNDE. Filtreli atanın içindeki
+         bir çocuğu katmana yükseltmek WebView'da o filtre tamponunu yeniden
+         rasterize ettiriyor ve gövde BİR KARE görünmez oluyordu: "her dökmede
+         tüp bir salise kaybolup geri geliyor" şikâyetinin sebebi buydu
+         (A54'te doğrulandı). Transform geçişi will-change olmadan da
+         compositor'da akıcı; katman yükseltme/indirme flaşı ortadan kalkıyor.
+         Sürekli promote de İSTEMİYORUZ (10 tüp × geniş gövde = boşa katman). */
       /* Ön cam. Fizik: cama KENARINDAN bakınca yoğun ve yansıtıcı, ORTASINDAN
          bakınca berrak görünür. Silindir hissini kuran tek şey bu — üstteki
          sıvıyı da örttüğü için sıvı "camın içinde" okunuyor. */
