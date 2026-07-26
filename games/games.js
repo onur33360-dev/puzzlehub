@@ -3308,12 +3308,23 @@ PuzzleGames.blockPuzzle = (() => {
     const col = JCOL[jewel] || JCOL[1];
     const w0 = line.type === 'row' ? geom.cssW * 0.82 : q.size * 2.1;
     const h0 = q.y + 40;
-    // Dikey gradyan bir kez 4×128 dokuya pişer; kare başına yalnızca blit.
-    const t = tex('col' + jewel, 4, 128, (x, w, h) => {
-      const g = x.createLinearGradient(0, h, 0, 0);
-      g.addColorStop(0, '#fff'); g.addColorStop(0.22, col.hl);
-      g.addColorStop(0.55, col.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
-      x.fillStyle = g; x.fillRect(0, 0, w, h);
+    // ÖNEMLİ: doku İKİ boyutlu sönümlenmeli. İlk canvas port'u dikey lineer
+    // gradyan kullanıyordu; yatayda hiç sönümleme olmadığı için sütun, sol/sağ
+    // kenarları KESKİN bir dikdörtgen olarak görünüyordu ("patlamayla alakasız
+    // gereksiz dikdörtgen" — kullanıcı raporu). DOM sürümünde yumuşaklık önce
+    // filter:blur(6px), sonra (perf için) elips radial-gradient ile geliyordu;
+    // burada da aynısı: tabandan (alt-orta) yayılan elips.
+    const t = tex('col' + jewel, 64, 128, (x, w, h) => {
+      const cx = w / 2, cy = h, rx = w * 0.62, ry = h * 1.16;
+      x.save();
+      x.translate(cx, cy);
+      x.scale(rx, ry);
+      const g = x.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, '#fff'); g.addColorStop(0.26, col.hl);
+      g.addColorStop(0.58, col.glow); g.addColorStop(0.78, 'rgba(0,0,0,0)');
+      x.fillStyle = g;
+      x.fillRect(-cx / rx, -cy / ry, w / rx, h / ry);
+      x.restore();
     });
     fxAdd({ dur: 520, draw(c, p) {
       const e = easeOut(p);
@@ -3335,13 +3346,22 @@ PuzzleGames.blockPuzzle = (() => {
     const col = JCOL[jewel] || JCOL[1];
     const row = line.type === 'row';
     const long = geom.cssW * 1.05, thick = q.size * 0.9;
-    // Bant gradyanı tek bir 128×4 dokuda; satır/sütun farkı döndürmeyle.
-    const t = tex('swp' + jewel, 128, 4, (x, w, h) => {
+    // Bant: yatayda uçlara doğru sönümlenir (gradyan), DİKEYDE de kenarları
+    // yumuşar. Dikey sönümleme olmadan bant, üst/alt kenarları keskin bir
+    // şerit gibi duruyordu (sütundakiyle aynı sınıf hata; DOM'da bunu
+    // filter:blur(1px) örtüyordu). Satır/sütun farkı çizimde döndürmeyle.
+    const t = tex('swp' + jewel, 128, 16, (x, w, h) => {
       const g = x.createLinearGradient(0, 0, w, 0);
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, col.hl);
       g.addColorStop(0.5, '#fff'); g.addColorStop(0.65, col.hl);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       x.fillStyle = g; x.fillRect(0, 0, w, h);
+      // Dikey yumuşatma: kenarları saydamlaştıran maske.
+      x.globalCompositeOperation = 'destination-in';
+      const m = x.createLinearGradient(0, 0, 0, h);
+      m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(0.5, '#000');
+      m.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = m; x.fillRect(0, 0, w, h);
     });
     fxAdd({ dur: 380, draw(c, p) {
       c.save();
