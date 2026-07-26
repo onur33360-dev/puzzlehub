@@ -3074,6 +3074,44 @@ PuzzleGames.blockPuzzle = (() => {
     return c;
   }
 
+  // ── DOKU ÖNBELLEĞİ ──
+  // Gradyanı HER KARE yeniden üretip tam ekran doldurmak, patlamadaki asıl
+  // maliyetti (ölçüldü A51: patlama sırasında p99 93ms, idle 61ms). Gradyan
+  // bir kez KÜÇÜK bir tuvale pişirilip ölçeklenerek basılıyor: piksel başına
+  // gradyan hesabı yerine tek bitmap blit. Görüntü aynı (gradyanlar zaten
+  // yumuşak), maliyet birkaç kat düşük.
+  const _tex = {};
+  function tex(key, w, h, paint) {
+    if (_tex[key]) return _tex[key];
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    paint(c.getContext('2d'), w, h);
+    _tex[key] = c;
+    return c;
+  }
+  // Radyal ışık dokusu (flaş/boşalma): merkezden dışa sönümlenen daire.
+  function radialTex(key, stops) {
+    return tex(key, 128, 128, (x, w, h) => {
+      const g = x.createRadialGradient(w/2, h/2, 0, w/2, h/2, w/2);
+      for (const [p, col] of stops) g.addColorStop(p, col);
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+    });
+  }
+  // Kıymık dokusu: mücevher gradyanlı yuvarlak köşeli parça.
+  function shardTexFor(j) {
+    const col = JCOL[j] || JCOL[1];
+    return tex('sh' + j, 24, 28, (x, w, h) => {
+      const g = x.createLinearGradient(0, 0, w, h);
+      g.addColorStop(0, col.hl); g.addColorStop(0.55, col.base); g.addColorStop(1, col.sh);
+      x.fillStyle = g;
+      const r = 5;
+      x.beginPath(); x.moveTo(r, 0);
+      x.arcTo(w, 0, w, h, r); x.arcTo(w, h, 0, h, r);
+      x.arcTo(0, h, 0, 0, r); x.arcTo(0, 0, w, 0, r);
+      x.closePath(); x.fill();
+    });
+  }
+
   function fxEnsure() {
     if (fxCv || !container) return;
     fxCv = document.createElement('canvas');
@@ -3175,7 +3213,7 @@ PuzzleGames.blockPuzzle = (() => {
       const ang = Math.random() * Math.PI * 2;
       parts.push({
         x: q.x, y: q.y, big,
-        j: jewelOf(i) || 1,
+        tex: shardTexFor(jewelOf(i) || 1),
         ang, dist: big ? 34 + Math.random() * 54 : 20 + Math.random() * 52,
         // Yerçekimi: kıymık savrulur AMA düşer. İri parça daha ağır.
         fall: big ? 26 : 14,
@@ -3203,21 +3241,14 @@ PuzzleGames.blockPuzzle = (() => {
         const e = easeOut(sp);
         const x = s.x + Math.cos(s.ang) * s.dist * e;
         const y = s.y + Math.sin(s.ang) * s.dist * e + s.fall * sp * sp;
-        const col = JCOL[s.j] || JCOL[1];
+        // Doku blit'i: gradyan + yol dolgusu parçacık başına kare başına
+        // yapılmıyor (bkz. DOKU ÖNBELLEĞİ notu).
         c.save();
         c.globalAlpha = 1 - sp * sp;
         c.translate(x, y);
         c.rotate(s.rot * sp);
-        if (s.big) {
-          const g = c.createLinearGradient(-s.sz / 2, -s.sz / 2, s.sz / 2, s.sz / 2);
-          g.addColorStop(0, col.hl); g.addColorStop(0.55, col.base); g.addColorStop(1, col.sh);
-          c.fillStyle = g;
-        } else {
-          c.fillStyle = col.hl;
-        }
         const w = s.sz, h = s.sz * (s.big ? 1.15 : 1.5);
-        rrect(c, -w / 2, -h / 2, w, h, Math.min(w, h) * 0.22);
-        c.fill();
+        c.drawImage(s.tex, -w / 2, -h / 2, w, h);
         c.restore();
       }
     }});
@@ -3227,18 +3258,25 @@ PuzzleGames.blockPuzzle = (() => {
   // neredeyse beyaz) + artçı (uzun, sönük, mücevher renginde).
   function sceneFlash(jewel, intensity) {
     const col = JCOL[jewel] || JCOL[1];
-    const mk = (peak, dur, inner, outer, ry) => fxAdd({ dur, draw(c, p) {
+    // Dokular bir kez pişer; kare başına iş yalnızca ölçekli bir blit.
+    // Elips oranları DOM sürümünden korundu (çekirdek 72%×52%, artçı 95%×70%).
+    const core = radialTex('fc' + jewel, [
+      [0, 'rgba(255,255,255,.95)'], [0.30, col.hl], [0.55, col.glow], [0.80, 'rgba(0,0,0,0)']]);
+    const after = radialTex('fa' + jewel, [
+      [0, col.glow], [0.76, 'rgba(0,0,0,0)']]);
+    const mk = (t, peak, dur, rx, ry, cyf) => fxAdd({ dur, draw(c, p) {
       if (!fxGeom) return;
       // Ani yükseliş (%8'de zirve) + hızlı düşüş = DARBE.
       const a = p < 0.08 ? (p / 0.08) * peak : peak * (1 - (p - 0.08) / 0.92);
       if (a <= 0) return;
-      const w = fxGeom.w, h = fxGeom.h, cx = w / 2, cy = h * 0.52;
-      const g = c.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * ry);
-      g.addColorStop(0, inner); g.addColorStop(0.42, outer); g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.save(); c.globalAlpha = a; c.fillStyle = g; c.fillRect(0, 0, w, h); c.restore();
+      const w = fxGeom.w, h = fxGeom.h, cx = w / 2, cy = h * cyf;
+      const ex = w * rx, ey = h * ry;
+      c.save(); c.globalAlpha = a;
+      c.drawImage(t, cx - ex, cy - ey, ex * 2, ey * 2);
+      c.restore();
     }});
-    mk(Math.min(intensity, 0.92), 90, 'rgba(255,255,255,.95)', col.hl, 0.62);
-    mk(Math.min(intensity * 0.55, 0.5), 300, col.hl, col.glow, 0.8);
+    mk(core,  Math.min(intensity, 0.92),        90,  0.72, 0.52, 0.52);
+    mk(after, Math.min(intensity * 0.55, 0.5), 300,  0.95, 0.70, 0.55);
   }
 
   // ── ŞOK DALGASI ── Tahtadan çıkıp tüm sahneyi kat eden halka.
@@ -3270,6 +3308,13 @@ PuzzleGames.blockPuzzle = (() => {
     const col = JCOL[jewel] || JCOL[1];
     const w0 = line.type === 'row' ? geom.cssW * 0.82 : q.size * 2.1;
     const h0 = q.y + 40;
+    // Dikey gradyan bir kez 4×128 dokuya pişer; kare başına yalnızca blit.
+    const t = tex('col' + jewel, 4, 128, (x, w, h) => {
+      const g = x.createLinearGradient(0, h, 0, 0);
+      g.addColorStop(0, '#fff'); g.addColorStop(0.22, col.hl);
+      g.addColorStop(0.55, col.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+    });
     fxAdd({ dur: 520, draw(c, p) {
       const e = easeOut(p);
       const sy = 0.04 + e * 0.96, sx = 0.7 + e * 0.55;
@@ -3277,11 +3322,7 @@ PuzzleGames.blockPuzzle = (() => {
       c.globalAlpha = p < 0.16 ? p / 0.16 * 0.9 : 0.9 * (1 - (p - 0.16) / 0.84);
       c.translate(q.x, q.y);
       c.scale(sx, sy);
-      const g = c.createLinearGradient(0, 0, 0, -h0);
-      g.addColorStop(0, '#fff'); g.addColorStop(0.22, col.hl);
-      g.addColorStop(0.55, col.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = g;
-      c.fillRect(-w0 / 2, -h0, w0, h0);
+      c.drawImage(t, -w0 / 2, -h0, w0, h0);
       c.restore();
     }});
   }
@@ -3294,17 +3335,20 @@ PuzzleGames.blockPuzzle = (() => {
     const col = JCOL[jewel] || JCOL[1];
     const row = line.type === 'row';
     const long = geom.cssW * 1.05, thick = q.size * 0.9;
+    // Bant gradyanı tek bir 128×4 dokuda; satır/sütun farkı döndürmeyle.
+    const t = tex('swp' + jewel, 128, 4, (x, w, h) => {
+      const g = x.createLinearGradient(0, 0, w, 0);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, col.hl);
+      g.addColorStop(0.5, '#fff'); g.addColorStop(0.65, col.hl);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+    });
     fxAdd({ dur: 380, draw(c, p) {
       c.save();
       c.globalAlpha = p < 0.2 ? p / 0.2 : 1 - (p - 0.2) / 0.8;
       c.translate(q.x, q.y);
-      const w = row ? long : thick, h = row ? thick : long;
-      const g = row ? c.createLinearGradient(-w / 2, 0, w / 2, 0)
-                    : c.createLinearGradient(0, -h / 2, 0, h / 2);
-      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, col.hl);
-      g.addColorStop(0.5, '#fff'); g.addColorStop(0.65, col.hl);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = g; c.fillRect(-w / 2, -h / 2, w, h);
+      if (!row) c.rotate(Math.PI / 2);
+      c.drawImage(t, -long / 2, -thick / 2, long, thick);
       c.restore();
     }});
   }
@@ -3447,14 +3491,12 @@ PuzzleGames.blockPuzzle = (() => {
     }
     if (!n) return;
     const x = sx / n, y = sy / n, R = size * 2.5, col = JCOL[jewel] || JCOL[1];
+    const t = radialTex('dis' + jewel, [[0, col.glow], [1, 'rgba(0,0,0,0)']]);
     fxAdd({ dur: 480, draw(c, p) {
-      const e = easeOut(p);
+      const e = easeOut(p), r = R * (0.3 + e * 0.7);
       c.save();
       c.globalAlpha = (1 - p) * 0.5;
-      const g = c.createRadialGradient(x, y, 0, x, y, R * (0.3 + e * 0.7));
-      g.addColorStop(0, col.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = g;
-      c.fillRect(x - R, y - R, R * 2, R * 2);
+      c.drawImage(t, x - r, y - r, r * 2, r * 2);
       c.restore();
     }});
   }
@@ -4681,6 +4723,7 @@ PuzzleGames.blockPuzzle = (() => {
     fxClear();
     if (fxCv) { fxCv.remove(); fxCv = null; fxCtx = null; fxGeom = null; }
     glowSprite = [];
+    for (const k in _tex) delete _tex[k];
     drag = null; locked = false; pendingGrab = null;
     // Sahne yalnızca bu oyun aktifken duruyor — diğer oyunların koyu-tema
     // varsayımına dokunmadan geri alınıyor.
