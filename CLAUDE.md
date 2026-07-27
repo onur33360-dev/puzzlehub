@@ -119,7 +119,8 @@ load-bearing — don't remove it when adding a file, update both lists.
 | `DATA_AND_STORAGE.md` | to be written | touching localStorage keys or shapes |
 | `ECONOMY_DESIGN.md` | to be written | changing diamond sources/sinks or streak rewards |
 | `MONETIZATION_INTEGRATION.md` | to be written | wiring real ads/IAP behind the mocked systems |
-| `ROADMAP.md` / `CHANGELOG.md` | to be written | figuring out what's next, or logging what shipped |
+| `ROADMAP.md` | written | figuring out what's next — sprint plan, canvas migration status, sprint-closing rule |
+| `CHANGELOG.md` | to be written | logging what shipped |
 
 `TESTING.md` and `RELEASE.md` are deliberately deferred until closer to launch — don't assume either exists.
 
@@ -389,7 +390,10 @@ never precached — a cold start must not wait on sound files), and requests car
 
 ## 8. Current Priorities / What Not to Assume
 
-Roadmap lives in `ROADMAP.md` (to be written). Until then:
+**Roadmap lives in `ROADMAP.md`** — read it for the active sprint and the canvas
+migration status. It also carries the sprint-closing rule (build → device test →
+Y6 test → commit → push) and the "never compare perf numbers on a warm device"
+rule. Beyond that:
 - Mocked systems (ads, IAP, leaderboard, Plus validation) are correct-for-now. Don't silently "complete" or productionize them.
 - The four unbuilt Discover games are intentionally unbuilt. Building one is a real feature request, not a bug fix — confirm scope before starting.
 - Don't assume test coverage or a release process exists. `TESTING.md` and `RELEASE.md` are intentionally deferred until closer to launch.
