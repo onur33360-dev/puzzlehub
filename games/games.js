@@ -7413,6 +7413,23 @@ PuzzleGames.waterSort = (() => {
   }
   function cleanup() {
     clearEvs();
+    // 01_ARCHITECTURE: cleanup() dinleyicileri, rAF döngülerini, zamanlayıcıları
+    // ve DOKULARI bırakmak zorunda. Canvas renderer'ın İKİ döngüsü var ve ikisi
+    // de oyundan çıkarken canlı olabilir:
+    //   wRaf   — döküş sürerken çıkılırsa,
+    //   wFxRaf — bir geri bildirim animasyonu (shake/çözüldü/giriş) sürerken.
+    // Bırakılırsa kopmuş bir canvas'a çizmeye devam ederler: hem sızıntı hem
+    // boşa GPU. Sprite'lar da tüp geometrisine bağlı olduğu için serbest
+    // bırakılıyor; sonraki init yeniden pişirir.
+    if (wRaf) cancelAnimationFrame(wRaf);
+    if (wFxRaf) cancelAnimationFrame(wFxRaf);
+    wRaf = 0; wFxRaf = 0;
+    wPourFx = null; wPendingTap = null;
+    wShake = null; wSolved = null; wIntro = null;
+    selected = null;
+    wInvalidateSprites();
+    glassBack = null; glassFront = null;
+    wcv = null; wctx = null; wGeom = null;
     animating = false;
     if (container) container.classList.remove('wsrt-scene');
     const scoreWrap = document.querySelector('.game-score-wrap');
