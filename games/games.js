@@ -3092,6 +3092,37 @@ PuzzleGames.blockPuzzle = (() => {
     }
   }
 
+  // Cache'e YALNIZCA verilen hücreleri işler (tüm board'u kurmadan).
+  // Eskiden yerleştirme animasyonu bitince renderBoard() çağrılıyordu, yani
+  // yerleştirme başına board cache'i İKİ KEZ kuruluyordu (biri placePiece'te
+  // soketlerle, biri animasyon bitince kristallerle) — her biri 64 blit +
+  // tam tuval temizliği. Sprint 3 sonrası "hafif fps düşüşleri"nin kaynağı buydu.
+  // Sprite payandası komşuya taştığı için etkilenen bölge konan hücreler +
+  // 8 komşusu; payanda (0.35·cs) bir hücreden kısa olduğu için ±1 yeterli.
+  function commitCells(cells) {
+    if (!geom || !cellTex) { renderBoard(); return; }
+    const set = new Set();
+    for (const c of cells) {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const y = c.y + dy, x = c.x + dx;
+        if (y >= 0 && y < G && x >= 0 && x < G) set.add(y * G + x);
+      }
+    }
+    // Önce bölgeyi temizle (komşuların taşan parıltısı da silinir), sonra
+    // tüm bölgeyi yeniden bas — böylece taşan parıltılar geri gelir.
+    for (const i of set) {
+      const y = (i / G) | 0, x = i % G;
+      bctx.clearRect(x * geom.step - cellTex.pad, y * geom.step - cellTex.pad, cellTex.S, cellTex.S);
+    }
+    for (const i of set) {
+      const y = (i / G) | 0, x = i % G, j = board[y][x];
+      const t = j ? cellTex.jewels[j] : cellTex.socket;
+      if (t) bctx.drawImage(t, x * geom.step - cellTex.pad, y * geom.step - cellTex.pad, cellTex.S, cellTex.S);
+    }
+    fullRepaint = true;
+    requestPaint();
+  }
+
   // Bir hücreyi cache'ten geri yükle (preview kalkınca altındaki board görünsün).
   function restoreCell(y, x) {
     const px = x * geom.step, py = y * geom.step;
@@ -3296,7 +3327,22 @@ PuzzleGames.blockPuzzle = (() => {
   }
   function fxPlaceIn(cells, jewel) {
     if (!cellTex) buildCellTextures();
-    if (!cellTex || !geom || !cellTex.jewels[jewel]) { placingCells = null; renderBoard(); return; }
+    // Bu animasyonun SAHİP olduğu hücreler. Hızlı ardışık hamlelerde ikinci
+    // yerleştirme placingCells'i devralır; kimlik karşılaştırması sayesinde
+    // biten animasyon başkasının hücrelerini iptal etmez.
+    const myCells = new Set(cells.map(c => c.y * G + c.x));
+    placingCells = myCells;
+    // renderBoard() ÇAĞRILMIYOR — ve çağrılmamalı. Konan hücreler yerleştirme
+    // öncesinde BOŞTU, yani cache'te zaten soket duruyor; animasyon boyunca
+    // istediğimiz görüntü de tam olarak bu. Buradaki eski renderBoard() çağrısı
+    // yerleştirme başına 64 blit + tam tuval temizliğini boşuna yapıyordu.
+    // placingCells yine de set ediliyor: araya giren bir cache kurulumu
+    // (ör. resize) olursa bu hücreleri soket çizsin diye.
+    if (!cellTex || !geom || !cellTex.jewels[jewel]) {
+      if (placingCells === myCells) placingCells = null;
+      commitCells(cells);
+      return;
+    }
     const t = cellTex.jewels[jewel], S = cellTex.S;
     const drop = geom.cs * 0.2;                       // DOM'daki -9px'in oranı
     const list = cells.map((c, i) => ({ y: c.y, x: c.x, delay: i * PLACE_STAGGER }));
@@ -3322,7 +3368,14 @@ PuzzleGames.blockPuzzle = (() => {
           c.restore();
         }
       },
-      done() { placingCells = null; renderBoard(); },
+      // Bitişte TÜM board yeniden kurulmaz — yalnızca konan hücreler cache'e
+      // işlenir (bkz. commitCells). placingCells başka bir yerleştirme
+      // tarafından değiştirilmişse (hızlı ardışık hamle) dokunma: o zaman
+      // sahibi olan animasyon kendi hücrelerini işleyecek.
+      done() {
+        if (placingCells === myCells) placingCells = null;
+        commitCells(cells);
+      },
     });
   }
 
@@ -4308,7 +4361,15 @@ PuzzleGames.blockPuzzle = (() => {
          scale(1)/opacity(1)'den başlamak, parçanın sönmeden önce bir an
          tam görünür hâle sıçraması demekti. */
       @keyframes bpFadeOut{0%{transform:scale(.72);opacity:.22}100%{transform:scale(.28);opacity:0}}
-      @keyframes bpNewPiece{0%{transform:scale(0) translateY(20px);opacity:0;filter:brightness(2)}60%{transform:scale(1.1) translateY(-3px);filter:brightness(1.3)}100%{transform:scale(1) translateY(0);opacity:1;filter:brightness(1)}}
+      /* filter:brightness KALDIRILDI (perf). Tepsi her 3 yerleştirmede bir
+         yenileniyor ve yenilemede 27'ye kadar .bp-crystal elemanı doğuyor;
+         her biri 450ms boyunca filtre canlandırıyordu. Filter compositor-only
+         DEĞİL: her karede yeniden rasterize olur — bu, projenin daha önce
+         bpCharging/bpEnergy'den ve .ph-beam'den kaldırdığı tuzağın aynısı,
+         burada gözden kaçmıştı. Sıçramanın büyük kısmı buradan geliyordu.
+         Giriş hissi transform+opacity ile korunuyor: scale(1.1) aşımı
+         "pop"u zaten veriyor. */
+      @keyframes bpNewPiece{0%{transform:scale(0) translateY(20px);opacity:0}60%{transform:scale(1.1) translateY(-3px);opacity:1}100%{transform:scale(1) translateY(0);opacity:1}}
       .bp-tp.new-in{animation:bpNewPiece .45s cubic-bezier(.34,1.56,.64,1) backwards}
       /* Kaybolma kuralı giriş kuralından SONRA gelmek ZORUNDA: ikisi aynı
          özgüllükte (.bp-tp.X) ve kademede sonra gelen kazanır. Ters sırada
@@ -4447,6 +4508,31 @@ PuzzleGames.blockPuzzle = (() => {
     setTimeout(finish, 300);
   }
 
+  // Hayalet tuvali: TEK örnek, oyun boyunca yeniden kullanılır (bkz.
+  // grabPiece'teki not — tutuş başına tahsis 150ms'lik sıçrama üretiyordu).
+  // En büyük parça 4 hücre; tuval buna göre boyutlanır ve hücre boyutu
+  // değişince (sizeCanvas → cellTex=null) yeniden üretilir.
+  let ghostCv = null, ghostCvW = 0, ghostCvCs = 0;
+  function ensureGhostCanvas() {
+    const cs = geom ? geom.cs : 40, pad = cellTex ? cellTex.pad : 0;
+    const need = 4 * (cs + GAP) + pad * 2;
+    if (ghostCv && ghostCvCs === cs) return ghostCv;
+    if (!ghostCv) {
+      ghostCv = document.createElement('canvas');
+      ghostCv.className = 'bp-ghost';
+      ghostCv.style.display = 'none';
+      document.body.appendChild(ghostCv);
+    }
+    const gs = bufScale || Math.min(window.devicePixelRatio || 1, 3);
+    ghostCvW = need; ghostCvCs = cs;
+    ghostCv.width = Math.round(need * gs);
+    ghostCv.height = Math.round(need * gs);
+    ghostCv.style.width = need + 'px';
+    ghostCv.style.height = need + 'px';
+    ghostCv.getContext('2d').setTransform(gs, 0, 0, gs, 0, 0);
+    return ghostCv;
+  }
+
   // ───────── SÜRÜKLE-BIRAK ─────────
   // Yerleştirme çözülürken (locked) gelen dokunuş SESSİZCE DÜŞMEZ, tamponlanır.
   // Yerleştirme sonrası kilit 90ms (satır yoksa) ile ~250ms (satır temizlemede)
@@ -4515,14 +4601,14 @@ PuzzleGames.blockPuzzle = (() => {
     // filter:drop-shadow her karede yeniden rasterize olurdu.
     if (!cellTex) buildCellTextures();
     const gpad = cellTex ? cellTex.pad : 0;
-    const ghost = document.createElement('canvas');
-    ghost.className = 'bp-ghost';
-    const gw = ghostW + gpad * 2, gh = ghostH + gpad * 2;
-    const gs = bufScale || Math.min(window.devicePixelRatio || 1, 3);
-    ghost.width = Math.round(gw * gs); ghost.height = Math.round(gh * gs);
-    ghost.style.width = gw + 'px'; ghost.style.height = gh + 'px';
+    // Hayalet canvas'ı HER TUTUŞTA yeniden oluşturulmaz, BİR KEZ üretilip
+    // yeniden kullanılır. Ölçüldü (A51): her tutuşta yeni canvas tahsisi tek
+    // karelik ~150ms sıçrama üretiyordu — parçayı her aldığında hissedilen
+    // takılma buydu. Tuval en büyük parçaya (4×4) göre boyutlanır; kullanılmayan
+    // alan saydam kalır ve compositor için ihmal edilebilir.
+    const ghost = ensureGhostCanvas();
     const gctx = ghost.getContext('2d');
-    gctx.setTransform(gs, 0, 0, gs, 0, 0);
+    gctx.clearRect(0, 0, ghostCvW, ghostCvW);
     const step = cs + GAP;
     if (cellTex && cellTex.jewels[p.jewel]) {
       // 1. geçiş: "havada" gölgesi — hazır sprite'tan blit (shadowBlur YOK,
@@ -4540,7 +4626,7 @@ PuzzleGames.blockPuzzle = (() => {
         gctx.drawImage(t, x * step, y * step, cellTex.S, cellTex.S);
       }));
     }
-    document.body.appendChild(ghost);
+    ghost.style.display = 'block';
 
     drag = { idx, piece:p, ghost, bRect, cs, originX, originY, ghostW, ghostH, gpad, row:-1, col:-1, valid:false, previewCells:null };
     posGhost(touch.clientX, touch.clientY);
@@ -4609,7 +4695,7 @@ PuzzleGames.blockPuzzle = (() => {
   function dropPiece() {
     if (!drag) return;
     const {idx, piece, ghost, row, col, valid} = drag;
-    ghost.remove();
+    ghost.style.display = 'none';   // silinmez, yeniden kullanılır
     clearPreview();
 
     if (valid) {
@@ -4650,21 +4736,28 @@ PuzzleGames.blockPuzzle = (() => {
     // Board güncelle (canvas) + DÜŞ→EZİL→OTUR animasyonu (Sprint 3/A).
     // Konan hücreler animasyon boyunca cache'e yazılmaz (soket kalır),
     // kristali FX katmanı düşürüp oturtur; bitince cache yeniden kurulur.
-    if (FX) {
-      placingCells = new Set(placedCells.map(c => c.y * G + c.x));
-      renderBoard();
-      fxPlaceIn(placedCells, piece.jewel);
-    } else {
-      renderBoard();
-    }
+    // YERLEŞTİRME ANİMASYONU KAPALI (ürün kararı): "düş → ezil → otur"
+    // hem gereksiz bulundu hem de yerleştirme başına ek maliyet getiriyordu.
+    // Yerine EN UCUZ yol: tüm board cache'ini kurmak yerine yalnızca konan
+    // hücreleri işle (64 blit → ~9 blit). fxPlaceIn duruyor; geri almak
+    // için bu satırı `fxPlaceIn(placedCells, piece.jewel)` yap.
+    commitCells(placedCells);
     renderScoreBar(true);
 
     // ── Yerleştirme enerjisi (Faz 2A) ── Artık canvas FX katmanında.
     // Sıra kasıtlı: önce yüzeyin altındaki yayılım (en yavaş, en arkada),
     // sonra ızgara iletimi, en son temas kıvılcımları (en hızlı, en önde).
     if (FX) {
-      daisDischarge(placedCells, piece.jewel);
-      runePulse(placedCells, piece.jewel);
+      // daisDischarge KAPALI (ürün kararı): konan taşın çevresini saran geniş
+      // radyal parıltıydı ("çevresini saran bir yapı") — istenmedi. Ayrıca
+      // ~5 hücre genişliğinde bir dolguyu 480ms boyunca her kare çiziyordu.
+      // Fonksiyon duruyor; geri almak tek satır.
+      // runePulse KAPALI (ürün kararı): konan taşın 2.4 hücre yarıçapındaki
+      // KOMŞU hücrelerini aydınlatıyordu. Tasarımda "levha enerjiyi iletir"
+      // diye vardı ama oyuncuda "koymadığım yerlerde iz düşümü" olarak
+      // okunuyor — anlatmak istediği şeyi anlatmıyor. Ayrıca kare başına
+      // ~20 hücre dolgusu çizerek yerleştirme sırasındaki fps'i düşürüyordu.
+      // Fonksiyon duruyor; geri almak tek satır.
       contactSparks(edges, piece.jewel);
     }
     updateCharge();
@@ -4944,6 +5037,7 @@ PuzzleGames.blockPuzzle = (() => {
     fxClear();
     if (fxCv) { fxCv.remove(); fxCv = null; fxCtx = null; fxGeom = null; }
     glowSprite = []; cellTex = null; placingCells = null;
+    if (ghostCv) { ghostCv.remove(); ghostCv = null; ghostCvCs = 0; }
     for (const k in _tex) delete _tex[k];
     drag = null; locked = false; pendingGrab = null;
     // Sahne yalnızca bu oyun aktifken duruyor — diğer oyunların koyu-tema
