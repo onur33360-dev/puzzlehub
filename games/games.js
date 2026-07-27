@@ -4537,7 +4537,13 @@ PuzzleGames.blockPuzzle = (() => {
   }
 
   function grabPiece(idx, e) {
-    if (drag) return;
+    // KURTARMA: ortada takılı bir sürükleme varsa onu İPTAL ET ve devam et.
+    // Eskiden burada `if (drag) return;` vardı; takılı bir drag (ör. sistem
+    // jesti touchcancel'ı yutulmuşsa) hem ekranda donmuş bir önizleme
+    // çerçevesi bırakıyor hem de SONRAKİ TÜM TUTUŞLARI engelliyordu
+    // ("tıklıyorum ama almıyor"). Yeni bir tutuş, oyuncunun parmağının
+    // ekranda olduğunun kanıtı — eski drag'i sonlandırmak her zaman doğru.
+    if (drag) { if (drag.end) drag.end({ type: 'touchcancel' }); drag = null; }
     const p = pieces[idx];
     if (!p) return;
     if (locked) {
