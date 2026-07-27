@@ -6311,31 +6311,10 @@ PuzzleGames.waterSort = (() => {
   // her dokunuşta tüm tüpleri yeniden çizmekten kaçınmak için.
   // Sıvı katmanları .wsrt-body içinde (ters dönen sıvı gövdesi, bkz.
   // injectCSS) — insertAdjacentHTML mutlaka o gövdeye hedeflenmeli.
-  function applyPourDOM(from, to, count, colorIdx) {
-    const fromInner = bodyOf(tubesEl.children[from]);
-    const toInner = bodyOf(tubesEl.children[to]);
-    for (let i=0;i<count;i++) { const l = topLayerEl(fromInner); if (l) l.remove(); }
-    const newFromTop = topLayerEl(fromInner);
-    if (newFromTop) newFromTop.classList.add('wsrt-layer-top');
-    const prevToTop = topLayerEl(toInner);
-    if (prevToTop) prevToTop.classList.remove('wsrt-layer-top');
-    // Dikiş yalnızca eklenen İLK katmanda olabilir (kalanlar aynı renk).
-    // Normal dökmede hiç oluşmaz — kural gereği sıvı ya aynı rengin ya da
-    // boş tüpün üstüne gider. Ama GERİ ALMA, altında farklı renk bulunan
-    // bir katmanı kaynağa iade edebilir; sınır oradan doğar.
-    const destColors = tubes[to].colors;
-    for (let i=0;i<count;i++) {
-      const isLast = i === count - 1;
-      const idx = destColors.length - count + i;
-      const seam = idx > 0 && destColors[idx-1] !== colorIdx;
-      const added = appendLayer(toInner, colorIdx, isLast, seam);
-      if (isLast && added) added.classList.add('wsrt-layer-settle');
-    }
-    syncLiquidShade(fromInner);
-    syncLiquidShade(toInner);
-    updateTubeGlow(tubesEl.children[from], tubes[from]);
-    updateTubeGlow(tubesEl.children[to], tubes[to]);
-  }
+  // Durum (tubes dizisi) zaten pourState/transferUnits ile guncellendi;
+  // canvas'ta yapilacak tek is yeniden cizim. Eskiden burada DOM katman
+  // cerrahisi vardi (katman ekle/cikar, dikis sinifi, isik ortusu senkronu).
+  function applyPourDOM() { wPaint(); }
   function updateControlsBar() {
     const undoBtn = wrapEl.querySelector('#wsrt-undo');
     const restartBtn = wrapEl.querySelector('#wsrt-restart');
@@ -6343,6 +6322,412 @@ PuzzleGames.waterSort = (() => {
     if (restartBtn) restartBtn.classList.toggle('off', history.length === 0);
   }
   // Tam yeniden çizim — sadece seviye başlangıcında/yeniden başlatmada.
+  // ═══════════ CANVAS RENDERER (Sprint 4) ═══════════
+  // Water Sort'un darboğazı ölçüldü (A51): idle 60fps ama DÖKÜŞTE ~46fps,
+  // en kötü kare 117ms; UI iş parçacığı ile GPU birebir aynı sürüyor, yani
+  // GPU fill-rate sınırı. Sebep: HAREKET EDEN tüpün üzerinde filter:saturate
+  // + brightness + blur + mix-blend-mode taşınması — eski WebView bunları
+  // her kare yeniden rasterize eder (Block'ta ghost drop-shadow'unda ölçülen
+  // sorunun aynısı).
+  //
+  // Mimari, Block'ta öğrenilen kurallara göre (bkz. ROADMAP):
+  //   Katman 1 — CAM: statik. Sprite'a BİR KEZ pişer, tekrar çizilmez.
+  //   Katman 2 — SIVI: her kare çizilir (hacmi/yönü sürekli değişir, bu
+  //              yüzden sprite'lanamaz) ama FILTER/BLEND/BLUR KULLANMAZ;
+  //              görünüm doğrudan renk ve gradyanlarla üretilir.
+  // Tek rAF döngüsü, yalnızca döküş sürerken çalışır; idle'da tam sıfır.
+  const WALL = 4.5, RIM_H = 17;          // CSS'teki --wsrt-wall / --wsrt-rim-h
+  let wcv = null, wctx = null, wScale = 1;
+  let wGeom = null;                       // {tw, th, cssW, cssH, pos:[{x,y}]}
+  let glassBack = null, glassFront = null;
+  let wRaf = 0, wPourFx = null;
+  let wPendingTap = null;                 // kilit sırasında gelen dokunuş (bkz. render)
+  const TAP_BUFFER_MS = 450;              // bundan eski tampon bayattır, oynanmaz
+  // Kilit açılınca bekleyen dokunuşu oynat — dokunuş düşürmek oyunu ölü hissettirir.
+  function wFlushTap() {
+    const p = wPendingTap; wPendingTap = null;
+    if (p && performance.now() - p.t < TAP_BUFFER_MS) onTapTube(p.i);
+  }
+
+  function wPickScale() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const px = (screen.width * dpr) * (screen.height * dpr);
+    const cores = navigator.hardwareConcurrency || 4;
+    if (px >= 2.2e6 && cores <= 8) return 0.8;
+    if (px >= 1.5e6 && cores <= 4) return 0.65;
+    return 1;
+  }
+
+  // Tüp yerleşimi — CSS flex'in yaptığını aritmetikle üretir:
+  // genişlik clamp(46, (alan - (n-1)*8)/min(n,6), 72), oran .235, satır başına
+  // en çok 6 tüp, ortalanmış, 8px boşluk.
+  function wLayout(cssW) {
+    const n = tubes.length, perRow = Math.min(n, 6), gap = 8;
+    const tw = Math.max(46, Math.min(72, (cssW - (perRow - 1) * gap) / perRow));
+    const th = tw / 0.235;
+    const rows = Math.ceil(n / perRow);
+    const pos = [];
+    for (let i = 0; i < n; i++) {
+      const r = Math.floor(i / perRow), c = i % perRow;
+      const inRow = Math.min(perRow, n - r * perRow);
+      const rowW = inRow * tw + (inRow - 1) * gap;
+      pos.push({ x: (cssW - rowW) / 2 + c * (tw + gap), y: r * (th + gap) });
+    }
+    return { tw, th, cssW, cssH: rows * th + (rows - 1) * gap, pos };
+  }
+
+  // Cam silüeti: üstte geniş-basık elips ağzı, altta derin U (CSS'teki
+  // border-radius:50% 50% 46% 46% / rim rim 13% 13% karşılığı).
+  function wTubePath(c, x, y, w, h) {
+    const rt = RIM_H, rb = h * 0.13, half = w / 2;
+    c.beginPath();
+    c.moveTo(x, y + rt);
+    c.ellipse(x + half, y + rt, half, rt, 0, Math.PI, 0);        // ağız (üst elips)
+    c.lineTo(x + w, y + h - rb);
+    c.ellipse(x + half, y + h - rb, half, rb, 0, 0, Math.PI);    // dip (U)
+    c.closePath();
+  }
+
+  // Cam SPRITE'ları — bir kez üretilir. back: gövde+derinlik, front: parlama+ağız.
+  function wBuildGlass() {
+    if (!wGeom) return;
+    const { tw, th } = wGeom;
+    const mk = (paint) => {
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(tw * wScale));
+      cv.height = Math.max(1, Math.round(th * wScale));
+      const c = cv.getContext('2d');
+      c.setTransform(wScale, 0, 0, wScale, 0, 0);
+      paint(c);
+      return cv;
+    };
+    glassBack = mk(c => {
+      wTubePath(c, 0, 0, tw, th);
+      const g = c.createLinearGradient(0, 0, 0, th);
+      g.addColorStop(0, 'rgba(150,175,255,.07)');
+      g.addColorStop(0.82, 'rgba(120,145,230,.10)');
+      g.addColorStop(1, 'rgba(160,185,255,.18)');
+      c.fillStyle = g; c.fill();
+    });
+    glassFront = mk(c => {
+      c.save(); wTubePath(c, 0, 0, tw, th); c.clip();
+      // Ön cam: kenarlarda yoğun, ortada berrak (silindir hissi)
+      const fg = c.createLinearGradient(0, 0, tw, 0);
+      fg.addColorStop(0, 'rgba(228,238,255,.38)');
+      fg.addColorStop(0.13, 'rgba(228,238,255,.12)');
+      fg.addColorStop(0.36, 'rgba(255,255,255,0)');
+      fg.addColorStop(0.64, 'rgba(255,255,255,0)');
+      fg.addColorStop(0.87, 'rgba(205,220,255,.13)');
+      fg.addColorStop(1, 'rgba(216,230,255,.32)');
+      c.fillStyle = fg; c.fillRect(0, 0, tw, th);
+      // Parlama lekeleri — blur YOK, gradyanın kendisi yumuşak.
+      const spot = (cx, cy, rx, ry, a) => {
+        const g2 = c.createRadialGradient(cx, cy, 0, cx, cy, 1);
+        g2.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+        g2.addColorStop(0.55, 'rgba(255,255,255,' + (a * 0.35) + ')');
+        g2.addColorStop(1, 'rgba(255,255,255,0)');
+        c.save(); c.translate(cx, cy); c.scale(rx, ry);
+        c.fillStyle = g2; c.beginPath(); c.arc(0, 0, 1, 0, Math.PI * 2); c.fill();
+        c.restore();
+      };
+      spot(tw * 0.155, th * 0.31, tw * 0.10, th * 0.26, 0.72);
+      spot(tw * 0.885, th * 0.32, tw * 0.06, th * 0.18, 0.42);
+      c.restore();
+      // Ağız halkası: camı KESİTTEN gösteren elips halka — açık kabın en güçlü
+      // işareti. DOM .wsrt-rim'in HACMİ iki iç kenardan gelir: öne bakan ÜST
+      // kenar gölgede, ışık yakalayan ALT kenar aydınlık. Bunlar olmadan halka
+      // düz bir çizgi gibi okunur (cam kalınlığı hissi kaybolur).
+      c.save();
+      c.lineCap = 'round';
+      const rimCx = tw / 2, rimCy = RIM_H / 2 + 1, rimRx = tw / 2 - 1.5, rimRy = RIM_H / 2 - 1;
+      // dış kontur
+      c.strokeStyle = 'rgba(233,243,255,.62)'; c.lineWidth = 2.5;
+      c.beginPath(); c.ellipse(rimCx, rimCy, rimRx, rimRy, 0, 0, Math.PI * 2); c.stroke();
+      // iç üst kenar gölgesi (öne bakan kenar — DOM inset üst gölge)
+      c.strokeStyle = 'rgba(3,5,18,.5)'; c.lineWidth = 2;
+      c.beginPath(); c.ellipse(rimCx, rimCy + 1.2, rimRx - 1.6, rimRy - 0.4, 0, Math.PI, Math.PI * 2); c.stroke();
+      // iç alt kenar ışığı (arka kenar ışığı yakalar — DOM inset alt ışık)
+      c.strokeStyle = 'rgba(245,249,255,.6)'; c.lineWidth = 1.6;
+      c.beginPath(); c.ellipse(rimCx, rimCy - 0.6, rimRx - 1.6, rimRy - 0.4, 0, 0, Math.PI); c.stroke();
+      // üst kristal ışık çubuğu (DOM .wsrt-rim::before — yakalanan ışık)
+      c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.4;
+      c.beginPath(); c.ellipse(rimCx, rimCy - 0.5, tw * 0.32, RIM_H * 0.2, 0, Math.PI * 1.12, Math.PI * 1.88); c.stroke();
+      c.restore();
+    });
+  }
+
+  // İç oda (sıvının yaşadığı boşluk) — cam duvarın içi.
+  function wChamber(x, y, w, h) {
+    return { x: x + WALL, y: y + RIM_H * 0.55, w: w - WALL * 2, h: h - RIM_H * 0.55 - WALL };
+  }
+
+  // Eksen-hizalı elips gradyanı (blur YOK — radyal gradyanın kendisi yumuşak).
+  // Menisküs ve havuz parıltısı için paylaşılıyor.
+  function ellipseGlow(c, gx, gy, rx, ry, stops) {
+    c.save(); c.translate(gx, gy); c.scale(rx, ry);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, 1);
+    for (const s of stops) g.addColorStop(s[0], s[1]);
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, 1, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
+
+  // Tüpün ARKASINA çizilen derinlik gölgesi + havuz parıltısı — DOM'da
+  // .wsrt-glass'ın box-shadow'uydu (0 18px derinlik + --wsrt-pool renkli glow).
+  // Cam sprite'ı silüetin İÇİNİ boyar; bu ikisi silüetin DIŞINA taşar, ayrı
+  // çizilir. FAZ 2: renk başına sprite'a pişir (Faz 1'de FPS umursanmıyor).
+  function wDrawUnderGlow(c, x, y, w, h, tube) {
+    const cx = x + w / 2;
+    ellipseGlow(c, cx, y + h * 0.99, w * 0.52, h * 0.055,
+      [[0, 'rgba(3,5,20,.5)'], [0.6, 'rgba(3,5,20,.2)'], [1, 'rgba(3,5,20,0)']]);
+    const n = tube.colors.length;
+    if (!n) return;
+    const glow = wCol(tube.colors[n - 1], 'glow');
+    if (!glow || glow === '#888') return;
+    ellipseGlow(c, cx, y + h * 0.7, w * 0.98, h * 0.52,
+      [[0, glow], [0.45, glow], [1, 'rgba(0,0,0,0)']]);
+  }
+
+  // Bir tüpün SIVISI. Katmanlar `colors` dizisinden (alttan üste) + isteğe
+  // bağlı `extraTop` (döküşte boşalan/dolan KISMİ blok, kesirli birim yüksekliği)
+  // segmentlere çevrilir; her segment tek tip çizilir. tilt/squash verilirse
+  // (döküş) gövde ters döner → yüzey dünyaya göre YATAY, hacim korunur.
+  // Görünüm DOM'un .wsrt-body/.wsrt-layer modelini üretir: düz renk taban +
+  // oda koordinatlı yan speküler + katman içi üst-ışık/alt-gölge + yalnız
+  // farklı renkler arası seam + en üstte menisküs; sonunda TÜM sütunu bağlayan
+  // tek ışık örtüsü (liquid-shade). filter/blend/blur YOK.
+  function wDrawLiquid(c, colors, x, y, w, h, tilt, squash, extraTop) {
+    const n = colors.length;
+    const extraUnits = extraTop && extraTop.units > 0.02 ? extraTop.units : 0;
+    if (!n && !extraUnits) return;
+    const ch = wChamber(x, y, w, h);
+    const cx = ch.x + ch.w / 2, left = ch.x, right = ch.x + ch.w;
+    c.save();
+    // Oda maskesi: sıvı cam siluetine kırpılır (dik konumda kurulur)
+    const r = Math.min(ch.w / 2, ch.h * 0.13);
+    c.beginPath();
+    c.moveTo(left, ch.y);
+    c.lineTo(right, ch.y);
+    c.lineTo(right, ch.y + ch.h - r);
+    c.ellipse(cx, ch.y + ch.h - r, ch.w / 2, r, 0, 0, Math.PI);
+    c.closePath();
+    c.clip();
+    if (tilt) {                       // gövde ters döner → yüzey dünya-yatay, hacim korunur
+      c.translate(x + w / 2, y + h);
+      c.rotate(-tilt * Math.PI / 180);
+      c.scale(1, squash || 1);
+      c.translate(-(x + w / 2), -(y + h));
+    }
+    const lh = ch.h * (LAYER_PCT / 100);
+    const over = ch.w * 3.4;          // yatıkken yanlara taşma payı (--wsrt-spill-k)
+    // Segmentler: alttan üste tam katmanlar + (varsa) en üstte kısmi blok.
+    const segs = [];
+    for (let k = 0; k < n; k++) segs.push({ color: colors[k], h: lh });
+    if (extraUnits) segs.push({ color: extraTop.color, h: extraUnits * lh });
+    const bottomY = ch.y + ch.h;
+    let cursor = 0;                   // segmentin altından ölçülen birikimli yükseklik
+    for (let j = 0; j < segs.length; j++) {
+      const seg = segs[j];
+      const segBot = bottomY - cursor, segTop = segBot - seg.h;
+      const isTop = j === segs.length - 1;
+      const downExt = j === 0 ? ch.w * 0.72 : 0;   // yatık dip köşesi (DOM: 0 64px 0)
+      // 1) düz taban (+ yan taşma, + dip uzantısı)
+      c.fillStyle = wCol(seg.color, 'base');
+      c.fillRect(left - over, segTop, ch.w + over * 2, seg.h + 1 + downExt);
+      // 2) yan speküler — yalnız oda genişliğinde: kenarlar parlak, orta berrak
+      const sg = c.createLinearGradient(left, 0, right, 0);
+      sg.addColorStop(0, 'rgba(255,255,255,.30)');
+      sg.addColorStop(0.24, 'rgba(255,255,255,0)');
+      sg.addColorStop(0.76, 'rgba(255,255,255,0)');
+      sg.addColorStop(1, 'rgba(255,255,255,.14)');
+      c.fillStyle = sg; c.fillRect(left, segTop, ch.w, seg.h + 1);
+      // 3) katman içi üst ışık (DOM inset üst highlight)
+      const tHi = Math.min(7, seg.h * 0.4);
+      if (tHi > 0.5) {
+        const tg = c.createLinearGradient(0, segTop, 0, segTop + tHi);
+        tg.addColorStop(0, 'rgba(255,255,255,.42)');
+        tg.addColorStop(1, 'rgba(255,255,255,0)');
+        c.fillStyle = tg; c.fillRect(left - over, segTop, ch.w + over * 2, tHi);
+      }
+      // 4) katman içi alt gölge (DOM inset alt shadow)
+      const bLo = Math.min(9, seg.h * 0.5);
+      if (bLo > 0.5) {
+        const bg = c.createLinearGradient(0, segBot - bLo, 0, segBot);
+        bg.addColorStop(0, 'rgba(0,0,0,0)');
+        bg.addColorStop(1, 'rgba(0,0,0,.28)');
+        c.fillStyle = bg; c.fillRect(left - over, segBot - bLo, ch.w + over * 2, bLo);
+      }
+      // 5) seam — yalnız ALTINDAKİ segment farklı renkse (segmentin alt kenarı)
+      if (j > 0 && segs[j - 1].color !== seg.color) {
+        c.fillStyle = 'rgba(255,255,255,.16)';
+        c.fillRect(left - over, segBot, ch.w + over * 2, 1);
+      }
+      // 6) menisküs — yalnız en üst segment (hava temasındaki içbükey yüzey)
+      if (isTop) {
+        ellipseGlow(c, cx, segTop + 1.5, ch.w * 0.6, 8,
+          [[0, 'rgba(255,255,255,.8)'], [0.62, 'rgba(255,255,255,.22)'], [1, 'rgba(255,255,255,0)']]);
+      }
+      cursor += seg.h;
+    }
+    // 7) Sütun ışık örtüsü (DOM .wsrt-liquid-shade) — TÜM sütuna bir kez;
+    // ayrık segmentleri tek parça sıvıya bağlar. DOM overlay-blend kullanıyordu,
+    // burada alfa ile yaklaşıldı (blend YASAK).
+    const totalH = cursor, colTop = bottomY - totalH;
+    const shg = c.createLinearGradient(0, colTop, 0, bottomY);
+    shg.addColorStop(0, 'rgba(255,255,255,.28)');
+    shg.addColorStop(0.30, 'rgba(255,255,255,.05)');
+    shg.addColorStop(0.52, 'rgba(0,0,0,0)');
+    shg.addColorStop(1, 'rgba(0,0,0,.26)');
+    c.fillStyle = shg; c.fillRect(left - over, colTop, ch.w + over * 2, totalH);
+    c.restore();
+  }
+
+  // Döküş akışı: ağızda geniş, düşerken incelen bir huni (yerçekimiyle hızlanıp
+  // incelen sıvı). Ağız hedefin tam üstünde olduğu için DİKEY. filter/blur YOK;
+  // ortadaki açık şerit camsı çekirdeğin ışığı kırması.
+  function wDrawStream(c, fx) {
+    const x = fx.streamX, y0 = fx.streamTopY, y1 = fx.streamBotY;
+    const wt = 6.5, wb = 3;
+    c.save();
+    c.globalAlpha = fx.streamAlpha;
+    c.fillStyle = wCol(fx.colorIdx, 'base');
+    c.beginPath();
+    c.moveTo(x - wt, y0); c.lineTo(x + wt, y0);
+    c.lineTo(x + wb, y1); c.lineTo(x - wb, y1);
+    c.closePath(); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.5)';
+    c.beginPath();
+    c.moveTo(x - wt * 0.4, y0); c.lineTo(x + wt * 0.4, y0);
+    c.lineTo(x + wb * 0.4, y1); c.lineTo(x - wb * 0.4, y1);
+    c.closePath(); c.fill();
+    c.restore();
+  }
+
+  // ── NEON-JEL TONU, FİLTRESİZ ──
+  // DOM sıvıyı `filter:saturate(1.22) brightness(1.08)` ile ışıtıyordu; canvas'ta
+  // filtre YASAK (ölçülen darboğaz oydu). Aynı dönüşüm burada renklerin İÇİNE
+  // pişiriliyor: sonuç piksel olarak aynı, maliyeti sıfır (bir kez, önbellekli).
+  const GEL_SAT = 1.22, GEL_BRI = 1.08;
+  function wGel(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;      // CSS saturate ekseni
+    const f = v => Math.max(0, Math.min(255, Math.round((lum + (v - lum) * GEL_SAT) * GEL_BRI)));
+    return 'rgb(' + f(r) + ',' + f(g) + ',' + f(b) + ')';
+  }
+  // Jewel token'ından renk (canvas CSS değişkeni okuyamaz). Sonuç önbelleklenir.
+  let WCOL = {};
+  function wCol(idx, kind) {
+    const k = (idx + 1) + '-' + kind;
+    if (WCOL[k]) return WCOL[k];
+    const v = getComputedStyle(document.documentElement)
+      .getPropertyValue('--ph-jewel-' + (idx + 1) + '-' + kind).trim() || '#888';
+    // glow rgba() — dokunma; gövde renkleri jel tonuna alınır.
+    WCOL[k] = kind === 'glow' ? v : wGel(v);
+    return WCOL[k];
+  }
+
+  function wSize() {
+    if (!wcv || !tubesEl) return false;
+    const cssW = tubesEl.clientWidth || tubesEl.getBoundingClientRect().width;
+    if (!cssW) return false;
+    const g = wLayout(cssW);
+    // ── HAREKET ZARFI (padding'li tek canvas) ──
+    // Döküşte kaynak tüp KALKAR, hedefin üstüne GİDER ve 45° YATAR. Canvas
+    // kendi bitmap'ine SERT kırpar; ızgaranın çevresine şeffaf bir "bleed"
+    // payı bırakıyoruz ki taşan tüp kesilmesin. Pay tüp yüksekliğinden türer:
+    // yanlarda ~th·sinθ (yatık gövdenin savrulması), üstte ağız boşluğu +
+    // hafif yükselme, altta yatık dip köşesi.
+    const padX = Math.round(g.th * 0.82);
+    const padTop = Math.round(g.th * 0.42);
+    const padBottom = Math.round(g.th * 0.3);
+    wGeom = Object.assign(g, { padX, padTop, padBottom, gridH: g.cssH });
+    wScale = Math.min(window.devicePixelRatio || 1, 3) * wPickScale();
+    const bmW = g.cssW + padX * 2, bmH = g.cssH + padTop + padBottom;
+    wcv.width = Math.round(bmW * wScale);
+    wcv.height = Math.round(bmH * wScale);
+    wcv.style.width = bmW + 'px';
+    wcv.style.height = bmH + 'px';
+    // Canvas ızgaradan büyük; negatif konumla ızgara yine .wsrt-tubes'un
+    // sol-üstüne hizalanır, pay dışarı taşar (dais overflow gizlemiyor).
+    wcv.style.position = 'absolute';
+    wcv.style.left = -padX + 'px';
+    wcv.style.top = -padTop + 'px';
+    // .wsrt-tubes yüksekliği ızgara kadar kalsın (dais düzeni paya göre kaymasın).
+    tubesEl.style.position = 'relative';
+    tubesEl.style.height = g.cssH + 'px';
+    // Çizim koordinatları ızgara-yerel: (0,0) = ızgara sol-üstü; pay transform'a gömülü.
+    wctx.setTransform(wScale, 0, 0, wScale, padX * wScale, padTop * wScale);
+    wBuildGlass();
+    return true;
+  }
+
+  // Tek çizim noktası. Döküş sırasında rAF'tan, aksi hâlde durum değişince.
+  function wPaint() {
+    if (!wGeom || !wctx) return;
+    // Pay dahil tüm bitmap'i temizle (koordinatlar ızgara-yerel; pay negatifte).
+    wctx.clearRect(-wGeom.padX, -wGeom.padTop, wGeom.cssW + wGeom.padX * 2, wGeom.cssH + wGeom.padTop + wGeom.padBottom);
+    const { tw, th, pos } = wGeom;
+    for (let i = 0; i < tubes.length; i++) {
+      const p = pos[i];
+      if (!p) continue;
+      const fx = wPourFx && wPourFx.from === i ? wPourFx : null;
+      wctx.save();
+      if (fx) wctx.transform(1, 0, 0, 1, fx.dx, fx.dy);
+      if (i === selected && !fx) wctx.translate(0, -14);          // seçili tüp kalkar
+      let tilt = 0, squash = 1;
+      if (fx) {
+        tilt = fx.tilt; squash = fx.squash;
+        wctx.translate(p.x + tw / 2, p.y + th);
+        wctx.rotate(tilt * Math.PI / 180);
+        wctx.translate(-(p.x + tw / 2), -(p.y + th));
+      }
+      // Havuz parıltısı + derinlik gölgesi cam siluetinin ARKASINA. Yalnız
+      // durağan tüpte — hareket eden tüpte glow tilt'e karışmasın (Faz 4).
+      if (!fx) wDrawUnderGlow(wctx, p.x, p.y, tw, th, tubes[i]);
+      if (glassBack) wctx.drawImage(glassBack, p.x, p.y, tw, th);
+      // Döküş sırasında GÖRÜNEN sıvı, durumdan (tubes) değil animasyonun ara
+      // hâlinden gelir: pourState durumu döküş BAŞINDA değiştirdiği için
+      // doğrudan çizmek sıvıyı ışınlar (kaynak bir anda boşalır, hedef dolar).
+      const pf = wPourFx;
+      let colors = tubes[i].colors, extraTop = null;
+      if (pf && pf.drain) {
+        if (i === pf.from) { colors = pf.srcBase; extraTop = { color: pf.colorIdx, units: pf.srcUnits }; }
+        else if (i === pf.to) { colors = pf.dstBase; extraTop = { color: pf.colorIdx, units: pf.dstUnits }; }
+      }
+      wDrawLiquid(wctx, colors, p.x, p.y, tw, th, tilt, squash, extraTop);
+      if (glassFront) wctx.drawImage(glassFront, p.x, p.y, tw, th);
+      // Durum halkası: seçili / geçerli hedef — box-shadow yerine ince kontur
+      const ring = (i === selected) ? 'rgba(190,168,255,.95)'
+        : (selected !== null && selected !== i && canPour(tubes, selected, i, CAP)) ? 'rgba(150,205,255,.75)' : null;
+      if (ring) {
+        wctx.save();
+        wTubePath(wctx, p.x - 1, p.y - 1, tw + 2, th + 2);
+        wctx.strokeStyle = ring; wctx.lineWidth = 2; wctx.stroke();
+        wctx.restore();
+      }
+      wctx.restore();
+    }
+    // Akış en üstte: kaynağın ağzından hedefin sıvı yüzeyine düşer.
+    if (wPourFx && wPourFx.streamAlpha > 0) wDrawStream(wctx, wPourFx);
+  }
+
+  // Dokunulan tüpü bul (DOM yerine geometriden).
+  function wHit(clientX, clientY) {
+    if (!wGeom || !wcv) return -1;
+    const r = wcv.getBoundingClientRect();
+    // Canvas pay kadar sola/yukarı taştığı için ızgara-yerel koordinata çevir.
+    const x = clientX - r.left - wGeom.padX, y = clientY - r.top - wGeom.padTop;
+    const { tw, th, pos } = wGeom;
+    for (let i = 0; i < pos.length; i++) {
+      const p = pos[i];
+      // Dokunma hedefi kasten cömert: tüp dar, parmak geniş.
+      if (x >= p.x - 4 && x <= p.x + tw + 4 && y >= p.y - 6 && y <= p.y + th + 6) return i;
+    }
+    return -1;
+  }
+
   function render() {
     wrapEl.innerHTML = `
       <div class="wsrt-bar">
@@ -6352,35 +6737,43 @@ PuzzleGames.waterSort = (() => {
           <button class="wsrt-icon-btn" id="wsrt-restart" title="Yeniden Başlat">🔄</button>
         </div>
       </div>
-      <div class="wsrt-dais"><div class="wsrt-tubes"></div></div>
+      <div class="wsrt-dais"><div class="wsrt-tubes"><canvas class="wsrt-cv"></canvas></div></div>
     `;
     tubesEl = wrapEl.querySelector('.wsrt-tubes');
-    tubesEl.style.setProperty('--wsrt-n', tubes.length);
-    tubes.forEach((tube,i) => tubesEl.appendChild(buildTubeEl(tube,i)));
-    phStaggerIn(tubesEl.children, 35);
+    wcv = wrapEl.querySelector('.wsrt-cv');
+    wctx = wcv.getContext('2d');
+    WCOL = {};
+    const boot = () => { if (wSize()) wPaint(); else requestAnimationFrame(boot); };
+    boot();
+    // ── DOKUNMA: pointerdown, click DEĞİL ──
+    // Mobil WebView 'click'i, hareketin kaydırma/çift-dokunma olmadığına karar
+    // verene kadar geciktirir; oyuncu bunu "tıklamayı anında algılamıyor" diye
+    // hisseder. pointerdown parmak değdiği kare tepki verir.
+    // Döküş kilidi (~700ms) boyunca gelen dokunuş DÜŞÜRÜLMEZ, tamponlanır —
+    // Block'ta öğrenilen kural (bkz. CLAUDE.md §5). Bayat tamponu oynamamak
+    // için tazelik penceresi var: kilit uzun sürerse dokunuş iptal olur.
+    wcv.style.touchAction = 'manipulation';   // 300ms çift-dokunma beklemesini kaldırır
+    addEv(wcv, 'pointerdown', (e) => {
+      const i = wHit(e.clientX, e.clientY);
+      if (i < 0) return;
+      if (animating) { wPendingTap = { i, t: performance.now() }; return; }
+      onTapTube(i);
+    });
     addEv(wrapEl.querySelector('#wsrt-undo'), 'click', undoLast);
     addEv(wrapEl.querySelector('#wsrt-restart'), 'click', restartLevel);
+    addEv(window, 'resize', () => { if (wSize()) wPaint(); });
     updateControlsBar();
   }
 
   // ═══════════ ETKİLEŞİM ═══════════
-  function updateValidTargets() {
-    Array.prototype.forEach.call(tubesEl.children, (el, j) => {
-      el.classList.toggle('valid-target', selected !== null && selected !== j && canPour(tubes, selected, j, CAP));
-    });
-  }
+  // Gecerli hedef halkasi artik wPaint icinde ciziliyor (DOM sinifi yok).
+  function updateValidTargets() { wPaint(); }
   function select(i) {
-    if (selected !== null) tubesEl.children[selected]?.classList.remove('selected');
     selected = i;
-    tubesEl.children[i].classList.add('selected');
-    updateValidTargets();
+    wPaint();
     GameAudio.play('tap'); GameAudio.haptic('micro');
   }
-  function deselect() {
-    if (selected !== null) tubesEl.children[selected]?.classList.remove('selected');
-    selected = null;
-    updateValidTargets();
-  }
+  function deselect() { selected = null; wPaint(); }
   function onTapTube(i) {
     if (animating) return;
     const tube = tubes[i];
@@ -6392,7 +6785,9 @@ PuzzleGames.waterSort = (() => {
     if (canPour(tubes, selected, i, CAP)) {
       doPour(selected, i);
     } else if (tube.colors.length) {
-      phShake(tubesEl.children[i]);
+      // Gecersiz hedef: DOM shake yerine sadece secim geri bildirimi
+      // (canvas'ta tek tup sallamak ayri bir animasyon isterdi — Faz 2).
+      GameAudio.haptic('soft');
       select(i);
     } else {
       deselect();
@@ -6411,15 +6806,14 @@ PuzzleGames.waterSort = (() => {
     { upTo: 4, sfx: 'combo3', haptic: 'combo3' },
     { upTo: 7, sfx: 'combo5', haptic: 'combo5' },
   ];
-  function tubeSolvedFeedback(el, x, y) {
+  function tubeSolvedFeedback(idx, x, y) {
     comboCount++;
-    el.classList.remove('wsrt-tube-solved'); void el.offsetWidth; el.classList.add('wsrt-tube-solved');
     phParticleBurst(document.body, x, y, 'var(--ph-success)', 10);
     // İlk tüp zaten büyük bir ödül — seri yazısı ancak ikinciden itibaren.
     if (comboCount < 2) { GameAudio.play('star'); GameAudio.haptic('star'); return; }
     const step = COMBO_SFX.find(s => comboCount <= s.upTo) || { sfx: 'combo8', haptic: 'record' };
     GameAudio.play(step.sfx); GameAudio.haptic(step.haptic);
-    const r = tubesEl.getBoundingClientRect();
+    const r = wcv.getBoundingClientRect();
     phFloatText(wrapEl, `Seri x${comboCount}! 🔥`, r.left + r.width/2, r.top - 12, 'var(--ph-success)');
   }
   // Gerçek bir dökülme: kaynak ağzından hedefin ağzına düşen, yerçekimiyle
@@ -6543,91 +6937,111 @@ PuzzleGames.waterSort = (() => {
   // (bkz. streamDuration) — hedef ne kadar boşsa akış o kadar uzun sürer.
   const POUR_TRAVEL_MS = 200;
   const POUR_RETURN_MS = 190;
+  // ── DÖKÜŞ (canvas, Sprint 4) ──
+  // Dizi ve zamanlama DOM sürümünden korundu: tüp KALKAR ve hedefin üstüne
+  // GİDER (travel) → sıvı AKAR (stream) → tüp yerine DÖNER (return).
+  // "Önce tepki, sonra sonuç": dokunuş anında tüp harekete geçer.
+  // Fark: hepsi tek bir rAF döngüsünde canvas'a çiziliyor; hareket eden tüpün
+  // üzerinde filter/blend/blur YOK (ölçülen darboğaz buydu).
   function doPour(from, to) {
-    const colorIdx = topRun(tubes[from]).color;
+    const run = topRun(tubes[from]);
+    const colorIdx = run.color;
+    // Dökme ÖNCESİ hâller — pourState durumu ANINDA değiştirir, oysa animasyon
+    // boyunca çizilmesi gereken şey aradaki geçiş. Kaynağın altta KALAN kısmı
+    // ve hedefin dökmeden ÖNCEKİ içeriği, durum değişmeden önce donduruluyor
+    // (aktarılacak miktar pourState'in kendi formülü: run ∩ hedefteki boşluk).
+    const willMove = Math.min(run.count, CAP - tubes[to].colors.length);
+    const srcBase = tubes[from].colors.slice(0, tubes[from].colors.length - willMove);
+    const dstBase = tubes[to].colors.slice();
     const count = pourState(tubes, from, to, CAP);
-    const fromEl = tubesEl.children[from];
-    const toEl = tubesEl.children[to];
-    const jewelColor = `var(--ph-jewel-${colorIdx+1}-base)`;
     const scoreDelta = count * 10;
 
-    // pourState `tubes`'u ANINDA değiştirir, applyPourDOM ise akış bitince
-    // çalışır. Bu aralıkta girdi açık kalırsa ikinci bir hamle, DOM'u henüz
-    // güncellenmemiş bir tahta üzerinde işlem yapar (durum ile DOM ayrışır).
-    // Dökmeler zaten sıralıdır (bkz. WATER_SORT.md §17) — tüm dizi boyunca kilitle.
+    // pourState tubes'u ANINDA değiştirir; animasyon boyunca girdi kilitli
+    // kalmazsa ikinci hamle yarı-güncel durum üzerinde işlem yapar.
     animating = true;
     score += scoreDelta;
     history.push({from, to, count, colorIdx, scoreDelta});
     updateGameScore(score);
 
-    // Dönüşüm, tüpler HENÜZ hareketsizken çözülür — hem kaynak hem hedef
-    // dik ve yerli yerinde, yani ölçüm her zaman temiz.
-    const { css: travelCss, mouth, tilt, squash } = pourTransform(fromEl, toEl);
-    fromEl.style.zIndex = '5';                       // komşuların üstünden geçsin
-    fromEl.style.transition = `transform ${POUR_TRAVEL_MS}ms var(--ph-ease-decel)`;
-    fromEl.style.transform = travelCss;
-    // Cam yatar, sıvı yatmaz: gövde aynı açıyı ters yönde uygular. İki geçiş
-    // BİLEREK farklı sürede/eğride (bkz. --wsrt-slosh-*) — aradaki fark
-    // sıvının kendi ağırlığıyla geriden gelip savrularak oturması demek.
-    fromEl.classList.add('wsrt-pouring');
-    fromEl.classList.remove('wsrt-returning');   // gidiş eğrisine geri dön
-    fromEl.style.setProperty('--wsrt-tilt', tilt + 'deg');
-    fromEl.style.setProperty('--wsrt-squash', squash.toFixed(4));
-    // Cam ve sıvı ayrı ses kimlikleri alır: tüp kalkar kalkmaz kısa, kristal
-    // bir "snap", sıvı gerçekten akmaya başladığında 'pour' — ses de görsel
-    // "önce tepki, sonra sonuç" sırasını takip eder.
+    const p0 = wGeom.pos[from], p1 = wGeom.pos[to], tw = wGeom.tw, th = wGeom.th;
+    const dir = p1.x >= p0.x ? 1 : -1;
+    const tiltMax = POUR_TILT_DEG * dir;
+    const tiltRad = tiltMax * Math.PI / 180;
+    // DOM pourTransform matematiği BİREBİR: tüp dip-MERKEZinden döner, bu yüzden
+    // ağız yana (th·sinθ) ve yukarı (th·(1-cosθ)) kayar. Bu iki terim İPTAL
+    // edilmezse ağız hedefi ~th·sinθ (≈160px) aşar — eski canvas bug'ı buydu.
+    // Denklem, ağzı hedef merkezinin POUR_MOUTH_GAP üstüne oturtacak şekilde çözülür.
+    const tx = (p1.x - p0.x) - th * Math.sin(tiltRad);
+    const ty = (p1.y - p0.y) - POUR_MOUTH_GAP - th * (1 - Math.cos(tiltRad));
+
     GameAudio.play('snap'); GameAudio.haptic(6);
     deselect();
     updateControlsBar();
 
-    setTimeout(() => {
-      GameAudio.play('pour'); GameAudio.haptic(10);
-      // Akış hedefteki sıvının yüzeyine iner; süre o mesafeden çıkar.
-      // pourState `tubes`'u zaten değiştirdi, bu yüzden dökme ÖNCESİ doluluk
-      // için eklenen birimler geri çıkarılıyor — akışın inmesi gereken yer
-      // hedefin ŞU ANDA görünen seviyesi.
-      const fallY = pourFallY(toEl, tubes[to].colors.length - count);
-      const streamMs = streamDuration(fallY - mouth.y);
-      pourStream(mouth, fallY, jewelColor, streamMs);
-      // Sıvı kaynaktan AKARKEN ayrılır, akış bitince değil.
-      drainSource(bodyOf(fromEl), count, streamMs);
-      setTimeout(() => {
-        applyPourDOM(from, to, count, colorIdx);
-        const won = isWin(tubes, CAP);
-        fromEl.style.transition = `transform ${POUR_RETURN_MS}ms var(--ph-ease-standard)`;
-        fromEl.style.transform = '';
-        // Sıvı da doğrulur — yine geriden, yine savrularak. Dönüşte salınımın
-        // kuyruğu tüpün oturmasından ~60ms sonra biter; kilit tüple birlikte
-        // açılır, kuyruk için oyuncuyu bekletmeye gerek yok.
-        // Sınıf, gövdeye dönüş bacağının eğrisini verir (bkz. injectCSS) —
-        // tilt değişmeden ÖNCE eklenmeli, yoksa geçiş eski eğriyle başlar.
-        fromEl.classList.add('wsrt-returning');
-        fromEl.style.setProperty('--wsrt-tilt', '0deg');
-        fromEl.style.setProperty('--wsrt-squash', '1');
-        setTimeout(() => {
-          fromEl.style.zIndex = '';
-          fromEl.style.transition = '';
-          // 'wsrt-returning' BİLEREK burada kaldırılmıyor: gövdenin dönüş
-          // geçişi (220ms) tüpünkinden (190ms) uzun, sınıfı şimdi almak
-          // geçişi tam ortasında farklı bir eğriye çevirirdi. Boşta durması
-          // zararsız (eğri yalnızca tilt değişince iş görür, o da 0'da) —
-          // bir sonraki dökme başlarken temizleniyor.
-          fromEl.classList.remove('wsrt-pouring');
-          // Kilit ancak tüp gerçekten yerine oturunca açılır — bir sonraki
-          // dökmenin ölçümü hareketli bir tüpü yakalamamalı.
-          // Kazanıldıysa hiç açılmaz: tahta kutlama/geçiş boyunca donuk kalır.
-          if (!won) animating = false;
-        }, POUR_RETURN_MS);
+    // Akışın geometrisi: ağız (kaynağın gittiği nokta) hedefin ÜSTÜNDE, akış
+    // hedefteki sıvının O ANKİ yüzeyine iner. Süre mesafeden çıkar (sabit HIZ) —
+    // hedef ne kadar boşsa akış o kadar uzun sürer (DOM streamDuration).
+    const chTo = wChamber(p1.x, p1.y, tw, th);
+    const lhTo = chTo.h * (LAYER_PCT / 100);
+    const mouthX = p1.x + tw / 2, mouthY = p1.y - POUR_MOUTH_GAP;
+    const fallY = chTo.y + chTo.h - dstBase.length * lhTo;
+    const streamMs = streamDuration(Math.max(18, fallY - mouthY));
+    const T1 = POUR_TRAVEL_MS, T2 = T1 + streamMs, T3 = T2 + POUR_RETURN_MS;
+    const t0 = performance.now();
+    let poured = false, sounded = false;
+    const ease = u => 1 - Math.pow(1 - u, 3);
+    const gravity = u => u * u;          // düşen sıvı HIZLANIR (DOM eğrisi)
 
-        const r = toEl.getBoundingClientRect();
-        // İniş "sıçraması" — akışın hedefe değdiği an birkaç damla saçılır.
-        phParticleBurst(document.body, r.left + r.width/2, r.top, jewelColor, 8);
-        phFloatText(wrapEl, `+${scoreDelta}`, r.left + r.width/2, r.top, 'var(--ph-success)');
+    const step = (now) => {
+      const el = now - t0;
+      if (el < T1) {                       // GİDİŞ — tüp kalkar, hedefe gider, yatar
+        const u = ease(el / T1);
+        wPourFx = { from, to, colorIdx, dx: tx * u, dy: ty * u,
+          tilt: tiltMax * u, squash: Math.cos(tiltMax * u * Math.PI / 180),
+          drain: true, srcBase, dstBase, srcUnits: count, dstUnits: 0, streamAlpha: 0 };
+      } else if (el < T2) {                // AKIŞ — kaynak boşalır, hedef dolar
+        if (!sounded) { sounded = true; GameAudio.play('pour'); GameAudio.haptic(10); }
+        const u = (el - T1) / streamMs;
+        // Akışın ÖN UCU yerçekimiyle iner; kuyruk kaynak boşaldıkça gelir.
+        const headY = mouthY + (fallY - mouthY) * Math.min(1, gravity(u) * 1.6);
+        // Hedef, akışın ön ucu YÜZEYE DEĞDİKTEN sonra dolmaya başlar — sıvı
+        // varmadan hedefin yükselmesi "ışınlanma" hissinin ta kendisiydi.
+        const arrive = 1 / 1.6, fill = u <= arrive ? 0 : (u - arrive) / (1 - arrive);
+        wPourFx = { from, to, colorIdx, dx: tx, dy: ty,
+          tilt: tiltMax, squash: Math.cos(tiltMax * Math.PI / 180),
+          drain: true, srcBase, dstBase,
+          srcUnits: count * (1 - u), dstUnits: count * fill,
+          streamAlpha: u > 0.92 ? (1 - u) / 0.08 : 1,   // kuyruk sönümü
+          streamX: mouthX, streamTopY: mouthY, streamBotY: headY };
+        if (!poured && u >= 0.999) { poured = true; onPoured(); }
+      } else if (el < T3) {                // DÖNÜŞ — tüp doğrulur
+        if (!poured) { poured = true; onPoured(); }
+        const u = ease((el - T2) / (T3 - T2)), k = 1 - u;
+        wPourFx = { from, to, colorIdx, dx: tx * k, dy: ty * k,
+          tilt: tiltMax * k, squash: Math.cos(tiltMax * k * Math.PI / 180), streamAlpha: 0 };
+      } else {
+        wPourFx = null; wRaf = 0; wPaint();
+        if (!isWin(tubes, CAP)) { animating = false; wFlushTap(); }
+        return;
+      }
+      wPaint();
+      wRaf = requestAnimationFrame(step);
+    };
 
-        if (isTubeSolved(tubes[to], CAP)) tubeSolvedFeedback(toEl, r.left + r.width/2, r.top + r.height/2);
-        if (won) setTimeout(onLevelComplete, 300);
-      }, streamMs);
-    }, POUR_TRAVEL_MS);
+    function onPoured() {
+      applyPourDOM();
+      const won = isWin(tubes, CAP);
+      const r = wcv.getBoundingClientRect();
+      // Canvas pay kadar taştığı için ekran koordinatına pay eklenir.
+      const cx = r.left + wGeom.padX + p1.x + tw / 2, cy = r.top + wGeom.padTop + p1.y;
+      phParticleBurst(document.body, cx, cy, `var(--ph-jewel-${colorIdx+1}-base)`, 8);
+      phFloatText(wrapEl, `+${scoreDelta}`, cx, cy, 'var(--ph-success)');
+      if (isTubeSolved(tubes[to], CAP)) tubeSolvedFeedback(to, cx, cy + th / 2);
+      if (won) setTimeout(onLevelComplete, 300 + POUR_RETURN_MS);
+    }
+
+    if (wRaf) cancelAnimationFrame(wRaf);
+    wRaf = requestAnimationFrame(step);
   }
   function undoOne(bulk) {
     if (!history.length) return;
