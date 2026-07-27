@@ -2875,11 +2875,11 @@ PuzzleGames.blockPuzzle = (() => {
   }
 
   // ── DIRTY RECTANGLES ──
-  // Roadmap kuralı: tüm board'u yeniden çizme. Yalnızca değişen hücreler
-  // (eski preview + yeni preview + değişen hücreler) yeniden çizilir; geri
-  // kalan cache'te olduğu gibi kalır. prevPreview, son çizilen preview'u
-  // tutar — temizlenecek alan bu.
-  let prevPreview = null, fullRepaint = true;
+  // Roadmap kuralı: tüm board'u yeniden ÇİZME. Bu kural artık cache
+  // tarafında yaşıyor: commitCells yalnızca değişen hücreleri (+8 komşu)
+  // yeniden çizer, 64 hücreyi değil. Görünen tuvale hazır cache görüntüsünü
+  // basmak ise tek bir drawImage — orada dirty-rect yapmak hem daha pahalı
+  // hem de hayalet çerçeve riski taşıyordu (bkz. paintBoard'daki not).
 
   function readJewels() {
     JCOL = [null];
@@ -2918,7 +2918,6 @@ PuzzleGames.blockPuzzle = (() => {
     bctx.setTransform(bufScale, 0, 0, bufScale, 0, 0);
     const cs = (cssW - (G - 1) * GAP) / G;            // hücre boyutu (CSS px)
     geom = { cssW, cs, step: cs + GAP };
-    fullRepaint = true; prevPreview = null;           // buffer sıfırlandı
     _fxOff = null;                                    // düzen değişti → FX ofseti tazelensin
     cellTex = null;                                   // hücre boyutu değişti → sprite'ları yenile
     return true;
@@ -2941,9 +2940,15 @@ PuzzleGames.blockPuzzle = (() => {
   function drawCrystalC(c, px, py, sz, jewel) {
     const col = JCOL[jewel] || JCOL[1];
     const r = sz * 0.14;
-    // dış glow (box-shadow 0 0 9px glow + 0 3px 14px glow) — önce, altına
+    // Dış glow — DAR tutulmak zorunda. DOM karşılığı negatif yayılımlıydı
+    // (0 0 9px -1px, 0 3px 14px -4px), yani hücre sınırının hemen dışında
+    // biterdi. Canvas'a taşırken blur sz*0.34'e (~15px) çıkarılmıştı ve
+    // parıltı KOMŞU HÜCRELERE taşıyordu: kullanıcı bunu "blokların çevresinde
+    // hayalet çerçeve" olarak gördü. Ayrıca payanda (pad) bu geniş parıltıya
+    // göre seçildiğinden her hücre blit'i gereğinden büyüktü (fill-rate).
+    // Dar blur + küçük payanda: halo gider, blit küçülür.
     c.save();
-    c.shadowColor = col.glow; c.shadowBlur = sz * 0.34; c.shadowOffsetY = sz * 0.09;
+    c.shadowColor = col.glow; c.shadowBlur = sz * 0.13; c.shadowOffsetY = sz * 0.05;
     rrect(c, px, py, sz, sz, r); c.fillStyle = col.base; c.fill();
     c.restore();
     c.save();
@@ -3040,7 +3045,9 @@ PuzzleGames.blockPuzzle = (() => {
   function buildCellTextures() {
     cellTex = null;
     if (!geom || !bufScale) return;
-    const pad = Math.max(2, Math.round(geom.cs * 0.35));
+    // Payanda yalnızca DAR dış parıltıyı kapsayacak kadar (bkz. drawCrystalC):
+    // 0.35 iken parıltı komşuya taşıyor ve blit'ler gereksiz büyüyordu.
+    const pad = Math.max(2, Math.round(geom.cs * 0.16));
     const S = Math.round(geom.cs) + pad * 2;
     const mk = (paint) => {
       const c = document.createElement('canvas');
@@ -3119,17 +3126,7 @@ PuzzleGames.blockPuzzle = (() => {
       const t = j ? cellTex.jewels[j] : cellTex.socket;
       if (t) bctx.drawImage(t, x * geom.step - cellTex.pad, y * geom.step - cellTex.pad, cellTex.S, cellTex.S);
     }
-    fullRepaint = true;
     requestPaint();
-  }
-
-  // Bir hücreyi cache'ten geri yükle (preview kalkınca altındaki board görünsün).
-  function restoreCell(y, x) {
-    const px = x * geom.step, py = y * geom.step;
-    const s = geom.step;                       // boşluğu da kapsa: kenar artıkları kalmasın
-    ctx.clearRect(px, py, s, s);
-    ctx.drawImage(boardCache, px * bufScale, py * bufScale, s * bufScale, s * bufScale,
-                  px, py, s, s);
   }
 
   // Bir hücreye preview highlight çiz.
@@ -3144,29 +3141,29 @@ PuzzleGames.blockPuzzle = (() => {
   }
 
   // Tek çizim noktası (yalnızca rAF'tan çağrılır — bkz. requestPaint).
-  // fullRepaint: board değişti (yerleştirme/temizleme/resize) → tam blit.
-  // Aksi hâlde DIRTY: sadece eski preview'u geri yükle + yeni preview'u çiz.
+  // HER KARE TAM BLIT — bilerek. Önceden "kirli dikdörtgen" mantığı vardı:
+  // eski preview hücreleri cache'ten tek tek geri yüklenir, yenileri çizilirdi.
+  // İki sebeple kaldırıldı:
+  //  1) DOĞRULUK: preview'un kendisi 2px'lik bir ÇERÇEVE. Geri yükleme
+  //     defterinin (prevPreview) durumla en ufak sapması ekranda takılı kalmış
+  //     hayalet bir çerçeve bırakır. Kalıntı riskini kökünden kaldırmak,
+  //     birkaç mikrosaniyeden çok daha değerli.
+  //  2) MALİYET: cache ARTIK TEK BİR GÖRÜNTÜ (kristaller commitCells ile
+  //     artımlı işleniyor), yani tam blit = TEK drawImage. Hücre hücre geri
+  //     yükleme 4-5 drawImage yapıyordu — yani dirty-rect burada daha da
+  //     pahalıydı. Pahalı olan tahtayı yeniden ÇİZMEK, hazır görüntüyü
+  //     basmak değil; o kural (bkz. ROADMAP) commitCells'te korunuyor.
   function paintBoard() {
     if (!geom) return;
-    const cur = (drag && drag.previewCells) ? drag.previewCells : null;
-    if (fullRepaint) {
-      ctx.clearRect(0, 0, geom.cssW, geom.cssW);
-      ctx.drawImage(boardCache, 0, 0, geom.cssW, geom.cssW);
-      fullRepaint = false;
-    } else if (prevPreview) {
-      for (const { y, x } of prevPreview) {
-        if (y < 0 || y >= G || x < 0 || x >= G) continue;
-        restoreCell(y, x);
-      }
-    }
-    if (cur) {
+    ctx.clearRect(0, 0, geom.cssW, geom.cssW);
+    ctx.drawImage(boardCache, 0, 0, geom.cssW, geom.cssW);
+    if (drag && drag.previewCells) {
       const ok = drag.valid;
-      for (const { y, x } of cur) {
+      for (const { y, x } of drag.previewCells) {
         if (y < 0 || y >= G || x < 0 || x >= G) continue;
         drawPreviewCell(y, x, ok);
       }
     }
-    prevPreview = cur ? cur.slice() : null;
   }
 
   // Canvas layout'u hazır olana kadar (clientWidth > 0) bekleyip callback'i çağır.
@@ -3474,8 +3471,18 @@ PuzzleGames.blockPuzzle = (() => {
       c.drawImage(t, cx - ex, cy - ey, ex * 2, ey * 2);
       c.restore();
     }});
+    // ÇEKİRDEK korunuyor: darbe karesi bu — patlamanın "vurdu" hissi buradan
+    // geliyor ve 90ms sürüyor.
     mk(core,  Math.min(intensity, 0.92),        90,  0.72, 0.52, 0.52);
-    mk(after, Math.min(intensity * 0.55, 0.5), 300,  0.95, 0.70, 0.55);
+    // ARTÇI KAPALI (ölçüm kararı). Tam ekranı 300ms boyunca dolduruyordu,
+    // yani çekirdekten ÜÇ KAT uzun. A/B ölçümü (A51, aynı termal durum):
+    //   sceneFlash açık  -> yoğun yerleştirme p99 113ms (idle 53)  = +60ms
+    //   sceneFlash kapalı-> yoğun yerleştirme p99  69ms (idle 57)  = +12ms
+    // Yani patlamadaki hissedilen takılmanın büyük kısmı bu iki tam-ekran
+    // dolgusuydu ve maliyetin çoğu uzun süren artçıdaydı. Çekirdek kalınca
+    // darbe korunuyor, süregelen maliyet kalkıyor.
+    // Geri almak: aşağıdaki satırın yorumunu kaldır.
+    // mk(after, Math.min(intensity * 0.55, 0.5), 300,  0.95, 0.70, 0.55);
   }
 
   // ── ŞOK DALGASI ── Tahtadan çıkıp tüm sahneyi kat eden halka.
@@ -4316,7 +4323,8 @@ PuzzleGames.blockPuzzle = (() => {
          eder — "burada bir şey vardı, kullandın" der. Kaybolan bloğun
          yerinde HİÇBİR ŞEY olmaması, yer değiştirmenin ikinci yarısıydı. */
       .bp-slot.spent{box-shadow:inset 0 1px 3px rgba(0,0,0,.55),inset 0 0 18px -4px var(--ph-jewel-1-glow),inset 0 -1px 0 rgba(180,165,255,.06)}
-      .bp-tp{display:grid;gap:2px;cursor:grab;touch-action:none;user-select:none;
+      /* .bp-tp artık bir <canvas> (tek eleman), grid değil. */
+      .bp-tp{display:block;cursor:grab;touch-action:none;user-select:none;
         transition:transform var(--ph-duration-fast) var(--ph-ease-spring),opacity var(--ph-duration-fast)}
       .bp-tp:active{cursor:grabbing}
       .bp-tp.grabbed{opacity:.22;transform:scale(.72)}
@@ -4414,7 +4422,6 @@ PuzzleGames.blockPuzzle = (() => {
   function renderBoard() {
     if (!geom) { if (!sizeCanvas()) return; }
     buildBoardCache();
-    fullRepaint = true;      // board değişti → tam blit (dirty-rect yetmez)
     requestPaint();
   }
 
@@ -4429,16 +4436,16 @@ PuzzleGames.blockPuzzle = (() => {
       slot.className = 'bp-slot' + (p ? '' : ' spent');
       slot.dataset.idx = i;
       if (p) {
-        const tp = document.createElement('div');
+        // Tepsi parçası artık hücre hücre DOM değil, TEK bir canvas —
+        // board ve hayaletle aynı sprite'lardan çizilir (tek malzeme kaynağı).
+        // Eskiden her yenilemede 27'ye kadar .bp-crystal elemanı doğuyordu
+        // (her biri 4 arka plan katmanı + 5 box-shadow + ::after) ve tepsi
+        // her 3 yerleştirmede bir yenileniyor — ölçümde kalan p99
+        // sıçramasının kaynağı buydu. Artık yenileme başına 3 küçük canvas.
+        const tp = document.createElement('canvas');
         tp.className = 'bp-tp' + (animate ? ' new-in' : '');
         if (animate) tp.style.animationDelay = (i*70)+'ms';
-        tp.style.gridTemplateColumns = `repeat(${p.shape[0].length},1fr)`;
-        p.shape.forEach(r => r.forEach(v => {
-          const c = document.createElement('div');
-          c.className = 'bp-tc' + (v ? ' on bp-crystal' : '');
-          if (v) c.style.cssText = jewelVars(p.jewel);
-          tp.appendChild(c);
-        }));
+        drawTrayPiece(tp, p);
         slot.appendChild(tp);
       }
       // Dinleyici PARÇANIN değil YUVANIN üzerinde. İki sebep — ikisi de
@@ -4460,6 +4467,31 @@ PuzzleGames.blockPuzzle = (() => {
       addEv(slot, 'mousedown', onStart);
       trayEl.appendChild(slot);
     });
+  }
+
+  // Tepsi parçasını canvas'a çizer. Hücre boyutu tepsiye sığacak şekilde
+  // seçilir (board hücresinden küçük); sprite'lar board'unkiyle AYNI, sadece
+  // ölçeklenerek basılır — malzeme tek kaynaktan gelmeye devam eder.
+  const TRAY_CELL = 15;                    // CSS px, eski .bp-tc ile aynı
+  function drawTrayPiece(cv2, p) {
+    const cols = p.shape[0].length, rows = p.shape.length;
+    const gap = 2, cs2 = TRAY_CELL, step2 = cs2 + gap;
+    if (!cellTex) buildCellTextures();
+    const t = cellTex && cellTex.jewels[p.jewel];
+    // Sprite payandası hücre boyutuna oranlı; tepsi ölçeğinde de aynı oran.
+    const pad2 = t ? cs2 * (cellTex.pad / geom.cs) : 0;
+    const S2 = cs2 + pad2 * 2;
+    const w = cols * step2 - gap + pad2 * 2, h = rows * step2 - gap + pad2 * 2;
+    const s = Math.min(window.devicePixelRatio || 1, 3);
+    cv2.width = Math.round(w * s); cv2.height = Math.round(h * s);
+    cv2.style.width = w + 'px'; cv2.style.height = h + 'px';
+    const c = cv2.getContext('2d');
+    c.setTransform(s, 0, 0, s, 0, 0);
+    if (!t) return;
+    p.shape.forEach((rw, y) => rw.forEach((v, x) => {
+      if (!v) return;
+      c.drawImage(t, x * step2, y * step2, S2, S2);
+    }));
   }
 
   function renderScoreBar(bump) {
@@ -4632,11 +4664,26 @@ PuzzleGames.blockPuzzle = (() => {
     posGhost(touch.clientX, touch.clientY);
 
     const onMove = (ev) => { ev.preventDefault(); const t=ev.touches?ev.touches[0]:ev; posGhost(t.clientX,t.clientY); showPreview(t.clientX,t.clientY); };
-    const onEnd = () => { document.removeEventListener('touchmove',onMove); document.removeEventListener('touchend',onEnd); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onEnd); dropPiece(); };
-    document.addEventListener('touchmove',onMove,{passive:false});
-    document.addEventListener('touchend',onEnd);
-    document.addEventListener('mousemove',onMove);
-    document.addEventListener('mouseup',onEnd);
+    // touchcancel/pointercancel ŞART — eksikliği "hayalet çerçeve" hatasıydı.
+    // Android WebView, sistem jesti devraldığında (kenar/geri jesti, bildirim
+    // çubuğunu çekme, ikinci parmak, kaydırmanın devralınması) touchcancel
+    // gönderir ve o durumda touchend HİÇ GELMEZ. Yalnızca touchend dinlenince
+    // sürükleme sonsuza kadar açık kalıyordu: drag null olmadığı için önizleme
+    // her karede yeniden çiziliyor (ekranda donmuş yeşil/kırmızı çerçeve) ve
+    // tepsi parçası .grabbed ile soluk kalıyordu. Scriptli testlerde hiç
+    // görülmedi çünkü onlar her zaman UP gönderiyor; gerçek parmakla sık.
+    const EV_END = ['touchend', 'touchcancel', 'mouseup', 'pointercancel'];
+    const onEnd = (ev) => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('mousemove', onMove);
+      EV_END.forEach(t => document.removeEventListener(t, onEnd));
+      const cancelled = ev && (ev.type === 'touchcancel' || ev.type === 'pointercancel');
+      dropPiece(cancelled);
+    };
+    document.addEventListener('touchmove', onMove, {passive:false});
+    document.addEventListener('mousemove', onMove);
+    EV_END.forEach(t => document.addEventListener(t, onEnd));
+    drag.end = onEnd;      // güvenlik ağı buradan sonlandırır (bkz. init)
   }
 
   function posGhost(cx, cy) {
@@ -4692,9 +4739,13 @@ PuzzleGames.blockPuzzle = (() => {
     requestPaint();
   }
 
-  function dropPiece() {
+  // cancelled: sürükleme SİSTEM tarafından iptal edildi (touchcancel) —
+  // oyuncu bırakmayı istemedi. Bu durumda taş yerleştirilmez, tepsiye döner:
+  // bildirim çubuğunu çekerken taşını kaybetmek sürpriz olur.
+  function dropPiece(cancelled) {
     if (!drag) return;
-    const {idx, piece, ghost, row, col, valid} = drag;
+    const {idx, piece, ghost, row, col} = drag;
+    const valid = drag.valid && !cancelled;
     ghost.style.display = 'none';   // silinmez, yeniden kullanılır
     clearPreview();
 
@@ -5027,13 +5078,20 @@ PuzzleGames.blockPuzzle = (() => {
     // Ekran dönünce/yeniden boyutlanınca canvas'ı yeniden boyutlandır + çiz.
     // clearEvs() cleanup'ta kaldırır (shared _listeners).
     addEv(window, 'resize', () => { if (sizeCanvas()) { buildBoardCache(); paintBoard(); } fxResize(); });
+
+    // GÜVENLİK AĞI: uygulama arka plana giderse sürükleme takılı kalmasın.
+    // touchcancel çoğu durumu yakalıyor ama sekme/uygulama gizlenmesi ayrı bir
+    // yol — takılı bir drag ekranda donmuş önizleme çerçevesi bırakıyordu.
+    addEv(document, 'visibilitychange', () => {
+      if (document.hidden && drag && drag.end) drag.end({ type: 'touchcancel' });
+    });
   }
 
   function cleanup() {
     bumpHighScore();          // güvenlik ağı; normalde çoktan yazılmış olur
     clearEvs();
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-    needsPaint = false; prevPreview = null; fullRepaint = true; geom = null;
+    needsPaint = false; geom = null;
     fxClear();
     if (fxCv) { fxCv.remove(); fxCv = null; fxCtx = null; fxGeom = null; }
     glowSprite = []; cellTex = null; placingCells = null;
