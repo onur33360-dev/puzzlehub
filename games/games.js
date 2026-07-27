@@ -3053,7 +3053,21 @@ PuzzleGames.blockPuzzle = (() => {
     };
     const jewels = [];
     for (let j = 1; j <= JEWELS; j++) jewels[j] = mk(x => drawCrystalC(x, pad, pad, geom.cs, j));
-    cellTex = { pad, S, socket: mk(x => drawSocketC(x, pad, pad, geom.cs)), jewels };
+    // Hayaletin "havada" gölgesi de sprite: aksi hâlde her TUTMA anında
+    // hücre başına bir shadowBlur çalışıyordu ve tutuş tek karelik bir
+    // sıçrama üretiyordu (ölçüldü: sürüklemede p99 150ms, medyan 34ms —
+    // yani tek seferlik tutuş maliyeti). Böylece shadowBlur etkileşim
+    // yolundan tamamen çıktı; yalnızca sprite üretiminde kalıyor.
+    const shadow = mk(x => {
+      x.save();
+      x.shadowColor = 'rgba(0,0,0,.5)';
+      x.shadowBlur = geom.cs * 0.22; x.shadowOffsetY = geom.cs * 0.16;
+      x.fillStyle = 'rgba(0,0,0,.85)';
+      rrect(x, pad, pad, geom.cs, geom.cs, geom.cs * 0.14);
+      x.fill();
+      x.restore();
+    });
+    cellTex = { pad, S, socket: mk(x => drawSocketC(x, pad, pad, geom.cs)), jewels, shadow };
   }
 
   // Yerleştirme animasyonu süresince ilgili hücreler cache'e YAZILMAZ (soket
@@ -4264,7 +4278,10 @@ PuzzleGames.blockPuzzle = (() => {
          maliyet tamamen GPU'da). "Kaldırma" gölgesi artık hücrelerin
          box-shadow'una gömülü: box-shadow, promoted katmanın raster'ına BİR KEZ
          pişip transform ile kaydırılıyor (filter gibi her kare yeniden çizilmez). */
-      .bp-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:var(--ph-z-floating);display:grid;gap:3px;will-change:transform;transition:none}
+      /* Hayalet artık TEK bir <canvas> (Sprint 3/B): board ile aynı kristal
+         sprite'larından çizilir, gölge canvas'a pişirilir. Bir kez çizilip
+         yalnızca transform ile kaydırılır. */
+      .bp-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:var(--ph-z-floating);display:block;will-change:transform;transition:none}
       .bp-ghost .bp-gc{border-radius:5px;position:relative}
       /* Hayalet de aynı kristal — elindeki taş, tahtadakiyle aynı malzeme
          olmalı. Ek olarak daha güçlü dış parıltı: havada, ışığı serbest. */
@@ -4485,22 +4502,47 @@ PuzzleGames.blockPuzzle = (() => {
     const cs = geom ? geom.cs : (bRect.width - (G - 1) * GAP) / G;
     const originX = bRect.left, originY = bRect.top;
     const cols = p.shape[0].length, rows = p.shape.length;
-    const ghost = document.createElement('div');
-    ghost.className = 'bp-ghost';
-    ghost.style.gridTemplateColumns = `repeat(${cols},${cs}px)`;
-    ghost.style.gap = GAP + 'px';
-    p.shape.flat().forEach(v => {
-      const gc = document.createElement('div');
-      gc.className = 'bp-gc' + (v ? ' on bp-crystal' : '');
-      gc.style.cssText = `width:${cs}px;height:${cs}px;` + (v ? jewelVars(p.jewel) : 'opacity:0;');
-      ghost.appendChild(gc);
-    });
-    document.body.appendChild(ghost);
-
     const ghostW = cols*cs + (cols-1)*GAP;
     const ghostH = rows*cs + (rows-1)*GAP;
 
-    drag = { idx, piece:p, ghost, bRect, cs, originX, originY, ghostW, ghostH, row:-1, col:-1, valid:false, previewCells:null };
+    // ── HAYALET: BOARD İLE AYNI SPRITE (Sprint 3/B) ──
+    // Elindeki taş ile tahtadaki taş AYNI MALZEME olmak zorunda (CLAUDE.md:
+    // "tahta hücresi, tepsi hücresi ve hayalet aynı reçeteyi kullanır").
+    // Kristal cilası canvas sprite'ına girince DOM hayalet geride kalmıştı;
+    // artık hayalet de aynı sprite'lardan çiziliyor — tek malzeme kaynağı.
+    // Hayalet TEK bir canvas: bir kez çizilir, sonra yalnızca transform ile
+    // kaydırılır (compositor-only). Gölge de canvas'a PİŞİRİLİYOR — CSS
+    // filter:drop-shadow her karede yeniden rasterize olurdu.
+    if (!cellTex) buildCellTextures();
+    const gpad = cellTex ? cellTex.pad : 0;
+    const ghost = document.createElement('canvas');
+    ghost.className = 'bp-ghost';
+    const gw = ghostW + gpad * 2, gh = ghostH + gpad * 2;
+    const gs = bufScale || Math.min(window.devicePixelRatio || 1, 3);
+    ghost.width = Math.round(gw * gs); ghost.height = Math.round(gh * gs);
+    ghost.style.width = gw + 'px'; ghost.style.height = gh + 'px';
+    const gctx = ghost.getContext('2d');
+    gctx.setTransform(gs, 0, 0, gs, 0, 0);
+    const step = cs + GAP;
+    if (cellTex && cellTex.jewels[p.jewel]) {
+      // 1. geçiş: "havada" gölgesi — hazır sprite'tan blit (shadowBlur YOK,
+      // bkz. buildCellTextures'taki not: tutuş anında sıçrama üretiyordu)
+      if (cellTex.shadow) {
+        p.shape.forEach((rw, y) => rw.forEach((v, x) => {
+          if (!v) return;
+          gctx.drawImage(cellTex.shadow, x * step, y * step, cellTex.S, cellTex.S);
+        }));
+      }
+      // 2. geçiş: kristaller — board'un TA KENDİSİ olan sprite
+      const t = cellTex.jewels[p.jewel];
+      p.shape.forEach((rw, y) => rw.forEach((v, x) => {
+        if (!v) return;
+        gctx.drawImage(t, x * step, y * step, cellTex.S, cellTex.S);
+      }));
+    }
+    document.body.appendChild(ghost);
+
+    drag = { idx, piece:p, ghost, bRect, cs, originX, originY, ghostW, ghostH, gpad, row:-1, col:-1, valid:false, previewCells:null };
     posGhost(touch.clientX, touch.clientY);
 
     const onMove = (ev) => { ev.preventDefault(); const t=ev.touches?ev.touches[0]:ev; posGhost(t.clientX,t.clientY); showPreview(t.clientX,t.clientY); };
@@ -4519,8 +4561,12 @@ PuzzleGames.blockPuzzle = (() => {
     // kaynağı buydu. translate compositor-only: ghost bir kez rasterize edilip
     // (will-change:transform) yalnızca kaydırılıyor. Ghost position:fixed + left/top:0
     // olduğu için translate doğrudan viewport koordinatı.
+    // Hayalet canvas'ı içerik kutusundan gpad kadar BÜYÜK (parıltı/gölge
+    // hücre sınırının dışına taşıyor), o yüzden konum gpad kadar geri alınır —
+    // yoksa taş parmağa göre sağ-aşağı kayar ve bırakma hedefi şaşar.
+    const gp = drag.gpad || 0;
     drag.ghost.style.transform =
-      'translate(' + (cx - drag.ghostW/2).toFixed(1) + 'px,' + (cy - drag.ghostH - 40).toFixed(1) + 'px)';
+      'translate(' + (cx - drag.ghostW/2 - gp).toFixed(1) + 'px,' + (cy - drag.ghostH - 40 - gp).toFixed(1) + 'px)';
   }
 
   function showPreview(cx, cy) {
