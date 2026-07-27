@@ -3010,13 +3010,19 @@ PuzzleGames.blockPuzzle = (() => {
     cellTex = { pad, S, socket: mk(x => drawSocketC(x, pad, pad, geom.cs)), jewels };
   }
 
+  // Yerleştirme animasyonu süresince ilgili hücreler cache'e YAZILMAZ (soket
+  // olarak kalır); kristali FX katmanı düşürüp oturtur. Animasyon bitince
+  // cache yeniden kurulur ve kristal kalıcı olarak board'a yazılır.
+  let placingCells = null;
+
   // Offscreen cache: tüm board (soketler + kristaller) — board değişince bir kez.
   function buildBoardCache() {
     if (!geom) return;
     if (!cellTex) buildCellTextures();
     bctx.clearRect(0, 0, geom.cssW, geom.cssW);
     for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
-      const px = x * geom.step, py = y * geom.step, j = board[y][x];
+      const px = x * geom.step, py = y * geom.step;
+      const j = (placingCells && placingCells.has(y * G + x)) ? 0 : board[y][x];
       if (cellTex) {
         const t = j ? cellTex.jewels[j] : cellTex.socket;
         if (t) { bctx.drawImage(t, px - cellTex.pad, py - cellTex.pad, cellTex.S, cellTex.S); continue; }
@@ -3201,7 +3207,7 @@ PuzzleGames.blockPuzzle = (() => {
       const el = now - o.t0;
       if (el < 0) continue;                       // gecikmeli efekt henüz başlamadı
       const p = el / o.dur;
-      if (p >= 1) { fxList.splice(i, 1); continue; }
+      if (p >= 1) { fxList.splice(i, 1); if (o.done) o.done(); continue; }
       o.draw(fxCtx, p, now);
     }
     if (fxList.length) fxRaf = requestAnimationFrame(fxTick);
@@ -3213,6 +3219,52 @@ PuzzleGames.blockPuzzle = (() => {
     if (fxCtx && fxGeom) fxCtx.clearRect(0, 0, fxGeom.w, fxGeom.h);
   }
   const easeOut = p => 1 - Math.pow(1 - p, 3);
+
+  // ── YERLEŞTİRME: DÜŞ → EZİL → OTUR (Sprint 3/A) ──
+  // Ağırlık hissi EZİLMEden gelir. Kristal scale(0)'dan büyüseydi "belirdi"
+  // gibi okunurdu, "düştü" gibi değil: sıra kasıtlı — yukarıdan gel (büyük) →
+  // çarpınca ez → geri yaylan → otur. DOM'daki bpPlaceIn tasarımı birebir
+  // korundu (280ms, hücre başına 12ms kademe); tek fark düşüş mesafesinin
+  // sabit -9px yerine hücre boyutuna oranlanması (her ekranda aynı hissetsin).
+  const PLACE_MS = 280, PLACE_STAGGER = 12;
+  function placeAnimState(u) {
+    const ease = t => t * t * (3 - 2 * t);           // smoothstep
+    if (u < 0.45) { const t = ease(u / 0.45); return { ty: -1 + t, s: 1.14 + (0.93 - 1.14) * t, a: 0.5 + 0.5 * t }; }
+    if (u < 0.72) { const t = ease((u - 0.45) / 0.27); return { ty: 0, s: 0.93 + (1.04 - 0.93) * t, a: 1 }; }
+    const t = ease((u - 0.72) / 0.28);
+    return { ty: 0, s: 1.04 + (1 - 1.04) * t, a: 1 };
+  }
+  function fxPlaceIn(cells, jewel) {
+    if (!cellTex) buildCellTextures();
+    if (!cellTex || !geom || !cellTex.jewels[jewel]) { placingCells = null; renderBoard(); return; }
+    const t = cellTex.jewels[jewel], S = cellTex.S;
+    const drop = geom.cs * 0.2;                       // DOM'daki -9px'in oranı
+    const list = cells.map((c, i) => ({ y: c.y, x: c.x, delay: i * PLACE_STAGGER }));
+    const total = PLACE_MS + (list.length - 1) * PLACE_STAGGER;
+    fxAdd({
+      dur: total,
+      draw(c, p, now) {
+        if (!placingCells || !geom || !cellTex) return;
+        const el = now - this.t0;
+        for (const s of list) {
+          const u = (el - s.delay) / PLACE_MS;
+          if (u < 0) continue;                        // sırası gelmedi: soket görünür
+          // Biten hücre OTURMUŞ hâlde çizilmeye devam eder: cache ancak tüm
+          // dizi bitince yazılıyor, aksi hâlde erken biten hücre kaybolurdu.
+          const st = u >= 1 ? { ty: 0, s: 1, a: 1 } : placeAnimState(u);
+          const q = fxCell(s.y, s.x);
+          if (!q) continue;
+          c.save();
+          c.globalAlpha = st.a;
+          c.translate(q.x, q.y + st.ty * drop);
+          c.scale(st.s, st.s);
+          c.drawImage(t, -S / 2, -S / 2, S, S);
+          c.restore();
+        }
+      },
+      done() { placingCells = null; renderBoard(); },
+    });
+  }
 
   // ── ŞARJ (1. VURUŞ) ──
   // Temizlenecek hücreler patlamadan önce beyaza yaklaşır. Beklenti anı;
@@ -4503,10 +4555,16 @@ PuzzleGames.blockPuzzle = (() => {
     // dizisi zaten güncel, ama fonksiyon yalnızca durum okuyor.
     const edges = contactEdges(placedCells);
 
-    // Board güncelle (canvas). place-in "düşme" animasyonu Faz 3'e (cila)
-    // bırakıldı: board cache statik, animasyon için hücrenin cache dışında
-    // tutulup FX katmanında canlandırılması gerek.
-    renderBoard();
+    // Board güncelle (canvas) + DÜŞ→EZİL→OTUR animasyonu (Sprint 3/A).
+    // Konan hücreler animasyon boyunca cache'e yazılmaz (soket kalır),
+    // kristali FX katmanı düşürüp oturtur; bitince cache yeniden kurulur.
+    if (FX) {
+      placingCells = new Set(placedCells.map(c => c.y * G + c.x));
+      renderBoard();
+      fxPlaceIn(placedCells, piece.jewel);
+    } else {
+      renderBoard();
+    }
     renderScoreBar(true);
 
     // ── Yerleştirme enerjisi (Faz 2A) ── Artık canvas FX katmanında.
@@ -4655,6 +4713,13 @@ PuzzleGames.blockPuzzle = (() => {
     const jewelOf = i => jcopy[i];
     const intensity = Math.min(lines.length * 2 + combo, 12);
 
+    // Yerleştirme animasyonunu İPTAL ET. Temizleme kontrolü yerleştirmeden
+    // 90ms sonra çalışıyor, animasyon ise 280ms+ sürüyor — çakışırlar.
+    // İptal edilmezse FX katmanı, tahtadan az sonra silinecek kristalleri
+    // düşürmeye devam eder. Kristaller cache'e hemen yazılıyor (zaten
+    // patlayacaklar), fxPlaceIn'in draw'ı placingCells null olunca susar.
+    if (placingCells) { placingCells = null; renderBoard(); }
+
     // ── 1. VURUŞ: ŞARJ + TUTUŞ ──
     haptic(14);
     if (FX) fxCharge(idxs, 100);
@@ -4786,7 +4851,7 @@ PuzzleGames.blockPuzzle = (() => {
     needsPaint = false; prevPreview = null; fullRepaint = true; geom = null;
     fxClear();
     if (fxCv) { fxCv.remove(); fxCv = null; fxCtx = null; fxGeom = null; }
-    glowSprite = []; cellTex = null;
+    glowSprite = []; cellTex = null; placingCells = null;
     for (const k in _tex) delete _tex[k];
     drag = null; locked = false; pendingGrab = null;
     // Sahne yalnızca bu oyun aktifken duruyor — diğer oyunların koyu-tema
