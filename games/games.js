@@ -6358,7 +6358,12 @@ PuzzleGames.waterSort = (() => {
   // Geri bildirim döngüsü. Döküşün kendi rAF'ı varken ikinci bir döngü açmaz —
   // döküş zaten her kare wPaint çağırıyor, bu animasyonlar onun üstüne biner.
   function wTick(now) {
-    if (!wAnimAlive(now) ) { wFxRaf = 0; wPaint(); return; }
+    if (!wAnimAlive(now)) { wFxRaf = 0; wMarkAll(); wPaint(); return; }
+    // Yalnız canlanan tüpü kirlet — çözüldü nabzı 700ms boyunca TEK tüpü
+    // ilgilendiriyor, tüm sahneyi 42 kare boyunca yeniden çizmek israf.
+    if (wShake) wMarkTube(wShake.idx);
+    if (wSolved) wMarkTube(wSolved.idx);
+    if (wIntro) wMarkAll();
     wPaint();
     wFxRaf = requestAnimationFrame(wTick);
   }
@@ -6479,6 +6484,68 @@ PuzzleGames.waterSort = (() => {
     });
   }
 
+  // ═══════════ SPRITE CACHE + INCREMENTAL UPDATE (Faz 2) ═══════════
+  // Faz 1 doğru görünümü kurdu ama her kare TÜM sahneyi yeniden çiziyordu ve
+  // her katman için gradyan tahsis ediyordu (~100 tahsis/kare). Block'ta
+  // öğrenilen kural: değişmeyen şey yeniden çizilmez, sprite'a pişer.
+  //
+  //   wTubeSpr[i]  — tüpün DİK hâli (cam arka + sıvı + cam ön) tek bitmap.
+  //                  Yalnız o tüpün sıvısı değişince yeniden pişer.
+  //   wGlowSpr[c]  — tüp altı derinlik gölgesi + havuz parıltısı, renk başına.
+  //
+  // Döküşteki İKİ tüp (yatan kaynak + dolan hedef) cache KULLANAMAZ: kaynağın
+  // sıvısı ters dönmek zorunda, hedefinki her kare değişiyor. Onlar yavaş
+  // yoldan çizilir — sahnenin geri kalanı blit.
+  let wTubeSpr = [], wTubeKey = [], wGlowSpr = {};
+  const GLOW_OX = -0.5, GLOW_OY = 0.15, GLOW_W = 2, GLOW_H = 1.15;
+  function wInvalidateSprites() { wTubeSpr = []; wTubeKey = []; wGlowSpr = {}; }
+
+  function wMkCanvas(cssW, cssH) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(cssW * wScale));
+    cv.height = Math.max(1, Math.round(cssH * wScale));
+    const c = cv.getContext('2d');
+    c.setTransform(wScale, 0, 0, wScale, 0, 0);
+    return { cv, c };
+  }
+
+  // Tüpün dik hâli — cache anahtarı sıvı dizisi. Halka/seçim burada DEĞİL
+  // (onlar sık değişir ve ucuzdur, sprite'ı boşuna geçersiz kılarlardı).
+  function wTubeSprite(i) {
+    const sig = tubes[i].colors.join(',');
+    if (wTubeKey[i] === sig && wTubeSpr[i]) return wTubeSpr[i];
+    const { tw, th } = wGeom;
+    const { cv, c } = wMkCanvas(tw, th);
+    if (glassBack) c.drawImage(glassBack, 0, 0, tw, th);
+    wDrawLiquid(c, tubes[i].colors, 0, 0, tw, th, 0, 1, null);
+    if (glassFront) c.drawImage(glassFront, 0, 0, tw, th);
+    wTubeSpr[i] = cv; wTubeKey[i] = sig;
+    return cv;
+  }
+
+  // Tüp altı ışıması — renge bağlı, tüpten geniş. Silüetin DIŞINA taştığı için
+  // tüp sprite'ına giremez, ayrı ve arkada.
+  function wGlowSprite(tube) {
+    const n = tube.colors.length;
+    const key = n ? tube.colors[n - 1] : 'e';
+    if (wGlowSpr[key] !== undefined) return wGlowSpr[key];
+    const { tw, th } = wGeom;
+    const { cv, c } = wMkCanvas(tw * GLOW_W, th * GLOW_H);
+    const x = -GLOW_OX * tw, y = -GLOW_OY * th;     // tüpün sprite içindeki yeri
+    const cx = x + tw / 2;
+    ellipseGlow(c, cx, y + th * 0.99, tw * 0.52, th * 0.055,
+      [[0, 'rgba(3,5,20,.5)'], [0.6, 'rgba(3,5,20,.2)'], [1, 'rgba(3,5,20,0)']]);
+    if (n) {
+      const glow = wCol(tube.colors[n - 1], 'glow');
+      if (glow && glow !== '#888') {
+        ellipseGlow(c, cx, y + th * 0.7, tw * 0.98, th * 0.52,
+          [[0, glow], [0.45, glow], [1, 'rgba(0,0,0,0)']]);
+      }
+    }
+    wGlowSpr[key] = cv;
+    return cv;
+  }
+
   // İç oda (sıvının yaşadığı boşluk) — cam duvarın içi.
   function wChamber(x, y, w, h) {
     return { x: x + WALL, y: y + RIM_H * 0.55, w: w - WALL * 2, h: h - RIM_H * 0.55 - WALL };
@@ -6492,22 +6559,6 @@ PuzzleGames.waterSort = (() => {
     for (const s of stops) g.addColorStop(s[0], s[1]);
     c.fillStyle = g; c.beginPath(); c.arc(0, 0, 1, 0, Math.PI * 2); c.fill();
     c.restore();
-  }
-
-  // Tüpün ARKASINA çizilen derinlik gölgesi + havuz parıltısı — DOM'da
-  // .wsrt-glass'ın box-shadow'uydu (0 18px derinlik + --wsrt-pool renkli glow).
-  // Cam sprite'ı silüetin İÇİNİ boyar; bu ikisi silüetin DIŞINA taşar, ayrı
-  // çizilir. FAZ 2: renk başına sprite'a pişir (Faz 1'de FPS umursanmıyor).
-  function wDrawUnderGlow(c, x, y, w, h, tube) {
-    const cx = x + w / 2;
-    ellipseGlow(c, cx, y + h * 0.99, w * 0.52, h * 0.055,
-      [[0, 'rgba(3,5,20,.5)'], [0.6, 'rgba(3,5,20,.2)'], [1, 'rgba(3,5,20,0)']]);
-    const n = tube.colors.length;
-    if (!n) return;
-    const glow = wCol(tube.colors[n - 1], 'glow');
-    if (!glow || glow === '#888') return;
-    ellipseGlow(c, cx, y + h * 0.7, w * 0.98, h * 0.52,
-      [[0, glow], [0.45, glow], [1, 'rgba(0,0,0,0)']]);
   }
 
   // Bir tüpün SIVISI. Katmanlar `colors` dizisinden (alttan üste) + isteğe
@@ -6683,20 +6734,63 @@ PuzzleGames.waterSort = (() => {
     // Çizim koordinatları ızgara-yerel: (0,0) = ızgara sol-üstü; pay transform'a gömülü.
     wctx.setTransform(wScale, 0, 0, wScale, padX * wScale, padTop * wScale);
     wBuildGlass();
+    wInvalidateSprites();   // geometri/ölçek değişti: tüm pişmiş bitmap'ler bayat
     return true;
+  }
+
+  // ── DIRTY REGION RENDERING (Faz 2) ──
+  // Tüm bitmap'i silip her şeyi yeniden çizmek, hiçbir şey değişmemiş olsa
+  // bile tam sahne bedeli demek. Artık yalnız DEĞİŞEN bölge temizlenir ve
+  // yalnız o bölgeye değen tüpler çizilir. Kirli dikdörtgen ızgara-yerel.
+  let wDirty = null;                 // {x0,y0,x1,y1} | null (=temiz) | 'all'
+  function wMark(x0, y0, x1, y1) {
+    if (wDirty === 'all') return;
+    if (!wDirty) { wDirty = { x0, y0, x1, y1 }; return; }
+    if (x0 < wDirty.x0) wDirty.x0 = x0;
+    if (y0 < wDirty.y0) wDirty.y0 = y0;
+    if (x1 > wDirty.x1) wDirty.x1 = x1;
+    if (y1 > wDirty.y1) wDirty.y1 = y1;
+  }
+  function wMarkAll() { wDirty = 'all'; }
+  // Bir tüpün kapladığı alan — ışıma tüpten geniş, seçim 14px yukarı kalkar.
+  function wMarkTube(i) {
+    if (!wGeom) return wMarkAll();
+    const p = wGeom.pos[i]; if (!p) return;
+    const { tw, th } = wGeom;
+    wMark(p.x + GLOW_OX * tw, p.y - 20, p.x + tw * (GLOW_OX + GLOW_W), p.y + th * GLOW_H);
   }
 
   // Tek çizim noktası. Döküş sırasında rAF'tan, aksi hâlde durum değişince.
   function wPaint() {
     if (!wGeom || !wctx) return;
-    // Pay dahil tüm bitmap'i temizle (koordinatlar ızgara-yerel; pay negatifte).
-    wctx.clearRect(-wGeom.padX, -wGeom.padTop, wGeom.cssW + wGeom.padX * 2, wGeom.cssH + wGeom.padTop + wGeom.padBottom);
+    const full = { x0: -wGeom.padX, y0: -wGeom.padTop,
+                   x1: wGeom.cssW + wGeom.padX, y1: wGeom.cssH + wGeom.padBottom };
+    // Döküş/giriş sırasında hareket zarfı geniş ve sürekli değişiyor; kirli
+    // bölge hesabı orada kazandırmaz, tam sahne daha ucuz ve daha güvenli.
+    const busy = wPourFx || wIntro;
+    const r = (busy || wDirty === 'all' || !wDirty) ? full : {
+      x0: Math.max(full.x0, wDirty.x0 - 2), y0: Math.max(full.y0, wDirty.y0 - 2),
+      x1: Math.min(full.x1, wDirty.x1 + 2), y1: Math.min(full.y1, wDirty.y1 + 2) };
+    wDirty = null;
+    if (r.x1 <= r.x0 || r.y1 <= r.y0) return;
+    wctx.save();
+    wctx.beginPath(); wctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0); wctx.clip();
+    wctx.clearRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    wPaintScene(r);
+    wctx.restore();
+  }
+
+  function wPaintScene(r) {
     const { tw, th, pos } = wGeom;
     const now = performance.now();
     for (let i = 0; i < tubes.length; i++) {
       const p = pos[i];
       if (!p) continue;
       const fx = wPourFx && wPourFx.from === i ? wPourFx : null;
+      // Kirli bölgeye değmeyen tüpü hiç çizme (hareket edenler hariç — onların
+      // zarfı kendi hücrelerinin dışına taşar, o kare zaten tam sahne).
+      if (!fx && (p.x + tw * (GLOW_OX + GLOW_W) < r.x0 || p.x + GLOW_OX * tw > r.x1 ||
+                  p.y + th * GLOW_H < r.y0 || p.y - 20 > r.y1)) continue;
       // Giriş (stagger): tüpler sırayla aşağıdan yükselip belirir.
       let introA = 1, introDy = 0;
       if (wIntro) {
@@ -6723,19 +6817,26 @@ PuzzleGames.waterSort = (() => {
       }
       // Havuz parıltısı + derinlik gölgesi cam siluetinin ARKASINA. Yalnız
       // durağan tüpte — hareket eden tüpte glow tilt'e karışmasın (Faz 4).
-      if (!fx) wDrawUnderGlow(wctx, p.x, p.y, tw, th, tubes[i]);
-      if (glassBack) wctx.drawImage(glassBack, p.x, p.y, tw, th);
+      if (!fx) wctx.drawImage(wGlowSprite(tubes[i]),
+        p.x + GLOW_OX * tw, p.y + GLOW_OY * th, tw * GLOW_W, th * GLOW_H);
       // Döküş sırasında GÖRÜNEN sıvı, durumdan (tubes) değil animasyonun ara
       // hâlinden gelir: pourState durumu döküş BAŞINDA değiştirdiği için
       // doğrudan çizmek sıvıyı ışınlar (kaynak bir anda boşalır, hedef dolar).
       const pf = wPourFx;
-      let colors = tubes[i].colors, extraTop = null;
+      let colors = null, extraTop = null;
       if (pf && pf.drain) {
         if (i === pf.from) { colors = pf.srcBase; extraTop = { color: pf.colorIdx, units: pf.srcUnits }; }
         else if (i === pf.to) { colors = pf.dstBase; extraTop = { color: pf.colorIdx, units: pf.dstUnits }; }
       }
-      wDrawLiquid(wctx, colors, p.x, p.y, tw, th, tilt, squash, extraTop);
-      if (glassFront) wctx.drawImage(glassFront, p.x, p.y, tw, th);
+      if (colors === null && !tilt) {
+        // HIZLI YOL: tüp değişmiyor → pişmiş bitmap'i tek drawImage ile bas.
+        wctx.drawImage(wTubeSprite(i), p.x, p.y, tw, th);
+      } else {
+        // YAVAŞ YOL: yalnız döküşteki iki tüp (yatan kaynak + dolan hedef).
+        if (glassBack) wctx.drawImage(glassBack, p.x, p.y, tw, th);
+        wDrawLiquid(wctx, colors || tubes[i].colors, p.x, p.y, tw, th, tilt, squash, extraTop);
+        if (glassFront) wctx.drawImage(glassFront, p.x, p.y, tw, th);
+      }
       // Durum halkası: çözüldü (altın, tek seferlik nabız) > seçili > geçerli hedef.
       // DOM'da box-shadow'du; burada ince kontur — parıltı sprite'a girmez,
       // çünkü rengi ve nabzı duruma göre değişiyor.
