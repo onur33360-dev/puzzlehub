@@ -147,8 +147,26 @@ Bunun yerine ölçümle bulunan gerçek maliyetler kesildi (aşağıya bak).
    güvenlik ağı eklendi; iptal edilen sürükleme taşı tepsiye geri verir.
 2. **Sprite dış parıltısının taşması** (yukarıda, B geri alımı).
 
-**Ders:** girdi olaylarının iptal yolu (cancel) test edilmiyorsa, otomatik
-testler geçse bile gerçek cihazda kalıcı görsel bozulma üretebilir.
+3. **`commitCells` komşu hücrelerin kenarını siliyordu.** Artımlı cache
+   güncellemesi her hücrenin *payandalı* kutusunu temizliyordu; payanda (~6px)
+   hücreler arası boşluktan (3px) büyük olduğu için temizlik komşunun içine
+   ~3px giriyordu. ±1 komşular yeniden çiziliyordu ama **±2 mesafedeki
+   hücrelerin o şeridi silinip bir daha çizilmiyordu.** Soket yarı saydam
+   olduğu için orada kaide görünüyor → konan taşı saran **daha açık ince bir
+   çerçeve**. Kalınlığı `pad − GAP` olduğundan payanda küçültülünce inceliyor
+   ama kaybolmuyordu. Düzeltme: yalnızca hücrenin kendi dikdörtgenini temizle
+   (glow gittiği için sprite payandası zaten saydam).
+
+**Dersler:**
+- Girdi olaylarının **iptal yolu (cancel)** test edilmiyorsa, otomatik testler
+  geçse bile gerçek cihazda kalıcı görsel bozulma üretebilir.
+- **Ölçüm aracının kör noktası, kodun temiz olduğu yanılgısını üretebilir.**
+  İlk doğrulama testi hücre değişimini yalnızca merkezî 104px'lik alanda
+  ölçüyordu; bozulan şerit hücrenin *kenarındaydı*. "61 hücrede sıfır değişim"
+  sonucu bu yüzden yanıltıcıydı. Bir ölçüm "temiz" diyorsa, önce ölçümün o
+  bölgeyi gerçekten kapsayıp kapsamadığını doğrula.
+- Kullanıcının **"aynı ama daha ince"** gözlemi kök nedeni verdi: artefaktın
+  bir parametreyle *ölçeklenmesi*, o parametrenin suçlu olduğunu söyler.
 
 ---
 
