@@ -98,31 +98,72 @@ zaman görsel kaliteye ayrılıyor.
 
 ---
 
-## Sprint 3 — Görsel Cila (AKTİF)
+## Sprint 3 — Görsel Cila ✅ (kapandı; B geri alındı)
 
-Amaç: Canvas Block Renderer'ın **premium görünümü**. Performans ikinci planda,
-ama **performans bütçesi korunur: yeni blur/filter eklenmez.**
+Amaç premium görünümdü. Sonuç: **görsel cila performansın önüne geçemez** —
+bu sprintin asıl çıktısı bu kural oldu.
 
-### A. Place Animation ← şu an burada
-Blok şu an aniden oturuyor. Yeni davranış: **Drop → Compress → Settle**.
-(DOM'daki `bpPlaceIn` tasarımı referans: yukarıdan gel `-9px scale(1.14)` →
-çarpınca ez `scale(.93)` → yaylan `scale(1.04)` → otur; 280ms, hücre başına
-12ms kademe.)
+### A. Place Animation — yazıldı, sonra ürün kararıyla kapatıldı
+`bpPlaceIn` tasarımı (düş `scale(1.14)` → ez `.93` → yayla `1.04` → otur,
+280ms, hücre başına 12ms kademe) canvas'a taşındı. Gereksiz bulunup kapatıldı;
+kod duruyor, geri almak tek satır (`placePiece` içindeki `commitCells`
+çağrısını `fxPlaceIn` ile değiştir).
 
-### B. Crystal Polish
-Sprite sistemi korunur. Eklenecek: iç parıltı, hafif bevel, küçük sparkle,
-ince highlight.
+### B. Crystal Polish — GERİ ALINDI
+İç parıltı + bevel + sparkle + dış glow eklendi; **dış glow komşu hücrelere
+taşarak halo/"hayalet çerçeve" üretti ve fill-rate yedi.** Tamamı kaldırıldı,
+sade sprite geri geldi.
 
-### C. Explosion Polish
-Shard, glow, flash, shockwave iyileştirilir — performansı bozmadan.
+**Kural (kalıcı):** bu renderer'da **glow / halo / light-bleed kullanılmaz.**
+Premium his yalnızca **bevel + highlight + faset + sparkle**'dan gelir ve
+hepsi **hücre sınırının içinde** kalır. Gelecek Crystal Polish sıfırdan,
+bu kurala göre yazılacak.
 
-### D. Kod Kalitesi
-Renderer temiz kalır, render ile oyun mantığı ayrı kalır, **oyun mantığı
-değiştirilmez.**
+### C. Explosion Polish — yapılmadı
+Bunun yerine ölçümle bulunan gerçek maliyetler kesildi (aşağıya bak).
+
+### Bu sprintte ölçümle bulunan ve kesilen maliyetler
+- **`sceneFlash` artçısı** — tam ekranı 300ms boyunca dolduruyordu.
+  A/B: flaş açık → yoğun p99 **113ms**; kapalı → **69ms**. Çekirdek (90ms,
+  darbe karesi) korundu, artçı kapatıldı.
+- **`bpNewPiece`'te `filter:brightness`** — tepsi her 3 yerleştirmede
+  yenileniyor ve 27'ye kadar eleman 450ms filtre canlandırıyordu. Kaldırıldı.
+- **Çift board cache kurulumu** — yerleştirme başına 2× 64 blit. `commitCells`
+  ile artımlı hâle geldi (~9 blit).
+- **Tepsi DOM kristalleri** → canvas sprite (yenileme başına 27 ağır DOM
+  elemanı yerine 3 küçük canvas).
+- **Hayalet tuvali** her tutuşta yeniden tahsis ediliyordu → yeniden kullanım.
+- **`runePulse` / `daisDischarge`** kapatıldı (istenmeyen görsel + kare
+  başına maliyet).
+
+### Kritik hata: "hayalet çerçeve"
+İki ayrı nedeni vardı:
+1. **`touchcancel` dinlenmiyordu.** Android WebView sistem jesti devraldığında
+   (kenar/geri jesti, bildirim çubuğu, ikinci parmak) `touchcancel` gönderir ve
+   **`touchend` hiç gelmez** → sürükleme sonsuza kadar açık kalır → önizleme
+   her karede yeniden çizilir → ekranda donmuş çerçeve. Scriptli testler her
+   zaman `UP` gönderdiği için ölçümlerde asla görünmedi, yalnızca gerçek
+   oynayışta çıktı. `touchcancel`/`pointercancel` + `visibilitychange`
+   güvenlik ağı eklendi; iptal edilen sürükleme taşı tepsiye geri verir.
+2. **Sprite dış parıltısının taşması** (yukarıda, B geri alımı).
+
+**Ders:** girdi olaylarının iptal yolu (cancel) test edilmiyorsa, otomatik
+testler geçse bile gerçek cihazda kalıcı görsel bozulma üretebilir.
 
 ---
 
-## Sprint 4 — Water Sort → Canvas
+## Block — DURUM: ÜRETİME HAZIR, GELİŞTİRME DURDU
+
+Block artık "mükemmel" yapılmaya çalışılmayacak; stabil, akıcı ve üretime
+hazır. Enerji Water Sort'a aktarılıyor. Block'a yalnızca **hata düzeltmesi**
+yapılır — yeni görsel katman eklenmez.
+
+Ölçüm (A51, SKIN mStatus=1): idle medyan 34ms / p99 48ms · yoğun yerleştirme
+medyan 32ms / p90 40ms / p95 53ms · idle 60fps, board görsel olarak temiz.
+
+---
+
+## Sprint 4 — Water Sort → Canvas (SIRADAKİ)
 
 Mevcut darboğaz: blur, filter, compositing, cam efektleri, sıvı animasyonu.
 Ölçülen davranış: döküşte ~46fps'e düşüyor, en kötü kare 117ms; UI iş parçacığı
