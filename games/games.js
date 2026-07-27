@@ -2920,6 +2920,7 @@ PuzzleGames.blockPuzzle = (() => {
     geom = { cssW, cs, step: cs + GAP };
     fullRepaint = true; prevPreview = null;           // buffer sıfırlandı
     _fxOff = null;                                    // düzen değişti → FX ofseti tazelensin
+    cellTex = null;                                   // hücre boyutu değişti → sprite'ları yenile
     return true;
   }
 
@@ -2981,13 +2982,46 @@ PuzzleGames.blockPuzzle = (() => {
     c.restore();
   }
 
+  // ── HÜCRE SPRITE'LARI ──
+  // drawCrystalC pahalı: shadowBlur (canvas'ın en yavaş işlemlerinden biri)
+  // + 4 gradyan + yol dolgusu. Cache'i her yerleştirmede 64 kez bu şekilde
+  // kurmak, yerleştirme/temizleme anında görünür bir takılma üretiyordu
+  // (ölçüldü A51, soğuk cihaz: yerleştirme oturumunda p99 150ms, idle 48ms).
+  // Artık her mücevher BİR KEZ kendi sprite'ına çiziliyor; cache kurulumu
+  // 64 karmaşık çizim yerine 64 blit. shadowBlur kare başına 64 → toplam 8.
+  // Sprite'ta payanda (pad) var çünkü glow hücre sınırının dışına taşıyor.
+  let cellTex = null;
+  function buildCellTextures() {
+    cellTex = null;
+    if (!geom || !bufScale) return;
+    const pad = Math.max(2, Math.round(geom.cs * 0.35));
+    const S = Math.round(geom.cs) + pad * 2;
+    const mk = (paint) => {
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(S * bufScale));
+      c.height = c.width;
+      const x = c.getContext('2d');
+      x.setTransform(bufScale, 0, 0, bufScale, 0, 0);
+      paint(x);
+      return c;
+    };
+    const jewels = [];
+    for (let j = 1; j <= JEWELS; j++) jewels[j] = mk(x => drawCrystalC(x, pad, pad, geom.cs, j));
+    cellTex = { pad, S, socket: mk(x => drawSocketC(x, pad, pad, geom.cs)), jewels };
+  }
+
   // Offscreen cache: tüm board (soketler + kristaller) — board değişince bir kez.
   function buildBoardCache() {
     if (!geom) return;
+    if (!cellTex) buildCellTextures();
     bctx.clearRect(0, 0, geom.cssW, geom.cssW);
     for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
-      const px = x * geom.step, py = y * geom.step;
-      if (board[y][x]) drawCrystalC(bctx, px, py, geom.cs, board[y][x]);
+      const px = x * geom.step, py = y * geom.step, j = board[y][x];
+      if (cellTex) {
+        const t = j ? cellTex.jewels[j] : cellTex.socket;
+        if (t) { bctx.drawImage(t, px - cellTex.pad, py - cellTex.pad, cellTex.S, cellTex.S); continue; }
+      }
+      if (j) drawCrystalC(bctx, px, py, geom.cs, j);
       else drawSocketC(bctx, px, py, geom.cs);
     }
   }
@@ -4640,7 +4674,17 @@ PuzzleGames.blockPuzzle = (() => {
         sceneFlash(jewel, power);
         shockwave(jewel);
         phAtmosphereFlare(atmoEl, 1.9 + Math.min(combo,4)*0.35, 520);
-        lines.forEach(l => { axisSweep(l, jewel); lightColumn(l, jewel); });
+        // IŞIK SÜTUNU KAPALI (ürün kararı, 2026-07-26). Sert kenarlı dikdörtgen
+        // hatası düzeltildikten sonra katman DOĞRU görünüyordu (yumuşak huzme),
+        // yani bu bir hata değil TASARIM tercihi: sütun patlamanın anlatısına
+        // yeni bir şey katmıyordu ve tek başına en büyük dolgu alanıydı
+        // (satırdan ekranın tepesine, board genişliğinin %82'si) — yani
+        // patlamadaki fill-rate maliyetinin en büyük tek kalemi.
+        // Patlama zaten 8 katman taşıyor: flaş, şok dalgası, süpürme, kıymık,
+        // glif, toz, çember, ızgara iletimi.
+        // Geri almak için: aşağıdaki satıra `lightColumn(l, jewel);` ekle —
+        // fonksiyon duruyor ve çalışır durumda, bilerek silinmedi.
+        lines.forEach(l => { axisSweep(l, jewel); });
         screenShake(2.5 + intensity*0.8, 180 + intensity*12);
         const mid = (G - 1) / 2 | 0;
         lines.forEach(l => {
@@ -4742,7 +4786,7 @@ PuzzleGames.blockPuzzle = (() => {
     needsPaint = false; prevPreview = null; fullRepaint = true; geom = null;
     fxClear();
     if (fxCv) { fxCv.remove(); fxCv = null; fxCtx = null; fxGeom = null; }
-    glowSprite = [];
+    glowSprite = []; cellTex = null;
     for (const k in _tex) delete _tex[k];
     drag = null; locked = false; pendingGrab = null;
     // Sahne yalnızca bu oyun aktifken duruyor — diğer oyunların koyu-tema
