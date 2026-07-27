@@ -6547,9 +6547,12 @@ PuzzleGames.waterSort = (() => {
 
   // Tüp altı ışıması — renge bağlı, tüpten geniş. Silüetin DIŞINA taştığı için
   // tüp sprite'ına giremez, ayrı ve arkada.
-  function wGlowSprite(tube) {
-    const n = tube.colors.length;
-    const key = n ? tube.colors[n - 1] : 'e';
+  // topColor: GÖRÜNEN sıvının en üst rengi (null = boş). Durumdan değil
+  // görüntüden beslenmesi kritik — pourState durumu döküş BAŞINDA değiştirdiği
+  // için `tubes[]`den okumak, sıvı daha varmadan hedefi hedef rengine
+  // boyuyordu (DOM'da ışıma sıvı inince değişiyordu).
+  function wGlowSprite(topColor) {
+    const key = topColor === null || topColor === undefined ? 'e' : topColor;
     if (wGlowSpr[key] !== undefined) return wGlowSpr[key];
     const { tw, th } = wGeom;
     const { cv, c } = wMkCanvas(tw * GLOW_W, th * GLOW_H);
@@ -6557,8 +6560,8 @@ PuzzleGames.waterSort = (() => {
     const cx = x + tw / 2;
     ellipseGlow(c, cx, y + th * 0.99, tw * 0.52, th * 0.055,
       [[0, 'rgba(3,5,20,.5)'], [0.6, 'rgba(3,5,20,.2)'], [1, 'rgba(3,5,20,0)']]);
-    if (n) {
-      const glow = wCol(tube.colors[n - 1], 'glow');
+    if (key !== 'e') {
+      const glow = wCol(topColor, 'glow');
       if (glow && glow !== '#888') {
         ellipseGlow(c, cx, y + th * 0.7, tw * 0.98, th * 0.52,
           [[0, glow], [0.45, glow], [1, 'rgba(0,0,0,0)']]);
@@ -6899,10 +6902,6 @@ PuzzleGames.waterSort = (() => {
         wctx.rotate(tilt * Math.PI / 180);
         wctx.translate(-(p.x + tw / 2), -(p.y + th));
       }
-      // Havuz parıltısı + derinlik gölgesi cam siluetinin ARKASINA. Yalnız
-      // durağan tüpte — hareket eden tüpte glow tilt'e karışmasın (Faz 4).
-      if (!fx) wctx.drawImage(wGlowSprite(tubes[i]),
-        p.x + GLOW_OX * tw, p.y + GLOW_OY * th, tw * GLOW_W, th * GLOW_H);
       // Döküş sırasında GÖRÜNEN sıvı, durumdan (tubes) değil animasyonun ara
       // hâlinden gelir: pourState durumu döküş BAŞINDA değiştirdiği için
       // doğrudan çizmek sıvıyı ışınlar (kaynak bir anda boşalır, hedef dolar).
@@ -6918,6 +6917,16 @@ PuzzleGames.waterSort = (() => {
         const s = 0.32 + 0.68 * settleEase(Math.min(1, (now - wSettle.t0) / SETTLE_MS));
         colors = wSettle.base;
         extraTop = { color: wSettle.color, units: wSettle.units * s };
+      }
+      // Havuz parıltısı + derinlik gölgesi cam siluetinin ARKASINA. Yalnız
+      // durağan tüpte — hareket eden tüpte glow tilt'e karışmasın (Faz 4).
+      // Renk GÖRÜNEN sıvıdan alınır: kısmi blok varsa o, yoksa en üst katman.
+      if (!fx) {
+        const vis = colors !== null ? colors : tubes[i].colors;
+        const top = (extraTop && extraTop.units > 0.02) ? extraTop.color
+          : (vis.length ? vis[vis.length - 1] : null);
+        wctx.drawImage(wGlowSprite(top),
+          p.x + GLOW_OX * tw, p.y + GLOW_OY * th, tw * GLOW_W, th * GLOW_H);
       }
       // Sprite yalnız TAM durağan tüp için geçerli: kuyrukta cam dik (tilt 0)
       // ama sıvı hâlâ savruluyor (bodyTilt≠0) — orada sprite salınımı yutardı.
