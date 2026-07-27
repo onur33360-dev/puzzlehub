@@ -6348,12 +6348,16 @@ PuzzleGames.waterSort = (() => {
   let wShake = null;      // {idx, t0}      geçersiz hedef
   let wSolved = null;     // {idx, t0}      tüp çözüldü
   let wIntro = null;      // {t0}           seviye açılışı (stagger)
+  let wSettle = null;     // {idx,t0,base,color,units}  inen sıvının oturması
+  const SETTLE_MS = 380;                          // --ph-duration-medium
+  const settleEase = phCubicBezier(.34, 1.56, .64, 1);   // --ph-ease-spring
   const SHAKE_MS = 300, SOLVED_MS = 700, INTRO_MS = 460, INTRO_STEP = 55;
   function wAnimAlive(now) {
     if (wShake && now - wShake.t0 > SHAKE_MS) wShake = null;
     if (wSolved && now - wSolved.t0 > SOLVED_MS) wSolved = null;
     if (wIntro && now - wIntro.t0 > INTRO_MS + tubes.length * INTRO_STEP) wIntro = null;
-    return !!(wShake || wSolved || wIntro);
+    if (wSettle && now - wSettle.t0 > SETTLE_MS) wSettle = null;
+    return !!(wShake || wSolved || wIntro || wSettle);
   }
   // Geri bildirim döngüsü. Döküşün kendi rAF'ı varken ikinci bir döngü açmaz —
   // döküş zaten her kare wPaint çağırıyor, bu animasyonlar onun üstüne biner.
@@ -6363,6 +6367,7 @@ PuzzleGames.waterSort = (() => {
     // ilgilendiriyor, tüm sahneyi 42 kare boyunca yeniden çizmek israf.
     if (wShake) wMarkTube(wShake.idx);
     if (wSolved) wMarkTube(wSolved.idx);
+    if (wSettle) wMarkTube(wSettle.idx);
     if (wIntro) wMarkAll();
     wPaint();
     wFxRaf = requestAnimationFrame(wTick);
@@ -6854,6 +6859,13 @@ PuzzleGames.waterSort = (() => {
       if (pf && pf.drain) {
         if (i === pf.from) { colors = pf.srcBase; extraTop = { color: pf.colorIdx, units: pf.srcUnits }; }
         else if (i === pf.to) { colors = pf.dstBase; extraTop = { color: pf.colorIdx, units: pf.dstUnits }; }
+      } else if (wSettle && wSettle.idx === i) {
+        // OTURMA — inen sıvı %32 ezilmiş gelir, yaylanarak (hafif aşarak) oturur.
+        // DOM'da wsrtSettle keyframe'iydi; burada kısmi blok yüksekliğiyle
+        // aynı şey yapılıyor, ayrı bir mekanizmaya gerek yok.
+        const s = 0.32 + 0.68 * settleEase(Math.min(1, (now - wSettle.t0) / SETTLE_MS));
+        colors = wSettle.base;
+        extraTop = { color: wSettle.color, units: wSettle.units * s };
       }
       // Sprite yalnız TAM durağan tüp için geçerli: kuyrukta cam dik (tilt 0)
       // ama sıvı hâlâ savruluyor (bodyTilt≠0) — orada sprite salınımı yutardı.
@@ -7271,6 +7283,9 @@ PuzzleGames.waterSort = (() => {
 
     function onPoured() {
       applyPourDOM();
+      // İnen sıvı yerine oturur (DOM .wsrt-layer-settle). Akış bitti, durum
+      // uygulandı; görsel olarak son blok ezik gelip yaylanarak yerleşir.
+      wSettle = { idx: to, t0: performance.now(), base: dstBase, color: colorIdx, units: count };
       const won = isWin(tubes, CAP);
       const r = wcv.getBoundingClientRect();
       // Canvas pay kadar taştığı için ekran koordinatına pay eklenir.
@@ -7506,7 +7521,7 @@ PuzzleGames.waterSort = (() => {
     if (wFxRaf) cancelAnimationFrame(wFxRaf);
     wRaf = 0; wFxRaf = 0;
     wPourFx = null; wPendingTap = null;
-    wShake = null; wSolved = null; wIntro = null;
+    wShake = null; wSolved = null; wIntro = null; wSettle = null;
     selected = null;
     wInvalidateSprites();
     glassBack = null; glassFront = null;
