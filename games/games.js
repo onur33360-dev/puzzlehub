@@ -6352,12 +6352,16 @@ PuzzleGames.waterSort = (() => {
   const SETTLE_MS = 380;                          // --ph-duration-medium
   const settleEase = phCubicBezier(.34, 1.56, .64, 1);   // --ph-ease-spring
   const SHAKE_MS = 300, SOLVED_MS = 700, INTRO_MS = 460, INTRO_STEP = 55;
+  const VALID_PULSE_MS = 3000;            // --ph-duration-ambient
   function wAnimAlive(now) {
     if (wShake && now - wShake.t0 > SHAKE_MS) wShake = null;
     if (wSolved && now - wSolved.t0 > SOLVED_MS) wSolved = null;
     if (wIntro && now - wIntro.t0 > INTRO_MS + tubes.length * INTRO_STEP) wIntro = null;
     if (wSettle && now - wSettle.t0 > SETTLE_MS) wSettle = null;
-    return !!(wShake || wSolved || wIntro || wSettle);
+    // Bir tüp seçiliyken geçerli hedef halkaları nabız atar (DOM'da sonsuz CSS
+    // animasyonuydu) — o yüzden seçim de "canlı animasyon" sayılır. Seçim
+    // kalkınca döngü kendiliğinden durur, idle yine tam sıfır.
+    return !!(wShake || wSolved || wIntro || wSettle || selected !== null);
   }
   // Geri bildirim döngüsü. Döküşün kendi rAF'ı varken ikinci bir döngü açmaz —
   // döküş zaten her kare wPaint çağırıyor, bu animasyonlar onun üstüne biner.
@@ -6368,7 +6372,7 @@ PuzzleGames.waterSort = (() => {
     if (wShake) wMarkTube(wShake.idx);
     if (wSolved) wMarkTube(wSolved.idx);
     if (wSettle) wMarkTube(wSettle.idx);
-    if (wIntro) wMarkAll();
+    if (wIntro || selected !== null) wMarkAll();   // nabız tüm geçerli hedeflerde
     wPaint();
     wFxRaf = requestAnimationFrame(wTick);
   }
@@ -6835,7 +6839,14 @@ PuzzleGames.waterSort = (() => {
         const u = (now - wShake.t0) / SHAKE_MS;
         wctx.translate(Math.sin(u * Math.PI * 6) * 7 * (1 - u), 0);
       }
-      if (i === selected && !fx) wctx.translate(0, -14);          // seçili tüp kalkar
+      // Seçili tüp kalkar VE hafifçe büyür (DOM: translateY(-14px) scale(1.04)).
+      // Ölçek dip-merkezden: tüp zeminden kopmuş gibi görünmemeli.
+      if (i === selected && !fx) {
+        wctx.translate(0, -14);
+        wctx.translate(p.x + tw / 2, p.y + th);
+        wctx.scale(1.04, 1.04);
+        wctx.translate(-(p.x + tw / 2), -(p.y + th));
+      }
       // CAM tilt ile döner, SIVI GÖVDESİ bodyTilt ile ters döner. İkisi eşitse
       // yüzey dünyaya göre yatay; gövde geride kalınca fark kadar sapar — DOM'un
       // salınımı (bkz. doPour'daki slosh notu) tam olarak bu farktan doğuyor.
@@ -6890,7 +6901,11 @@ PuzzleGames.waterSort = (() => {
       } else if (i === selected) {
         ring = 'rgba(190,168,255,.95)';
       } else if (selected !== null && selected !== i && canPour(tubes, selected, i, CAP)) {
-        ring = 'rgba(150,205,255,.75)';
+        // Geçerli hedef: camgöbeği halka NABIZ atar (DOM wsrtValidPulse —
+        // opacity 0→1→0, sonsuz). Sabit halka "burası geçerli" der ama
+        // dikkat çekmez; nabız gözü tahtada gezdiren şey.
+        const a = 0.5 - 0.5 * Math.cos(now / VALID_PULSE_MS * Math.PI * 2);
+        ring = 'rgba(150,205,255,' + (0.75 * a).toFixed(3) + ')';
       }
       if (ring) {
         wctx.save();
@@ -6967,6 +6982,7 @@ PuzzleGames.waterSort = (() => {
   function select(i) {
     selected = i;
     wPaint();
+    wKick();                 // geçerli hedef nabzını başlat
     GameAudio.play('tap'); GameAudio.haptic('micro');
   }
   function deselect() { selected = null; wPaint(); }
