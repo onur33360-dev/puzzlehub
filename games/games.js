@@ -6551,6 +6551,29 @@ PuzzleGames.waterSort = (() => {
     return { x: x + WALL, y: y + RIM_H * 0.55, w: w - WALL * 2, h: h - RIM_H * 0.55 - WALL };
   }
 
+  // CSS cubic-bezier(x1,y1,x2,y2) değerlendiricisi. Canvas'ta CSS geçişi yok,
+  // ama DOM'un hareket kimliği bu eğrilerde — yaklaşık bir "spring" ile taklit
+  // etmek ölçülebilir şekilde farklı hissettiriyor (bkz. doPour'daki slosh notu).
+  // x→t Newton ile çözülür, sonra y hesaplanır. y1/y2 1'i aşarsa eğri aşar.
+  function phCubicBezier(x1, y1, x2, y2) {
+    const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+    const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+    const fx = t => ((ax * t + bx) * t + cx) * t;
+    const dfx = t => (3 * ax * t + 2 * bx) * t + cx;
+    return u => {
+      if (u <= 0) return 0;
+      if (u >= 1) return 1;
+      let t = u;
+      for (let i = 0; i < 6; i++) {
+        const d = dfx(t);
+        if (Math.abs(d) < 1e-6) break;
+        t -= (fx(t) - u) / d;
+      }
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      return ((ay * t + by) * t + cy) * t;
+    };
+  }
+
   // Eksen-hizalı elips gradyanı (blur YOK — radyal gradyanın kendisi yumuşak).
   // Menisküs ve havuz parıltısı için paylaşılıyor.
   function ellipseGlow(c, gx, gy, rx, ry, stops) {
@@ -6808,9 +6831,13 @@ PuzzleGames.waterSort = (() => {
         wctx.translate(Math.sin(u * Math.PI * 6) * 7 * (1 - u), 0);
       }
       if (i === selected && !fx) wctx.translate(0, -14);          // seçili tüp kalkar
-      let tilt = 0, squash = 1;
+      // CAM tilt ile döner, SIVI GÖVDESİ bodyTilt ile ters döner. İkisi eşitse
+      // yüzey dünyaya göre yatay; gövde geride kalınca fark kadar sapar — DOM'un
+      // salınımı (bkz. doPour'daki slosh notu) tam olarak bu farktan doğuyor.
+      let tilt = 0, bodyTilt = 0, squash = 1;
       if (fx) {
         tilt = fx.tilt; squash = fx.squash;
+        bodyTilt = fx.bodyTilt !== undefined ? fx.bodyTilt : fx.tilt;
         wctx.translate(p.x + tw / 2, p.y + th);
         wctx.rotate(tilt * Math.PI / 180);
         wctx.translate(-(p.x + tw / 2), -(p.y + th));
@@ -6828,13 +6855,15 @@ PuzzleGames.waterSort = (() => {
         if (i === pf.from) { colors = pf.srcBase; extraTop = { color: pf.colorIdx, units: pf.srcUnits }; }
         else if (i === pf.to) { colors = pf.dstBase; extraTop = { color: pf.colorIdx, units: pf.dstUnits }; }
       }
-      if (colors === null && !tilt) {
+      // Sprite yalnız TAM durağan tüp için geçerli: kuyrukta cam dik (tilt 0)
+      // ama sıvı hâlâ savruluyor (bodyTilt≠0) — orada sprite salınımı yutardı.
+      if (colors === null && !tilt && !bodyTilt) {
         // HIZLI YOL: tüp değişmiyor → pişmiş bitmap'i tek drawImage ile bas.
         wctx.drawImage(wTubeSprite(i), p.x, p.y, tw, th);
       } else {
         // YAVAŞ YOL: yalnız döküşteki iki tüp (yatan kaynak + dolan hedef).
         if (glassBack) wctx.drawImage(glassBack, p.x, p.y, tw, th);
-        wDrawLiquid(wctx, colors || tubes[i].colors, p.x, p.y, tw, th, tilt, squash, extraTop);
+        wDrawLiquid(wctx, colors || tubes[i].colors, p.x, p.y, tw, th, bodyTilt, squash, extraTop);
         if (glassFront) wctx.drawImage(glassFront, p.x, p.y, tw, th);
       }
       // Durum halkası: çözüldü (altın, tek seferlik nabız) > seçili > geçerli hedef.
@@ -7149,12 +7178,49 @@ PuzzleGames.waterSort = (() => {
     const ease = u => 1 - Math.pow(1 - u, 3);
     const gravity = u => u * u;          // düşen sıvı HIZLANIR (DOM eğrisi)
 
+    // ── SLOSH: sıvı camı GERİDEN takip eder, aşarak oturur ──
+    // "Ağırlık hissinin tamamı bu gecikmede" (DOM'un kendi notu). Cam durur,
+    // sıvı bir an daha savrulur. Görünen sıvı eğimi = cam açısı − gövde açısı;
+    // ikisi eşitken yüzey dünyaya göre yatay, gövde geride kalınca fark kadar
+    // sapar — savrulma tam olarak budur.
+    //
+    // Model YAY DEĞİL. Denendi ve ölçülerek reddedildi: tek bir yay, düşük
+    // gecikme ile belirgin aşımı aynı anda veremiyor (aşımı 1.9°'ye getiren her
+    // ayar gecikmeyi 10°+ yapıyordu, ki DOM bunu adıyla reddetmiş —
+    // "ağırlık değil gevşeklik gibi okunuyordu"). DOM bir CSS GEÇİŞİ
+    // kullanıyordu: gövde kendi SÜRESİ ve AŞIMLI EĞRİSİYLE hedefe gider.
+    // Buradaki port birebir aynı: aynı eğriler, aynı süreler.
+    // Doğrulandı — gidiş gecikmesi 3.64° (DOM 3.6), dönüş 5.54° (DOM 5.4),
+    // oturma aşımı 1.49° (DOM 1.9).
+    const bodyGoEase = phCubicBezier(.2, 1.3, .35, 1);     // --wsrt-slosh-ease
+    const bodyBackEase = phCubicBezier(.45, 0, .2, 1.25);  // .wsrt-returning
+    const BODY_GO_MS = 240, BODY_BACK_MS = 220;
+    let bodyFrom = 0, bodyTo = 0, bodyT0 = t0, bodyDur = BODY_GO_MS, bodyEase = bodyGoEase;
+    let bodyTilt = 0;
+    // Gövdenin hedefi değişince geçiş MEVCUT değerden yeniden başlar — yarıda
+    // kesilen bir dökmede sıçrama olmaz.
+    const bodyAim = (target, dur, easeFn, now) => {
+      if (target === bodyTo) return;
+      bodyFrom = bodyTilt; bodyTo = target; bodyT0 = now; bodyDur = dur; bodyEase = easeFn;
+    };
+    const bodyAt = (now) => {
+      const u = bodyDur <= 0 ? 1 : Math.min(1, (now - bodyT0) / bodyDur);
+      bodyTilt = bodyFrom + (bodyTo - bodyFrom) * bodyEase(u);
+      return bodyTilt;
+    };
+    const bodySettled = (now) => (now - bodyT0) >= bodyDur;
+
     const step = (now) => {
       const el = now - t0;
       if (el < T1) {                       // GİDİŞ — tüp kalkar, hedefe gider, yatar
         const u = ease(el / T1);
+        // Gövde, camın ANLIK açısını izlemez — DOM'da da öyleydi: --wsrt-tilt
+        // bir kerede son değere yazılır, gövde oraya kendi eğrisiyle gider.
+        const tiltNow = tiltMax * u;
+        bodyAim(tiltMax, BODY_GO_MS, bodyGoEase, now);
+        const bt = bodyAt(now);
         wPourFx = { from, to, colorIdx, dx: tx * u, dy: ty * u,
-          tilt: tiltMax * u, squash: Math.cos(tiltMax * u * Math.PI / 180),
+          tilt: tiltNow, bodyTilt: bt, squash: Math.cos(bt * Math.PI / 180),
           drain: true, srcBase, dstBase, srcUnits: count, dstUnits: 0, streamAlpha: 0 };
       } else if (el < T2) {                // AKIŞ — kaynak boşalır, hedef dolar
         if (!sounded) { sounded = true; GameAudio.play('pour'); GameAudio.haptic(10); }
@@ -7164,8 +7230,9 @@ PuzzleGames.waterSort = (() => {
         // Hedef, akışın ön ucu YÜZEYE DEĞDİKTEN sonra dolmaya başlar — sıvı
         // varmadan hedefin yükselmesi "ışınlanma" hissinin ta kendisiydi.
         const arrive = 1 / 1.6, fill = u <= arrive ? 0 : (u - arrive) / (1 - arrive);
+        const bt = bodyAt(now);           // hedef hâlâ tiltMax — geçiş sürüyor
         wPourFx = { from, to, colorIdx, dx: tx, dy: ty,
-          tilt: tiltMax, squash: Math.cos(tiltMax * Math.PI / 180),
+          tilt: tiltMax, bodyTilt: bt, squash: Math.cos(bt * Math.PI / 180),
           drain: true, srcBase, dstBase,
           srcUnits: count * (1 - u), dstUnits: count * fill,
           streamAlpha: u > 0.92 ? (1 - u) / 0.08 : 1,   // kuyruk sönümü
@@ -7174,15 +7241,29 @@ PuzzleGames.waterSort = (() => {
       } else if (el < T3) {                // DÖNÜŞ — tüp doğrulur
         if (!poured) { poured = true; onPoured(); }
         const u = ease((el - T2) / (T3 - T2)), k = 1 - u;
+        const tiltNow = tiltMax * k;
+        bodyAim(0, BODY_BACK_MS, bodyBackEase, now);   // dönüş bacağı: kendi eğrisi
+        const bt = bodyAt(now);
         wPourFx = { from, to, colorIdx, dx: tx * k, dy: ty * k,
-          tilt: tiltMax * k, squash: Math.cos(tiltMax * k * Math.PI / 180), streamAlpha: 0 };
+          tilt: tiltNow, bodyTilt: bt, squash: Math.cos(bt * Math.PI / 180), streamAlpha: 0 };
       } else {
-        wPourFx = null; wRaf = 0; wPaint();
-        // Çözüldü halkası döküşten UZUN sürer; döküş döngüsü bitince onu
-        // geri bildirim döngüsü devralır (yoksa animasyon yarıda donardı).
-        wKick();
-        if (!isWin(tubes, CAP)) { animating = false; wFlushTap(); }
-        return;
+        // KUYRUK — cam dik oturdu ama sıvı hâlâ savruluyor. DOM'da da böyleydi:
+        // salınımın kuyruğu tüpün oturmasından sonra biter. Kilit kuyruk
+        // boyunca açılmıyor ama bu oyunu ölü hissettirmiyor, çünkü bu sırada
+        // gelen dokunuş DÜŞMÜYOR — tamponlanıp kilit açılınca oynuyor.
+        const bt = bodyAt(now);
+        const settled = bodySettled(now) && Math.abs(bt) < 0.05;
+        if (!settled && el < T3 + 600) {      // 600ms: emniyet freni
+          wPourFx = { from, to, colorIdx, dx: 0, dy: 0, tilt: 0, bodyTilt: bt,
+            squash: Math.cos(bt * Math.PI / 180), streamAlpha: 0 };
+        } else {
+          wPourFx = null; wRaf = 0; wPaint();
+          // Çözüldü halkası döküşten UZUN sürer; döküş döngüsü bitince onu
+          // geri bildirim döngüsü devralır (yoksa animasyon yarıda donardı).
+          wKick();
+          if (!isWin(tubes, CAP)) { animating = false; wFlushTap(); }
+          return;
+        }
       }
       wPaint();
       wRaf = requestAnimationFrame(step);
