@@ -2969,17 +2969,63 @@ PuzzleGames.blockPuzzle = (() => {
     let hg = c.createRadialGradient(px + sz * 0.27, py + sz * 0.21, 0, px + sz * 0.27, py + sz * 0.21, sz * 0.44);
     hg.addColorStop(0, 'rgba(255,255,255,.98)'); hg.addColorStop(0.45, 'rgba(255,255,255,.45)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = hg; c.fillRect(px, py, sz, sz);
-    // 5) keskin parlama çizgisi (::after, 128deg dar bant)
+    // 5) İÇ PARILTI (Sprint 3/B) — taşın İÇİNDE hapsolmuş ışık. Alt-orta'dan
+    //    yukarı doğru sönümlenen sıcak bir yayılım. Değerli taşı "boyalı cam"
+    //    değil "içinde ışık olan cisim" yapan katman; çekirdek karartmasıyla
+    //    (4) birlikte çalışır: merkez koyu ama İÇİ AYDINLIK.
+    let ig = c.createRadialGradient(px + sz * 0.5, py + sz * 0.78, 0, px + sz * 0.5, py + sz * 0.78, sz * 0.62);
+    ig.addColorStop(0, 'rgba(255,255,255,.30)');
+    ig.addColorStop(0.45, hexA(col.hl, 0.16));
+    ig.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = ig; c.fillRect(px, py, sz, sz);
+    // 6) keskin parlama çizgisi (::after, 128deg dar bant)
     let sg = c.createLinearGradient(px + sz * 0.1, py + sz, px + sz * 0.9, py);
     sg.addColorStop(0.30, 'rgba(255,255,255,0)'); sg.addColorStop(0.375, 'rgba(255,255,255,.62)');
     sg.addColorStop(0.41, 'rgba(255,255,255,.14)'); sg.addColorStop(0.46, 'rgba(255,255,255,0)');
     c.fillStyle = sg; c.fillRect(px, py, sz, sz);
+
+    // 7) BEVEL (Sprint 3/B) — pah. Işık sol-üstten geldiği için üst-sol iç
+    //    kenar YAKALAMA IŞIĞI, alt-sağ iç kenar HACIM GÖLGESİ alır. DOM'da
+    //    bunlar box-shadow inset'leriydi. Blur YOK: yumuşaklık, azalan
+    //    alfalı iki ardışık şeritten geliyor (kaydırılmış yolu çizmek,
+    //    kırpma içinde kalan tarafta bir iç şerit bırakır).
+    const bev = (dx, dy, w0, a0, a1) => {
+      c.lineWidth = w0;
+      c.strokeStyle = a0; rrect(c, px + dx, py + dy, sz, sz, r); c.stroke();
+      c.lineWidth = w0 * 2;
+      c.strokeStyle = a1; rrect(c, px + dx * 2, py + dy * 2, sz, sz, r); c.stroke();
+    };
+    const bw = Math.max(1, sz * 0.045);
+    bev(bw, bw, bw, 'rgba(255,255,255,.85)', 'rgba(255,255,255,.16)');    // üst-sol ışık
+    bev(-bw, -bw, bw, 'rgba(0,0,0,.42)', 'rgba(0,0,0,.14)');             // alt-sağ gölge
+
+    // 8) SPARKLE (Sprint 3/B) — fasetlerin buluştuğu noktada dört uçlu
+    //    kısa bir kıvılcım. Kesilmiş taşın imzası; küçük ve tek olmalı,
+    //    çoğaltmak "parlak plastik"e döndürür.
+    const spx = px + sz * 0.27, spy = py + sz * 0.21, sl = sz * 0.30, sw = sz * 0.035;
+    c.fillStyle = 'rgba(255,255,255,.95)';
+    c.beginPath();                                    // dikey iğne
+    c.moveTo(spx, spy - sl); c.lineTo(spx + sw, spy); c.lineTo(spx, spy + sl); c.lineTo(spx - sw, spy);
+    c.closePath(); c.fill();
+    c.beginPath();                                    // yatay iğne (daha kısa)
+    c.moveTo(spx - sl * 0.72, spy); c.lineTo(spx, spy - sw); c.lineTo(spx + sl * 0.72, spy); c.lineTo(spx, spy + sw);
+    c.closePath(); c.fill();
     c.restore();
-    // box-shadow inset 0 0 0 1px beyaz + üst yakalama ışığı (keskin kenar)
+
+    // 9) kenar kırılması — keskin dış çizgi (inset 0 0 0 1px)
     c.save();
     rrect(c, px + 0.5, py + 0.5, sz - 1, sz - 1, r);
     c.strokeStyle = 'rgba(255,255,255,.42)'; c.lineWidth = 1; c.stroke();
     c.restore();
+  }
+
+  // '#rrggbb' + alfa → 'rgba(...)'. Jewel token'ları hex; iç parıltıda
+  // rengin şeffaf tonu gerekiyor.
+  function hexA(hex, a) {
+    const h = (hex || '').trim();
+    if (h[0] !== '#' || h.length < 7) return 'rgba(255,255,255,' + a + ')';
+    const n = parseInt(h.slice(1, 7), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
   // ── HÜCRE SPRITE'LARI ──
