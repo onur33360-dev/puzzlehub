@@ -6351,6 +6351,17 @@ PuzzleGames.waterSort = (() => {
   let wSettle = null;     // {idx,t0,base,color,units}  inen sıvının oturması
   const SETTLE_MS = 380;                          // --ph-duration-medium
   const settleEase = phCubicBezier(.34, 1.56, .64, 1);   // --ph-ease-spring
+  // ── SHEEN: sıvının üstünden süzülen ışık bandı ──
+  // DOM'da sonsuz bir CSS animasyonuydu (9sn'de bir süzülür). Canvas'ta o model
+  // KULLANILMIYOR: sürekli animasyon, tüplerin sonsuza kadar her kare yeniden
+  // çizilmesi demekti ve bu "idle sıfır maliyet" kuralını bozardı
+  // (03_PERFORMANCE_RULES / 04_CANVAS_POLICY). Bunun yerine OLAY TETİKLEMELİ:
+  // seviye açılışı, başarılı döküş ve seçimden sonra BİR KEZ süzülür, biter.
+  // Oyuncu hiçbir şey yapmıyorsa hiçbir şey çizilmez.
+  let wSheen = null;      // {t0}
+  let sheenGrad = null;   // geometriye bağlı, bir kez üretilir
+  const SHEEN_MS = 900;
+  function wSheenGo() { wSheen = { t0: performance.now() }; wKick(); }
   const SHAKE_MS = 300, SOLVED_MS = 700, INTRO_MS = 460, INTRO_STEP = 55;
   const VALID_PULSE_MS = 3000;            // --ph-duration-ambient
   function wAnimAlive(now) {
@@ -6358,10 +6369,11 @@ PuzzleGames.waterSort = (() => {
     if (wSolved && now - wSolved.t0 > SOLVED_MS) wSolved = null;
     if (wIntro && now - wIntro.t0 > INTRO_MS + tubes.length * INTRO_STEP) wIntro = null;
     if (wSettle && now - wSettle.t0 > SETTLE_MS) wSettle = null;
+    if (wSheen && now - wSheen.t0 > SHEEN_MS) wSheen = null;
     // Bir tüp seçiliyken geçerli hedef halkaları nabız atar (DOM'da sonsuz CSS
     // animasyonuydu) — o yüzden seçim de "canlı animasyon" sayılır. Seçim
     // kalkınca döngü kendiliğinden durur, idle yine tam sıfır.
-    return !!(wShake || wSolved || wIntro || wSettle || selected !== null);
+    return !!(wShake || wSolved || wIntro || wSettle || wSheen || selected !== null);
   }
   // Geri bildirim döngüsü. Döküşün kendi rAF'ı varken ikinci bir döngü açmaz —
   // döküş zaten her kare wPaint çağırıyor, bu animasyonlar onun üstüne biner.
@@ -6372,6 +6384,7 @@ PuzzleGames.waterSort = (() => {
     if (wShake) wMarkTube(wShake.idx);
     if (wSolved) wMarkTube(wSolved.idx);
     if (wSettle) wMarkTube(wSettle.idx);
+    if (wSheen) wMarkAll();                       // bant tüm dolu tüplerden geçer
     if (wIntro || selected !== null) wMarkAll();   // nabız tüm geçerli hedeflerde
     wPaint();
     wFxRaf = requestAnimationFrame(wTick);
@@ -6687,6 +6700,34 @@ PuzzleGames.waterSort = (() => {
     c.restore();
   }
 
+  // Sheen bandı — DOM'da en ÜST katmanın içinde yaşıyordu (overflow:hidden ile
+  // ona kırpılıyordu), burada da öyle: bant yalnız en üst katmanın kutusunda
+  // görünür. Gradyan geometriye bağlı olduğu için bir kez üretilip yeniden
+  // kullanılır; kare başına gradyan üretmek yasak (03_PERFORMANCE_RULES).
+  function wDrawSheen(c, x, y, w, h, nUnits, u) {
+    if (nUnits <= 0) return;
+    const ch = wChamber(x, y, w, h);
+    const lh = ch.h * (LAYER_PCT / 100);
+    const topY = ch.y + ch.h - Math.min(CAP, nUnits) * lh;
+    const bandW = ch.w * 0.36;
+    if (!sheenGrad) {
+      sheenGrad = c.createLinearGradient(0, 0, bandW, 0);
+      sheenGrad.addColorStop(0, 'rgba(255,255,255,0)');
+      sheenGrad.addColorStop(0.5, 'rgba(255,255,255,.22)');
+      sheenGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    }
+    // Uçlarda sönümlen: bant birden belirip birden kaybolmasın.
+    const fade = u < 0.15 ? u / 0.15 : u > 0.85 ? (1 - u) / 0.15 : 1;
+    c.save();
+    c.beginPath(); c.rect(ch.x, topY, ch.w, lh); c.clip();
+    c.globalAlpha = fade;
+    c.translate(ch.x - bandW + (ch.w + bandW * 2) * u, topY - lh * 0.1);
+    c.transform(1, 0, -Math.tan(14 * Math.PI / 180), 1, 0, 0);   // skewX(-14deg)
+    c.fillStyle = sheenGrad;
+    c.fillRect(0, 0, bandW, lh * 1.2);
+    c.restore();
+  }
+
   // Döküş akışı: ağızda geniş, düşerken incelen bir huni (yerçekimiyle hızlanıp
   // incelen sıvı). Ağız hedefin tam üstünde olduğu için DİKEY. filter/blur YOK;
   // ortadaki açık şerit camsı çekirdeğin ışığı kırması.
@@ -6849,7 +6890,7 @@ PuzzleGames.waterSort = (() => {
       }
       // CAM tilt ile döner, SIVI GÖVDESİ bodyTilt ile ters döner. İkisi eşitse
       // yüzey dünyaya göre yatay; gövde geride kalınca fark kadar sapar — DOM'un
-      // salınımı (bkz. doPour'daki slosh notu) tam olarak bu farktan doğuyor.
+      // salınımı (bkz. doPour'daki yay) tam olarak bu farktan doğuyor.
       let tilt = 0, bodyTilt = 0, squash = 1;
       if (fx) {
         tilt = fx.tilt; squash = fx.squash;
@@ -6888,6 +6929,13 @@ PuzzleGames.waterSort = (() => {
         if (glassBack) wctx.drawImage(glassBack, p.x, p.y, tw, th);
         wDrawLiquid(wctx, colors || tubes[i].colors, p.x, p.y, tw, th, bodyTilt, squash, extraTop);
         if (glassFront) wctx.drawImage(glassFront, p.x, p.y, tw, th);
+      }
+      // Sheen — olay tetiklemeli tek seferlik süzülme (bkz. wSheen notu).
+      if (wSheen) {
+        const units = colors !== null
+          ? colors.length + (extraTop ? extraTop.units : 0)
+          : tubes[i].colors.length;
+        wDrawSheen(wctx, p.x, p.y, tw, th, units, (now - wSheen.t0) / SHEEN_MS);
       }
       // Durum halkası: çözüldü (altın, tek seferlik nabız) > seçili > geçerli hedef.
       // DOM'da box-shadow'du; burada ince kontur — parıltı sprite'a girmez,
@@ -6953,6 +7001,7 @@ PuzzleGames.waterSort = (() => {
     const boot = () => {
       if (!wSize()) { requestAnimationFrame(boot); return; }
       wIntro = { t0: performance.now() };
+      wSheenGo();          // seviye açılışı: cam bir kez ışığı yakalar
       wKick();
     };
     boot();
@@ -6982,6 +7031,7 @@ PuzzleGames.waterSort = (() => {
   function select(i) {
     selected = i;
     wPaint();
+    wSheenGo();              // seçim: ışık bir kez süzülür
     wKick();                 // geçerli hedef nabzını başlat
     GameAudio.play('tap'); GameAudio.haptic('micro');
   }
@@ -7212,8 +7262,8 @@ PuzzleGames.waterSort = (() => {
     // ikisi eşitken yüzey dünyaya göre yatay, gövde geride kalınca fark kadar
     // sapar — savrulma tam olarak budur.
     //
-    // Model YAY DEĞİL. Denendi ve ölçülerek reddedildi: tek bir yay, düşük
-    // gecikme ile belirgin aşımı aynı anda veremiyor (aşımı 1.9°'ye getiren her
+    // Model YAY DEĞİL. Denendi ve yanlış çıktı: tek bir yay, düşük gecikme ile
+    // belirgin aşımı aynı anda veremiyor (ölçüldü: aşımı 1.9°'ye getiren her
     // ayar gecikmeyi 10°+ yapıyordu, ki DOM bunu adıyla reddetmiş —
     // "ağırlık değil gevşeklik gibi okunuyordu"). DOM bir CSS GEÇİŞİ
     // kullanıyordu: gövde kendi SÜRESİ ve AŞIMLI EĞRİSİYLE hedefe gider.
@@ -7302,6 +7352,7 @@ PuzzleGames.waterSort = (() => {
       // İnen sıvı yerine oturur (DOM .wsrt-layer-settle). Akış bitti, durum
       // uygulandı; görsel olarak son blok ezik gelip yaylanarak yerleşir.
       wSettle = { idx: to, t0: performance.now(), base: dstBase, color: colorIdx, units: count };
+      wSheenGo();          // başarılı döküş: sıvı yerleşirken ışık süzülür
       const won = isWin(tubes, CAP);
       const r = wcv.getBoundingClientRect();
       // Canvas pay kadar taştığı için ekran koordinatına pay eklenir.
@@ -7526,21 +7577,21 @@ PuzzleGames.waterSort = (() => {
   function cleanup() {
     clearEvs();
     // 01_ARCHITECTURE: cleanup() dinleyicileri, rAF döngülerini, zamanlayıcıları
-    // ve DOKULARI bırakmak zorunda. Canvas renderer'ın İKİ döngüsü var ve ikisi
+    // ve DOKULARI bırakmak zorunda. Canvas renderer'ın iki döngüsü var ve ikisi
     // de oyundan çıkarken canlı olabilir:
     //   wRaf   — döküş sürerken çıkılırsa,
-    //   wFxRaf — bir geri bildirim animasyonu (shake/çözüldü/giriş) sürerken.
-    // Bırakılırsa kopmuş bir canvas'a çizmeye devam ederler: hem sızıntı hem
-    // boşa GPU. Sprite'lar da tüp geometrisine bağlı olduğu için serbest
-    // bırakılıyor; sonraki init yeniden pişirir.
+    //   wFxRaf — bir tüp SEÇİLİYKEN çıkılırsa (seçim, geçerli hedef nabzını
+    //            canlı tutuyor; bu döngü kendi başına asla durmazdı).
+    // Bırakılırsa kopmuş bir canvas'a sonsuza kadar çizmeye devam ederler.
     if (wRaf) cancelAnimationFrame(wRaf);
     if (wFxRaf) cancelAnimationFrame(wFxRaf);
     wRaf = 0; wFxRaf = 0;
     wPourFx = null; wPendingTap = null;
-    wShake = null; wSolved = null; wIntro = null; wSettle = null;
+    wShake = null; wSolved = null; wIntro = null; wSettle = null; wSheen = null;
     selected = null;
+    // Dokular: sprite'lar tüp geometrisine bağlı; sonraki init yeniden pişirir.
     wInvalidateSprites();
-    glassBack = null; glassFront = null;
+    glassBack = null; glassFront = null; sheenGrad = null;
     wcv = null; wctx = null; wGeom = null;
     animating = false;
     if (container) container.classList.remove('wsrt-scene');
