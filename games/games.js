@@ -3062,23 +3062,31 @@ PuzzleGames.blockPuzzle = (() => {
   // 8 komşusu; payanda (0.35·cs) bir hücreden kısa olduğu için ±1 yeterli.
   function commitCells(cells) {
     if (!geom || !cellTex) { renderBoard(); return; }
-    const set = new Set();
+    // YALNIZCA HÜCRENİN KENDİ DİKDÖRTGENİ temizlenir — payandalı kutu DEĞİL.
+    //
+    // Eski hâl "hayalet çerçeve" hatasının kaynağıydı: payandalı kutu
+    // (S = cs + 2·pad) temizleniyordu ve payanda (≈6px) hücreler arası
+    // boşluktan (GAP=3px) BÜYÜK olduğu için her temizlik komşu hücrenin
+    // içine ≈3px giriyordu. Komşular (±1) yeniden çiziliyordu ama ±2
+    // mesafedeki hücrelerin o 3px'lik şeridi siliniyor ve BİR DAHA
+    // ÇİZİLMİYORDU. Soket yarı saydam olduğu için (rgba(8,10,30,.5))
+    // silinen yerde kaide olduğu gibi görünüyor → konan taşı saran, daha
+    // AÇIK renkli ince bir çerçeve. Kalınlığı pad−GAP olduğu için pad
+    // küçültülünce inceliyor ama kaybolmuyordu.
+    //
+    // Artık gerek de yok: glow kaldırıldığından sprite'ın payandası TAMAMEN
+    // SAYDAM ve görünür içeriği tam olarak hücre dikdörtgeni. Hücreyi
+    // temizleyip sprite'ı basmak komşulara hiç dokunmuyor — bu yüzden
+    // komşuları set'e eklemeye de gerek kalmadı (daha az blit).
+    // DİKKAT: hücre dışına taşan bir efekt (glow/gölge) sprite'a geri
+    // eklenirse bu varsayım bozulur — o zaman ya payandalı temizliğe
+    // dönülmeli ya da etkilenen komşular yeniden çizilmeli.
     for (const c of cells) {
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const y = c.y + dy, x = c.x + dx;
-        if (y >= 0 && y < G && x >= 0 && x < G) set.add(y * G + x);
-      }
-    }
-    // Önce bölgeyi temizle (komşuların taşan parıltısı da silinir), sonra
-    // tüm bölgeyi yeniden bas — böylece taşan parıltılar geri gelir.
-    for (const i of set) {
-      const y = (i / G) | 0, x = i % G;
-      bctx.clearRect(x * geom.step - cellTex.pad, y * geom.step - cellTex.pad, cellTex.S, cellTex.S);
-    }
-    for (const i of set) {
-      const y = (i / G) | 0, x = i % G, j = board[y][x];
+      if (c.y < 0 || c.y >= G || c.x < 0 || c.x >= G) continue;
+      const px = c.x * geom.step, py = c.y * geom.step, j = board[c.y][c.x];
+      bctx.clearRect(px, py, geom.cs, geom.cs);
       const t = j ? cellTex.jewels[j] : cellTex.socket;
-      if (t) bctx.drawImage(t, x * geom.step - cellTex.pad, y * geom.step - cellTex.pad, cellTex.S, cellTex.S);
+      if (t) bctx.drawImage(t, px - cellTex.pad, py - cellTex.pad, cellTex.S, cellTex.S);
     }
     requestPaint();
   }
