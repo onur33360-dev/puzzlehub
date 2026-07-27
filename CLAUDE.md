@@ -104,9 +104,16 @@ load-bearing — don't remove it when adding a file, update both lists.
 
 ## 3. Documentation Map
 
+**`docs/01`–`docs/10` are the project's permanent source of truth.** They define
+architecture, rendering, performance, canvas policy, game development, UI/UX,
+monetization, release, security and the post-release roadmap. Read them before
+implementing anything. If this file and those documents ever disagree, **the
+numbered documents win** — fix this file.
+
 | Doc | Status | Read it when... |
 |---|---|---|
-| `CLAUDE.md` (this file) | written | every session, first |
+| `docs/01_ARCHITECTURE.md` … `docs/10_POST_RELEASE_ROADMAP.md` | written | **first, every session** — official rules |
+| `CLAUDE.md` (this file) | written | every session, after the numbered docs |
 | `VISION.md` | to be written | you need to know *why* PuzzleHub exists, not just what it is |
 | `PRODUCT_PRINCIPLES.md` | to be written | weighing a product tradeoff |
 | `UX_RULES.md` | to be written | touching any interaction/navigation pattern |
@@ -130,7 +137,7 @@ load-bearing — don't remove it when adding a file, update both lists.
 
 - **Screens:** `div.screen` siblings toggled via an `.active` class. No router. `showScreen()` / `switchTab()` in `app.js`.
 - **Games:** `PuzzleGames` registry object. Each game is a self-contained IIFE exposing `{ init(container), cleanup() }`. Each injects its own scoped `<style>` at runtime via the shared `injectStyle(id, css)` helper.
-- **Rendering is per-game, not global.** Most games render with DOM + CSS. `blockPuzzle` renders its board and all of its effects on **Canvas 2D** (2026-07-26) because DOM hit a GPU fill-rate wall on low/mid Android WebViews — see the canvas landmines in Section 5. The shell (Home / Discover / Leaderboard / Profile) and light games stay DOM; new *heavy* games should start on canvas.
+- **Rendering is per-game, not global — and the renderer is chosen BEFORE implementation.** This is an architectural decision, not a later migration: lightweight games start on DOM, render-intensive games start on Canvas immediately (`docs/04_CANVAS_POLICY.md` is the authority). Most existing games render with DOM + CSS. `blockPuzzle` and `waterSort` render their boards and effects on **Canvas 2D** — see the canvas landmines in Section 5. The shell (Home / Discover / Leaderboard / Profile) always stays DOM. Migrating an *existing* DOM game to Canvas is a separate decision and still requires profiling that confirms a GPU/filter bottleneck plus owner approval.
 - **Audio:** one global `GameAudio` singleton (`games.js`) — synthesized via Web Audio API — shared by the app shell and every game. See the audio policy in Section 6 before adding any sampled audio file.
 - **Discover feed:** `window.ReelsEngine` (`reels.js`) — infinite scroll, `IntersectionObserver`-driven active-card demo lifecycle (start/pause/destroy), DOM pruned past 24 cards.
 - **State:** no state-management library. State lives in per-game closures plus `localStorage`. UI updates are imperative `innerHTML` template-string re-renders, not reactive/diffed.
