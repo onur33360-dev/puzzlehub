@@ -2940,17 +2940,11 @@ PuzzleGames.blockPuzzle = (() => {
   function drawCrystalC(c, px, py, sz, jewel) {
     const col = JCOL[jewel] || JCOL[1];
     const r = sz * 0.14;
-    // Dış glow — DAR tutulmak zorunda. DOM karşılığı negatif yayılımlıydı
-    // (0 0 9px -1px, 0 3px 14px -4px), yani hücre sınırının hemen dışında
-    // biterdi. Canvas'a taşırken blur sz*0.34'e (~15px) çıkarılmıştı ve
-    // parıltı KOMŞU HÜCRELERE taşıyordu: kullanıcı bunu "blokların çevresinde
-    // hayalet çerçeve" olarak gördü. Ayrıca payanda (pad) bu geniş parıltıya
-    // göre seçildiğinden her hücre blit'i gereğinden büyüktü (fill-rate).
-    // Dar blur + küçük payanda: halo gider, blit küçülür.
-    c.save();
-    c.shadowColor = col.glow; c.shadowBlur = sz * 0.13; c.shadowOffsetY = sz * 0.05;
-    rrect(c, px, py, sz, sz, r); c.fillStyle = col.base; c.fill();
-    c.restore();
+    // DIŞ GLOW YOK (Sprint 3/B geri alındı). Kristalin çevresine yayılan
+    // parıltı, komşu hücrelere taşarak "hayalet çerçeve/halo" üretiyordu ve
+    // her hücre blit'ini büyüterek fill-rate yiyordu. Kural: bu renderer'da
+    // GLOW/HALO/LIGHT BLEED KULLANILMAZ. Premium his bevel/highlight/faset/
+    // sparkle'dan gelmeli — ve onlar da hücre sınırının İÇİNDE kalmalı.
     c.save();
     rrect(c, px, py, sz, sz, r); c.clip();
     // 4) taban mücevher gradyanı (linear ~165deg: hl→base→sh)
@@ -2974,64 +2968,21 @@ PuzzleGames.blockPuzzle = (() => {
     let hg = c.createRadialGradient(px + sz * 0.27, py + sz * 0.21, 0, px + sz * 0.27, py + sz * 0.21, sz * 0.44);
     hg.addColorStop(0, 'rgba(255,255,255,.98)'); hg.addColorStop(0.45, 'rgba(255,255,255,.45)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = hg; c.fillRect(px, py, sz, sz);
-    // 5) İÇ PARILTI (Sprint 3/B) — taşın İÇİNDE hapsolmuş ışık. Alt-orta'dan
-    //    yukarı doğru sönümlenen sıcak bir yayılım. Değerli taşı "boyalı cam"
-    //    değil "içinde ışık olan cisim" yapan katman; çekirdek karartmasıyla
-    //    (4) birlikte çalışır: merkez koyu ama İÇİ AYDINLIK.
-    let ig = c.createRadialGradient(px + sz * 0.5, py + sz * 0.78, 0, px + sz * 0.5, py + sz * 0.78, sz * 0.62);
-    ig.addColorStop(0, 'rgba(255,255,255,.30)');
-    ig.addColorStop(0.45, hexA(col.hl, 0.16));
-    ig.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = ig; c.fillRect(px, py, sz, sz);
-    // 6) keskin parlama çizgisi (::after, 128deg dar bant)
+    // 5) keskin parlama çizgisi (::after, 128deg dar bant)
     let sg = c.createLinearGradient(px + sz * 0.1, py + sz, px + sz * 0.9, py);
     sg.addColorStop(0.30, 'rgba(255,255,255,0)'); sg.addColorStop(0.375, 'rgba(255,255,255,.62)');
     sg.addColorStop(0.41, 'rgba(255,255,255,.14)'); sg.addColorStop(0.46, 'rgba(255,255,255,0)');
     c.fillStyle = sg; c.fillRect(px, py, sz, sz);
 
-    // 7) BEVEL (Sprint 3/B) — pah. Işık sol-üstten geldiği için üst-sol iç
-    //    kenar YAKALAMA IŞIĞI, alt-sağ iç kenar HACIM GÖLGESİ alır. DOM'da
-    //    bunlar box-shadow inset'leriydi. Blur YOK: yumuşaklık, azalan
-    //    alfalı iki ardışık şeritten geliyor (kaydırılmış yolu çizmek,
-    //    kırpma içinde kalan tarafta bir iç şerit bırakır).
-    const bev = (dx, dy, w0, a0, a1) => {
-      c.lineWidth = w0;
-      c.strokeStyle = a0; rrect(c, px + dx, py + dy, sz, sz, r); c.stroke();
-      c.lineWidth = w0 * 2;
-      c.strokeStyle = a1; rrect(c, px + dx * 2, py + dy * 2, sz, sz, r); c.stroke();
-    };
-    const bw = Math.max(1, sz * 0.045);
-    bev(bw, bw, bw, 'rgba(255,255,255,.85)', 'rgba(255,255,255,.16)');    // üst-sol ışık
-    bev(-bw, -bw, bw, 'rgba(0,0,0,.42)', 'rgba(0,0,0,.14)');             // alt-sağ gölge
-
-    // 8) SPARKLE (Sprint 3/B) — fasetlerin buluştuğu noktada dört uçlu
-    //    kısa bir kıvılcım. Kesilmiş taşın imzası; küçük ve tek olmalı,
-    //    çoğaltmak "parlak plastik"e döndürür.
-    const spx = px + sz * 0.27, spy = py + sz * 0.21, sl = sz * 0.30, sw = sz * 0.035;
-    c.fillStyle = 'rgba(255,255,255,.95)';
-    c.beginPath();                                    // dikey iğne
-    c.moveTo(spx, spy - sl); c.lineTo(spx + sw, spy); c.lineTo(spx, spy + sl); c.lineTo(spx - sw, spy);
-    c.closePath(); c.fill();
-    c.beginPath();                                    // yatay iğne (daha kısa)
-    c.moveTo(spx - sl * 0.72, spy); c.lineTo(spx, spy - sw); c.lineTo(spx + sl * 0.72, spy); c.lineTo(spx, spy + sw);
-    c.closePath(); c.fill();
     c.restore();
 
-    // 9) kenar kırılması — keskin dış çizgi (inset 0 0 0 1px)
+    // 6) kenar kırılması — keskin dış çizgi (inset 0 0 0 1px)
     c.save();
     rrect(c, px + 0.5, py + 0.5, sz - 1, sz - 1, r);
     c.strokeStyle = 'rgba(255,255,255,.42)'; c.lineWidth = 1; c.stroke();
     c.restore();
   }
 
-  // '#rrggbb' + alfa → 'rgba(...)'. Jewel token'ları hex; iç parıltıda
-  // rengin şeffaf tonu gerekiyor.
-  function hexA(hex, a) {
-    const h = (hex || '').trim();
-    if (h[0] !== '#' || h.length < 7) return 'rgba(255,255,255,' + a + ')';
-    const n = parseInt(h.slice(1, 7), 16);
-    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
-  }
 
   // ── HÜCRE SPRITE'LARI ──
   // drawCrystalC pahalı: shadowBlur (canvas'ın en yavaş işlemlerinden biri)
@@ -3045,9 +2996,11 @@ PuzzleGames.blockPuzzle = (() => {
   function buildCellTextures() {
     cellTex = null;
     if (!geom || !bufScale) return;
-    // Payanda yalnızca DAR dış parıltıyı kapsayacak kadar (bkz. drawCrystalC):
-    // 0.35 iken parıltı komşuya taşıyor ve blit'ler gereksiz büyüyordu.
-    const pad = Math.max(2, Math.round(geom.cs * 0.16));
+    // Kristalin artık hücre dışına taşan hiçbir şeyi yok (glow kaldırıldı).
+    // Payanda yalnızca HAYALET GÖLGESİ sprite'ı için gerekiyor; kristal
+    // sprite'ında kullanılmıyor ama tek boyut paylaşıldığı için ortak.
+    // Küçük payanda = küçük blit = daha az fill-rate.
+    const pad = Math.max(2, Math.round(geom.cs * 0.13));
     const S = Math.round(geom.cs) + pad * 2;
     const mk = (paint) => {
       const c = document.createElement('canvas');
@@ -3068,7 +3021,8 @@ PuzzleGames.blockPuzzle = (() => {
     const shadow = mk(x => {
       x.save();
       x.shadowColor = 'rgba(0,0,0,.5)';
-      x.shadowBlur = geom.cs * 0.22; x.shadowOffsetY = geom.cs * 0.16;
+      // Blur+offset payandanın İÇİNDE kalmalı, yoksa gölge kırpılır.
+      x.shadowBlur = geom.cs * 0.09; x.shadowOffsetY = geom.cs * 0.05;
       x.fillStyle = 'rgba(0,0,0,.85)';
       rrect(x, pad, pad, geom.cs, geom.cs, geom.cs * 0.14);
       x.fill();
