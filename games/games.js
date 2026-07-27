@@ -6341,6 +6341,29 @@ PuzzleGames.waterSort = (() => {
   let wGeom = null;                       // {tw, th, cssW, cssH, pos:[{x,y}]}
   let glassBack = null, glassFront = null;
   let wRaf = 0, wPourFx = null;
+  // ── GERİ BİLDİRİM ANİMASYONLARI (Faz 1.6) ──
+  // Hepsi TEK rAF'tan akar (bkz. wTick): döküş kendi döngüsünü sürerken bunlar
+  // da onun üstünde yaşayabilir. Hiçbiri canlı değilse döngü DURUR — idle'da
+  // maliyet tam sıfır (Block kuralı).
+  let wShake = null;      // {idx, t0}      geçersiz hedef
+  let wSolved = null;     // {idx, t0}      tüp çözüldü
+  let wIntro = null;      // {t0}           seviye açılışı (stagger)
+  const SHAKE_MS = 300, SOLVED_MS = 700, INTRO_MS = 460, INTRO_STEP = 55;
+  function wAnimAlive(now) {
+    if (wShake && now - wShake.t0 > SHAKE_MS) wShake = null;
+    if (wSolved && now - wSolved.t0 > SOLVED_MS) wSolved = null;
+    if (wIntro && now - wIntro.t0 > INTRO_MS + tubes.length * INTRO_STEP) wIntro = null;
+    return !!(wShake || wSolved || wIntro);
+  }
+  // Geri bildirim döngüsü. Döküşün kendi rAF'ı varken ikinci bir döngü açmaz —
+  // döküş zaten her kare wPaint çağırıyor, bu animasyonlar onun üstüne biner.
+  function wTick(now) {
+    if (!wAnimAlive(now) ) { wFxRaf = 0; wPaint(); return; }
+    wPaint();
+    wFxRaf = requestAnimationFrame(wTick);
+  }
+  let wFxRaf = 0;
+  function wKick() { if (!wFxRaf && !wRaf) wFxRaf = requestAnimationFrame(wTick); }
   let wPendingTap = null;                 // kilit sırasında gelen dokunuş (bkz. render)
   const TAP_BUFFER_MS = 450;              // bundan eski tampon bayattır, oynanmaz
   // Kilit açılınca bekleyen dokunuşu oynat — dokunuş düşürmek oyunu ölü hissettirir.
@@ -6669,12 +6692,27 @@ PuzzleGames.waterSort = (() => {
     // Pay dahil tüm bitmap'i temizle (koordinatlar ızgara-yerel; pay negatifte).
     wctx.clearRect(-wGeom.padX, -wGeom.padTop, wGeom.cssW + wGeom.padX * 2, wGeom.cssH + wGeom.padTop + wGeom.padBottom);
     const { tw, th, pos } = wGeom;
+    const now = performance.now();
     for (let i = 0; i < tubes.length; i++) {
       const p = pos[i];
       if (!p) continue;
       const fx = wPourFx && wPourFx.from === i ? wPourFx : null;
+      // Giriş (stagger): tüpler sırayla aşağıdan yükselip belirir.
+      let introA = 1, introDy = 0;
+      if (wIntro) {
+        const u = Math.max(0, Math.min(1, (now - wIntro.t0 - i * INTRO_STEP) / INTRO_MS));
+        introA = u; introDy = (1 - u) * 26;
+        if (u <= 0) continue;                                    // sırası gelmedi: hiç çizme
+      }
       wctx.save();
+      wctx.globalAlpha = introA;
+      if (introDy) wctx.translate(0, introDy);
       if (fx) wctx.transform(1, 0, 0, 1, fx.dx, fx.dy);
+      // Geçersiz hedef: sönümlenen yatay salınım (DOM phShake karşılığı).
+      if (wShake && wShake.idx === i) {
+        const u = (now - wShake.t0) / SHAKE_MS;
+        wctx.translate(Math.sin(u * Math.PI * 6) * 7 * (1 - u), 0);
+      }
       if (i === selected && !fx) wctx.translate(0, -14);          // seçili tüp kalkar
       let tilt = 0, squash = 1;
       if (fx) {
@@ -6698,13 +6736,24 @@ PuzzleGames.waterSort = (() => {
       }
       wDrawLiquid(wctx, colors, p.x, p.y, tw, th, tilt, squash, extraTop);
       if (glassFront) wctx.drawImage(glassFront, p.x, p.y, tw, th);
-      // Durum halkası: seçili / geçerli hedef — box-shadow yerine ince kontur
-      const ring = (i === selected) ? 'rgba(190,168,255,.95)'
-        : (selected !== null && selected !== i && canPour(tubes, selected, i, CAP)) ? 'rgba(150,205,255,.75)' : null;
+      // Durum halkası: çözüldü (altın, tek seferlik nabız) > seçili > geçerli hedef.
+      // DOM'da box-shadow'du; burada ince kontur — parıltı sprite'a girmez,
+      // çünkü rengi ve nabzı duruma göre değişiyor.
+      let ring = null, ringW = 2;
+      if (wSolved && wSolved.idx === i) {
+        const u = (now - wSolved.t0) / SOLVED_MS;
+        const a = Math.sin(Math.min(1, u) * Math.PI);            // 0 → 1 → 0
+        ring = 'rgba(255,214,120,' + (0.95 * a).toFixed(3) + ')';
+        ringW = 2 + 2.5 * a;
+      } else if (i === selected) {
+        ring = 'rgba(190,168,255,.95)';
+      } else if (selected !== null && selected !== i && canPour(tubes, selected, i, CAP)) {
+        ring = 'rgba(150,205,255,.75)';
+      }
       if (ring) {
         wctx.save();
         wTubePath(wctx, p.x - 1, p.y - 1, tw + 2, th + 2);
-        wctx.strokeStyle = ring; wctx.lineWidth = 2; wctx.stroke();
+        wctx.strokeStyle = ring; wctx.lineWidth = ringW; wctx.stroke();
         wctx.restore();
       }
       wctx.restore();
@@ -6743,7 +6792,12 @@ PuzzleGames.waterSort = (() => {
     wcv = wrapEl.querySelector('.wsrt-cv');
     wctx = wcv.getContext('2d');
     WCOL = {};
-    const boot = () => { if (wSize()) wPaint(); else requestAnimationFrame(boot); };
+    // Seviye açılışı: tüpler sırayla aşağıdan yükselerek belirir (DOM phStaggerIn).
+    const boot = () => {
+      if (!wSize()) { requestAnimationFrame(boot); return; }
+      wIntro = { t0: performance.now() };
+      wKick();
+    };
     boot();
     // ── DOKUNMA: pointerdown, click DEĞİL ──
     // Mobil WebView 'click'i, hareketin kaydırma/çift-dokunma olmadığına karar
@@ -6785,10 +6839,11 @@ PuzzleGames.waterSort = (() => {
     if (canPour(tubes, selected, i, CAP)) {
       doPour(selected, i);
     } else if (tube.colors.length) {
-      // Gecersiz hedef: DOM shake yerine sadece secim geri bildirimi
-      // (canvas'ta tek tup sallamak ayri bir animasyon isterdi — Faz 2).
+      // Geçersiz hedef: tüp sallanır (DOM phShake karşılığı) ve seçim oraya geçer.
+      wShake = { idx: i, t0: performance.now() };
       GameAudio.haptic('soft');
       select(i);
+      wKick();
     } else {
       deselect();
     }
@@ -6808,6 +6863,7 @@ PuzzleGames.waterSort = (() => {
   ];
   function tubeSolvedFeedback(idx, x, y) {
     comboCount++;
+    wSolved = { idx, t0: performance.now() };   // altın halka nabzı (DOM wsrtSolvedPulse)
     phParticleBurst(document.body, x, y, 'var(--ph-success)', 10);
     // İlk tüp zaten büyük bir ödül — seri yazısı ancak ikinciden itibaren.
     if (comboCount < 2) { GameAudio.play('star'); GameAudio.haptic('star'); return; }
@@ -7021,6 +7077,9 @@ PuzzleGames.waterSort = (() => {
           tilt: tiltMax * k, squash: Math.cos(tiltMax * k * Math.PI / 180), streamAlpha: 0 };
       } else {
         wPourFx = null; wRaf = 0; wPaint();
+        // Çözüldü halkası döküşten UZUN sürer; döküş döngüsü bitince onu
+        // geri bildirim döngüsü devralır (yoksa animasyon yarıda donardı).
+        wKick();
         if (!isWin(tubes, CAP)) { animating = false; wFlushTap(); }
         return;
       }
