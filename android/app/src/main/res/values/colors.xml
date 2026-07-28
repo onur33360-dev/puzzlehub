@@ -4,8 +4,12 @@
   background_color #14142E ve theme_color #8B5CF6 orada da yaziyor;
   ikisi ayrisirsa uygulama acilirken bir kare boyunca yanlis renk
   gorunur (native splash bir renk, web sayfasi baska bir renk).
-  Ayni degerler style.css :root (--bg-body / --accent), index.html
-  meta theme-color ve capacitor.config.json'da da var.
+  Ayni degerler style.css :root icindeki bg-body / accent token'larinda,
+  index.html meta theme-color'da ve capacitor.config.json'da da var.
+
+  DIKKAT: XML yorumunda cift tire KULLANMA (token adlarini bas tireleriyle
+  yazmak build'i kirar) — mergeDebugResources "The string is not permitted
+  within comments" ile patlar.
 -->
 <resources>
     <color name="phBackground">#14142E</color>
