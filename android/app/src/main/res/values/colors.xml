@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   PuzzleHub paleti — DEGERLER manifest.json ile AYNI OLMALI.
-  background_color #110820 ve theme_color #a855f7 orada da yaziyor;
+  background_color #14142E ve theme_color #8B5CF6 orada da yaziyor;
   ikisi ayrisirsa uygulama acilirken bir kare boyunca yanlis renk
   gorunur (native splash bir renk, web sayfasi baska bir renk).
+  Ayni degerler style.css :root (--bg-body / --accent), index.html
+  meta theme-color ve capacitor.config.json'da da var.
 -->
 <resources>
-    <color name="phBackground">#110820</color>
-    <color name="phAccent">#a855f7</color>
+    <color name="phBackground">#14142E</color>
+    <color name="phAccent">#8B5CF6</color>
 
     <!-- Capacitor'un temasi bu uc ismi bekliyor. -->
-    <color name="colorPrimary">#110820</color>
-    <color name="colorPrimaryDark">#110820</color>
-    <color name="colorAccent">#a855f7</color>
+    <color name="colorPrimary">#14142E</color>
+    <color name="colorPrimaryDark">#14142E</color>
+    <color name="colorAccent">#8B5CF6</color>
 </resources>

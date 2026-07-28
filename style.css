@@ -3,22 +3,49 @@
    Ekran görüntülerine birebir uyumlu
    ============================================ */
 
+/* ── PALET (2026-07-28 tema yenilemesi) ────────────────────────────
+   Kaynak: sahibinin paylaştığı 5 ekranlık tasarım mockup'ı.
+   Eski palet MAGENTA'ya çalan mor + erik-siyahı zemindi (#a855f7 /
+   #110820). Yeni palet MAVİYE çalan menekşe + derin indigo zemin
+   (#8B5CF6 / #14142E) — mockup'taki tüm yüzeyler bu iki eksende.
+   Anlamsal renkler (sarı/yeşil/camgöbeği/kırmızı/turuncu/pembe)
+   mockup'ta aynı tonlarda kaldığı için DEĞİŞMEDİ.
+
+   KAPSAM: burası yalnızca UYGULAMA KABUĞU'dur. Oyunlar
+   core/design-tokens.css'teki --ph-* sistemini kullanıyor ve o dosyaya
+   BİLEREK dokunulmadı — oyun içi görselleri ve canvas renk literal'lerini
+   değiştirmek ayrı ve çok daha büyük bir karar (bkz. CLAUDE.md §8).
+
+   Renk değerleri BU DOSYADAN İBARET DEĞİL. Aynı iki değer şurada da
+   yazılı ve birlikte güncellenmek zorunda, yoksa uygulama açılırken bir
+   kare boyunca yanlış renk görünür:
+     manifest.json (background_color, theme_color)
+     index.html    (meta theme-color)
+     capacitor.config.json (android.backgroundColor)
+     android/app/src/main/res/values/colors.xml
+   ------------------------------------------------------------------ */
 :root {
-  --bg-body: #110820;
-  --bg-body-end: #0d0f1a;
+  --bg-body: #14142E;
+  --bg-body-end: #0D0D20;
   --bg-card: rgba(255,255,255,0.06);
-  --bg-card-solid: #1c1231;
+  --bg-card-solid: #1E1E42;
   --bg-card-hover: rgba(255,255,255,0.1);
   --bg-element: rgba(255,255,255,0.04);
   --bg-input: rgba(255,255,255,0.08);
 
-  --text: #f0f0f5;
-  --text-secondary: #9a9ab0;
-  --text-muted: #5d5d78;
+  --text: #EDEDF7;
+  --text-secondary: #9E9EC0;
+  --text-muted: #5F5F85;
   --text-gold: #fbbf24;
 
-  --accent: #a855f7;
-  --accent-dark: #7c3aed;
+  --accent: #8B5CF6;
+  --accent-light: #A78BFA;
+  --accent-dark: #6D28D9;
+  /* rgba() çağrıları bir hex token'ı kullanamaz. Bu üçlü, dosyadaki 16
+     yarı-saydam marka dolgusunun (rgba(...,0.15) vb.) tek kaynağı —
+     paralel bir sistem değil, mevcut token'ın eksik kalan parçası.
+     Değeri --accent ile AYNI renk olmalı. */
+  --accent-rgb: 139,92,246;
   --cyan: #22d3ee;
   --green: #22c55e;
   --red: #ef4444;
@@ -26,8 +53,8 @@
   --pink: #ec4899;
   --yellow: #fbbf24;
 
-  --tab-bg: #0f0a1e;
-  --tab-active: #a855f7;
+  --tab-bg: #101028;
+  --tab-active: #A78BFA;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -151,7 +178,7 @@ a { color:inherit; text-decoration:none; }
   width:42px; height:42px; border-radius:50%;
   background: linear-gradient(135deg, var(--accent), var(--cyan));
   display:flex; align-items:center; justify-content:center;
-  font-size:22px; box-shadow: 0 0 16px rgba(168,85,247,0.3);
+  font-size:22px; box-shadow: 0 0 16px rgba(var(--accent-rgb),0.3);
 }
 
 /* ========== LIG CARD ========== */
@@ -168,7 +195,7 @@ a { color:inherit; text-decoration:none; }
 .lig-card::before {
   content:''; position:absolute; top:-50%; right:-30%;
   width:200px; height:200px; border-radius:50%;
-  background:radial-gradient(circle, rgba(168,85,247,0.12), transparent 70%);
+  background:radial-gradient(circle, rgba(var(--accent-rgb),0.12), transparent 70%);
   pointer-events:none;
 }
 
@@ -227,9 +254,9 @@ a { color:inherit; text-decoration:none; }
   border-color:rgba(34,197,94,0.3);
 }
 .reward-day.today {
-  background:rgba(168,85,247,0.15);
-  border-color:rgba(168,85,247,0.4);
-  box-shadow:0 0 12px rgba(168,85,247,0.2);
+  background:rgba(var(--accent-rgb),0.15);
+  border-color:rgba(var(--accent-rgb),0.4);
+  box-shadow:0 0 12px rgba(var(--accent-rgb),0.2);
 }
 .reward-icon { font-size:20px; }
 .reward-check { color:var(--green); font-size:18px; font-weight:900; }
@@ -276,7 +303,7 @@ a { color:inherit; text-decoration:none; }
   width:100%; padding:16px;
   border-radius:var(--radius-lg);
   border:none;
-  background:linear-gradient(180deg, #c084fc 0%, var(--accent) 14%, var(--accent-dark) 100%);
+  background:linear-gradient(180deg, var(--accent-light) 0%, var(--accent) 14%, var(--accent-dark) 100%);
   box-shadow:0 6px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18);
   display:flex; align-items:center; justify-content:center; gap:10px;
   margin-top:10px;
@@ -345,6 +372,85 @@ a { color:inherit; text-decoration:none; }
   background:rgba(34,211,238,0.1);
   font-size:13px; font-weight:800; color:var(--cyan);
 }
+
+/* ========== İLERLEME (prg-) ==========
+   'lider' sekmesinin yeni içeriği. Renklerin tamamı yukarıdaki :root
+   token'larından geliyor — sabit hex YOK, böylece tema güncellemesi bu
+   ekrana ayrıca dokunmadan iner. Referans tasarımdaki ilerleme çubukları
+   bilerek yok: paydaları (oyunların toplam bölüm sayısı) koda açık değil,
+   uydurma yüzde çizmektense sayı yazıyoruz (bkz. app.js renderProgress). */
+
+.prg-hero {
+  display:flex; align-items:center; gap:14px;
+  padding:16px 18px; margin-bottom:16px;
+  border-radius:var(--radius-xl);
+  background:var(--bg-card); border:1px solid rgba(255,255,255,0.08);
+}
+.prg-avatar {
+  width:52px; height:52px; border-radius:50%; flex-shrink:0;
+  background:linear-gradient(135deg, var(--accent), var(--cyan));
+  display:flex; align-items:center; justify-content:center; font-size:26px;
+}
+.prg-hero-info { display:flex; flex-direction:column; gap:3px; }
+.prg-hero-name { font-size:18px; font-weight:800; }
+.prg-hero-tag { font-size:12px; color:var(--text-secondary); }
+
+/* 4'lü sayaç ızgarası — hepsi gerçek localStorage değeri. */
+.prg-stats {
+  display:grid; grid-template-columns:repeat(4, 1fr); gap:8px;
+  margin-bottom:22px;
+}
+.prg-tile {
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:12px 4px; border-radius:var(--radius-md);
+  background:var(--bg-card); border:1px solid rgba(255,255,255,0.06);
+}
+.prg-tile-icon { font-size:18px; }
+.prg-tile-val { font-size:17px; font-weight:800; font-family:var(--font-display); }
+.prg-tile-lbl {
+  font-size:9px; font-weight:700; letter-spacing:.3px;
+  color:var(--text-muted); text-align:center;
+}
+
+/* Oyun ilerlemesi / günlük seri satırı */
+.prg-row {
+  display:flex; align-items:center; gap:12px;
+  padding:13px 14px; margin-bottom:6px;
+  border-radius:var(--radius-md);
+  background:var(--bg-card); border:1px solid rgba(255,255,255,0.06);
+}
+.prg-row-emoji { font-size:22px; flex-shrink:0; }
+.prg-row-name { flex:1; font-size:14px; font-weight:700; }
+.prg-row-val {
+  font-size:13px; font-weight:800; color:var(--accent);
+  white-space:nowrap;
+}
+.prg-row-sub { font-weight:600; color:var(--text-muted); }
+/* Henüz oynanmamış oyun: satır duruyor ama öne çıkmıyor. */
+.prg-row-idle { opacity:.55; }
+.prg-row-idle .prg-row-val { color:var(--text-muted); font-weight:600; }
+
+.prg-empty {
+  text-align:center; padding:22px 14px;
+  border-radius:var(--radius-md);
+  background:var(--bg-card); border:1px solid rgba(255,255,255,0.06);
+  color:var(--text-secondary); font-size:13px;
+}
+.prg-empty-icon { font-size:26px; display:block; margin-bottom:6px; }
+.prg-empty-cta { margin-top:8px; color:var(--accent); font-size:12px; font-weight:700; }
+
+/* "Yakında" kartı — inşa EDİLMEMİŞ bir sistemin yerini tutar. Sahte sayı
+   göstermek yerine sistemin henüz olmadığını açıkça söyler. */
+.prg-soon {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:16px; border-radius:var(--radius-md);
+  background:var(--bg-element);
+  border:1px dashed rgba(255,255,255,0.12);
+}
+.prg-soon-icon { font-size:24px; opacity:.6; flex-shrink:0; }
+.prg-soon-text { display:flex; flex-direction:column; gap:4px; }
+.prg-soon-title { font-size:14px; font-weight:700; color:var(--text-secondary); }
+.prg-soon-desc { font-size:12px; line-height:1.5; color:var(--text-muted); }
 
 /* ========== SETTINGS ========== */
 .profile-card-section { margin-bottom:20px; }
@@ -612,8 +718,8 @@ a { color:inherit; text-decoration:none; }
   display: flex;
   align-items: center;
   gap: 4px;
-  background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.05));
-  border: 1px solid rgba(168,85,247,0.2);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb),0.15), rgba(var(--accent-rgb),0.05));
+  border: 1px solid rgba(var(--accent-rgb),0.2);
   padding: 6px 12px;
   border-radius: 20px;
   cursor: pointer;
@@ -622,7 +728,7 @@ a { color:inherit; text-decoration:none; }
 .diamond-display:active { transform: scale(0.95); }
 .diamond-display.diamond-pop { animation: diamondPop 0.4s ease; }
 .diamond-icon { font-size: 16px; }
-.diamond-count { font-size: 14px; font-weight: 800; color: #c084fc; }
+.diamond-count { font-size: 14px; font-weight: 800; color: var(--accent-light); }
 
 @keyframes diamondPop {
   0%, 100% { transform: scale(1); }
@@ -634,8 +740,8 @@ a { color:inherit; text-decoration:none; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(59,130,246,0.06));
-  border: 1px solid rgba(168,85,247,0.12);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb),0.08), rgba(59,130,246,0.06));
+  border: 1px solid rgba(var(--accent-rgb),0.12);
   border-radius: 16px;
   padding: 16px;
   margin: 0 0 16px;
@@ -653,7 +759,7 @@ a { color:inherit; text-decoration:none; }
   border-radius: 12px;
   transition: background 0.2s;
 }
-.eco-item.eco-ad-btn:active { background: rgba(168,85,247,0.15); }
+.eco-item.eco-ad-btn:active { background: rgba(var(--accent-rgb),0.15); }
 .eco-icon { font-size: 24px; }
 .eco-info { display: flex; flex-direction: column; }
 .eco-value { font-size: 18px; font-weight: 800; color: #fff; }
@@ -662,7 +768,7 @@ a { color:inherit; text-decoration:none; }
 
 /* ========== DAILY REWARDS UPGRADE ========== */
 .reward-day.claimable {
-  border: 2px solid #a855f7;
+  border: 2px solid var(--accent);
   animation: rewardGlow 1.5s ease-in-out infinite;
   cursor: pointer;
 }
@@ -678,8 +784,8 @@ a { color:inherit; text-decoration:none; }
 }
 
 @keyframes rewardGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,0); }
-  50% { box-shadow: 0 0 16px 4px rgba(168,85,247,0.3); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb),0); }
+  50% { box-shadow: 0 0 16px 4px rgba(var(--accent-rgb),0.3); }
 }
 @keyframes rewardIconGlow {
   0%, 100% { transform: scale(1); }
@@ -720,9 +826,9 @@ a { color:inherit; text-decoration:none; }
 .ad-reward-preview {
   font-size: 24px;
   font-weight: 800;
-  color: #a855f7;
+  color: var(--accent);
   padding: 16px;
-  background: rgba(168,85,247,0.1);
+  background: rgba(var(--accent-rgb),0.1);
   border-radius: 12px;
 }
 .ad-timer { display: flex; flex-direction: column; gap: 6px; }
@@ -736,7 +842,7 @@ a { color:inherit; text-decoration:none; }
 .ad-timer-fill {
   width: 0;
   height: 100%;
-  background: linear-gradient(90deg, #a855f7, #22d3ee);
+  background: linear-gradient(90deg, var(--accent), #22d3ee);
   border-radius: 3px;
 }
 .ad-timer-text {
@@ -746,7 +852,7 @@ a { color:inherit; text-decoration:none; }
 .ad-skip {
   margin-top: 16px;
   padding: 12px 24px;
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -771,7 +877,7 @@ a { color:inherit; text-decoration:none; }
   width: 100%;
 }
 .go-btn-ad {
-  background: linear-gradient(135deg, #a855f7, #7c3aed) !important;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark)) !important;
   color: #fff !important;
   display: flex;
   align-items: center;
@@ -816,7 +922,7 @@ a { color:inherit; text-decoration:none; }
 /* ========== PLUS PAGE ========== */
 .plus-page {
   min-height: 100%;
-  background: linear-gradient(180deg, #0f0a1e 0%, #1a1035 50%, #0f0a1e 100%);
+  background: linear-gradient(180deg, var(--tab-bg) 0%, var(--bg-card-solid) 50%, var(--tab-bg) 100%);
   padding: 16px;
   position: relative;
   overflow-y: auto;
@@ -1002,8 +1108,8 @@ a { color:inherit; text-decoration:none; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: linear-gradient(135deg, rgba(168,85,247,0.1), rgba(59,130,246,0.06));
-  border: 1px solid rgba(168,85,247,0.15);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb),0.1), rgba(59,130,246,0.06));
+  border: 1px solid rgba(var(--accent-rgb),0.15);
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 24px;
@@ -1012,7 +1118,7 @@ a { color:inherit; text-decoration:none; }
 .shop-balance-amount {
   font-size: 36px;
   font-weight: 900;
-  color: #c084fc;
+  color: var(--accent-light);
 }
 .shop-balance-label {
   font-size: 13px;
@@ -1056,14 +1162,14 @@ a { color:inherit; text-decoration:none; }
   box-shadow: 0 0 16px rgba(251,191,36,0.1);
 }
 .shop-package.shop-popular {
-  border-color: #a855f7;
-  background: rgba(168,85,247,0.06);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb),0.06);
 }
 .shop-badge {
   position: absolute;
   top: -8px;
   right: -4px;
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   color: #fff;
   font-size: 9px;
   font-weight: 800;
@@ -1096,7 +1202,7 @@ a { color:inherit; text-decoration:none; }
   font-size: 13px;
   font-weight: 800;
   color: #fff;
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   border: none;
   cursor: pointer;
   margin-top: 4px;
@@ -1131,7 +1237,7 @@ a { color:inherit; text-decoration:none; }
 .sfi-reward {
   font-size: 14px;
   font-weight: 800;
-  color: #c084fc;
+  color: var(--accent-light);
   white-space: nowrap;
 }
 

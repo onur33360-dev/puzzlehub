@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <meta name="description" content="PuzzleHub — Rahatlatıcı puzzle oyunları" />
-  <meta name="theme-color" content="#a855f7" />
+  <meta name="theme-color" content="#8B5CF6" />
   <!-- Eski "hiçbir şeyi cache'leme" meta etiketleri (Cache-Control,
        Pragma, Expires) kaldırıldı: artık sürümlenmiş bir service
        worker stratejisi var (bkz. sw.js). -->
@@ -64,7 +64,7 @@
           <div class="eco-item eco-ad-btn" onclick="RewardedAd.showForDiamonds(10)">
             <span class="eco-icon">📺</span>
             <div class="eco-info">
-              <span class="eco-value" style="color:#a855f7">+10💎</span>
+              <span class="eco-value" style="color:var(--accent)">+10💎</span>
               <span class="eco-label">REKLAM İZLE</span>
             </div>
           </div>
@@ -111,13 +111,29 @@
       <!-- ====== KEŞFET (REELS) EKRANI ====== -->
       <div id="screen-discover" class="screen screen-fullbleed"></div>
 
-      <!-- ====== LİDER EKRANI ====== -->
+      <!-- ====== İLERLEME EKRANI ====== -->
+      <!-- Sekme anahtarı 'lider' OLARAK KALDI (data-tab, ekran id'si,
+           app.js'teki geri tuşu sırası). Değişen yalnızca sekmenin ADI ve
+           İÇERİĞİ. Anahtarı yeniden adlandırmak switchTab/showScreen/
+           __phHandleBack üçlüsünü aynı anda dokunmayı gerektirirdi ve bu
+           turda kazancı yok — liderlik tablosunun nereye gideceğine karar
+           verilince tek seferde yapılır. -->
       <div id="screen-lider" class="screen">
         <header class="page-header">
-          <h2 class="page-title">🏆 Liderlik Tablosu</h2>
+          <h2 class="page-title">📊 İlerleme</h2>
         </header>
-        <div class="lider-podium" id="lider-podium"></div>
-        <div class="lider-list" id="lider-list"></div>
+        <div id="progress-content"></div>
+
+        <!-- LİDERLİK TABLOSU — GİZLİ, SİLİNMEDİ.
+             Bu verinin nereye taşınacağına (Profil altı mı, tamamen kalkacak
+             mı) henüz karar verilmedi. Kapsayıcılar DOM'da duruyor ki
+             app.js'teki renderLeaderboard() hâlâ çalışır durumda kalsın:
+             geri dönmek display:none'ı kaldırıp fonksiyonu çağırmaktan
+             ibaret olsun. Boş kaldıkları için ekranda yer kaplamıyorlar. -->
+        <div id="lider-legacy" style="display:none">
+          <div class="lider-podium" id="lider-podium"></div>
+          <div class="lider-list" id="lider-list"></div>
+        </div>
       </div>
 
       <!-- ====== PROFİL EKRANI ====== -->
@@ -312,8 +328,8 @@
         <span class="tab-label">KEŞFET</span>
       </button>
       <button class="tab" data-tab="lider" onclick="switchTab('lider')">
-        <span class="tab-icon">🏆</span>
-        <span class="tab-label">SKORLAR</span>
+        <span class="tab-icon">📊</span>
+        <span class="tab-label">İLERLEME</span>
       </button>
       <button class="tab" data-tab="profil" onclick="switchTab('profil')">
         <span class="tab-icon">👤</span>
@@ -334,7 +350,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.27.1';
+    const APP_VERSION = '1.28.0';
 
     // Sıralı yükleme: games.js → ui-kit.js → reels.js → app.js
     // (app.js, games.js'teki PuzzleGames/GameAudio ve reels.js'teki

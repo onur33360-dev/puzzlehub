@@ -1,19 +1,21 @@
 {
   "name": "puzzlehub",
-  "version": "1.27.1",
+  "version": "1.28.0",
   "private": true,
   "description": "PuzzleHub — Turkce, mobil-oncelikli casual oyun merkezi",
   "scripts": {
     "build": "node tools/build-www.js",
     "sync": "npm run build && cap sync android",
     "android": "npm run sync && cap open android",
-    "apk": "npm run sync && cd android && gradlew.bat assembleDebug"
+    "apk": "npm run sync && cd android && gradlew.bat assembleDebug",
+    "assets:android": "capacitor-assets generate --android"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.0.0"
   }
 }

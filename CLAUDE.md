@@ -6,7 +6,7 @@ Permanent instruction manual for everyone working on PuzzleHub — human or AI. 
 
 ## 1. Project Snapshot
 
-PuzzleHub is a Turkish-language, mobile-first casual puzzle hub: a tab-based shell (Home / Discover / Leaderboard / Profile) around 7 playable puzzle games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top.
+PuzzleHub is a Turkish-language, mobile-first casual puzzle hub: a tab-based shell (Home / Discover / Progress / Profile) around 7 playable puzzle games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top.
 
 **Current stage: pre-launch prototype.** Ads, in-app payments, the leaderboard, and Plus-subscription validation are all intentionally mocked right now. That is a staging decision, not a defect — see Section 8 before "fixing" any of it.
 
@@ -90,6 +90,7 @@ so a fresh clone must recreate it.
 | `npm run sync` | `build` + push `www/` into `android/` |
 | `npm run android` | `sync` + open Android Studio |
 | `npm run apk` | `sync` + build a debug APK |
+| `npm run assets:android` | regenerate native launcher icons + splash from source art |
 
 **Never run `npx cap sync` directly** — it copies `www/` without regenerating it, so it
 happily ships whatever stale snapshot is sitting there. Always go through `npm run sync`.
@@ -99,6 +100,18 @@ happily ships whatever stale snapshot is sitting there. Always go through `npm r
 the app but missed in one of the two lists is the hardest deployment bug in this project to
 diagnose (the web build works, the APK opens to a blank screen), so the guard is
 load-bearing — don't remove it when adding a file, update both lists.
+
+**`@capacitor/assets` is the second approved dependency (2026-07-28), dev-only.** It
+regenerates the 26 native icon/splash files from source art in `assets/`, which were
+previously hand-made and therefore never updated. The zero-dependency rule in §6 still
+holds: this is tooling, it never ships, and no runtime code imports it.
+
+**The `--android` flag in `assets:android` is load-bearing, not decoration.** Without a
+platform flag the tool also runs PWA mode, which hunts for a web manifest in `public/`,
+`src/`, `www/` — in this repo it finds and **rewrites `www/manifest.json`**. That is
+generated output: the next `npm run build` deletes it, so the edit vanishes and never
+reaches the repo root. Web icons and the root `manifest.json` stay manual. Source-art
+contract, expected filenames and sizes: `assets/README.md`.
 
 ---
 
@@ -137,7 +150,7 @@ numbered documents win** — fix this file.
 
 - **Screens:** `div.screen` siblings toggled via an `.active` class. No router. `showScreen()` / `switchTab()` in `app.js`.
 - **Games:** `PuzzleGames` registry object. Each game is a self-contained IIFE exposing `{ init(container), cleanup() }`. Each injects its own scoped `<style>` at runtime via the shared `injectStyle(id, css)` helper.
-- **Rendering is per-game, not global — and the renderer is chosen BEFORE implementation.** This is an architectural decision, not a later migration: lightweight games start on DOM, render-intensive games start on Canvas immediately (`docs/04_CANVAS_POLICY.md` is the authority). Most existing games render with DOM + CSS. `blockPuzzle` and `waterSort` render their boards and effects on **Canvas 2D** — see the canvas landmines in Section 5. The shell (Home / Discover / Leaderboard / Profile) always stays DOM. Migrating an *existing* DOM game to Canvas is a separate decision and still requires profiling that confirms a GPU/filter bottleneck plus owner approval.
+- **Rendering is per-game, not global — and the renderer is chosen BEFORE implementation.** This is an architectural decision, not a later migration: lightweight games start on DOM, render-intensive games start on Canvas immediately (`docs/04_CANVAS_POLICY.md` is the authority). Most existing games render with DOM + CSS. `blockPuzzle` and `waterSort` render their boards and effects on **Canvas 2D** — see the canvas landmines in Section 5. The shell (Home / Discover / Progress / Profile) always stays DOM. Migrating an *existing* DOM game to Canvas is a separate decision and still requires profiling that confirms a GPU/filter bottleneck plus owner approval.
 - **Audio:** one global `GameAudio` singleton (`games.js`) — synthesized via Web Audio API — shared by the app shell and every game. See the audio policy in Section 6 before adding any sampled audio file.
 - **Discover feed:** `window.ReelsEngine` (`reels.js`) — infinite scroll, `IntersectionObserver`-driven active-card demo lifecycle (start/pause/destroy), DOM pruned past 24 cards.
 - **State:** no state-management library. State lives in per-game closures plus `localStorage`. UI updates are imperative `innerHTML` template-string re-renders, not reactive/diffed.
@@ -355,6 +368,51 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   backwards compatible; games that omit it get the old behavior. It exists so a game can
   define what "continue after an ad/diamonds" restores. The hook is single-use and cleared
   on restart/exit.
+- **The palette lives in TWO independent `:root` blocks and they do NOT talk to each other.**
+  `style.css` owns the **app shell** (Home / Progress / Profile / Plus / Shop / tab bar /
+  game header) via legacy tokens — `--bg-body`, `--accent`, `--text`, `--radius-*`.
+  `core/design-tokens.css` owns **games and shared components** via `--ph-*` (143 uses in
+  `components.css`, 308 in `games.js`). `style.css` reads **zero** `--ph-*` tokens.
+  Practical consequence: editing one file changes exactly half the app. The 2026-07-28
+  theme refresh deliberately touched **only the shell** — a game-wide repaint would also
+  have to chase the colour literals baked into the Block Puzzle and Water Sort **canvas**
+  renderers, which no CSS token can reach. That is a separate, much larger decision.
+- **`--accent-rgb` must stay numerically identical to `--accent`.** Sixteen translucent
+  brand fills in `style.css` are `rgba(var(--accent-rgb), …)`; `rgba()` cannot consume a
+  hex token, so the triplet is the only way those follow the palette. Change one without
+  the other and half the purple tints silently drift off-brand. Same reason
+  `--accent-light` exists: `#c084fc` used to be hardcoded in four places.
+- **Two colours are written in FIVE files and must be changed together:** `style.css`
+  (`--bg-body` / `--accent`), `manifest.json` (`background_color` / `theme_color`),
+  `index.html` (`meta theme-color`), `capacitor.config.json` (`android.backgroundColor`),
+  `android/app/src/main/res/values/colors.xml` (`phBackground` / `phAccent` /
+  `colorPrimary` / `colorPrimaryDark` / `colorAccent`). If they drift, the app shows the
+  wrong colour for one frame while the native splash hands off to the web view.
+- **The third tab is keyed `lider` but displays İLERLEME — this is intentional.**
+  2026-07-28 replaced the tab's *content*, not its *key*: `data-tab="lider"`, the screen
+  id `#screen-lider` and `__phHandleBack`'s screen ordering all still say `lider`.
+  Renaming the key means touching `switchTab` / `showScreen` / `__phHandleBack` at once,
+  and there is no payoff until the leaderboard's fate is settled.
+  **`renderLeaderboard()` and the `LEADERBOARD` array are NOT dead code — do not delete
+  them.** They have zero call sites on purpose; where that data goes (under Profile, or
+  gone entirely) is undecided. Their containers still exist in `index.html` inside a
+  hidden `#lider-legacy`, so restoring the screen is: drop the `display:none`, call the
+  function. Deleting either half breaks that.
+- **The İlerleme screen shows only data that is actually persisted — keep it that way.**
+  The reference mockup shows badge counts, a collection percentage and "games tried"
+  totals; none of those systems exist. Two traps if you extend it: (1) `gh_plays_*` is
+  incremented **only** by `reels.js` when a game is launched from the Discover feed, so
+  any "games played" total silently undercounts everything launched from Home;
+  (2) games' `LEVELS.length` is closed over inside each IIFE, so a level **progress bar**
+  has no honest denominator — that is why levels render as a number, not a bar.
+  Arrow Puzzle is absent from the list because `phHighScore('arrowPuzzle')` is only ever
+  *read*, never written, so it would display 0 forever.
+- **`assets/icons/icon-192.png` and `icon-512.png` are JPEGs with a `.png` name.** Both are
+  byte-identical, both 1024×1024, 379 KB each, and both are precached by the service
+  worker — so every version bump re-downloads 758 KB of icon. `manifest.json` also
+  declares them `purpose: "any maskable"`, but JPEG has no alpha and maskable icons get
+  cropped to the launcher's shape. Fix this when the new logo lands, not before; the
+  full recipe is in `assets/README.md`.
 - **Background music is globally disabled** behind `MUSIC_DISABLED` in `games.js`'s `GameAudio`, and `#btn-music` in `index.html` is hidden. The synthesized pad/beat engine underneath is intact and deliberately untouched — the existing composition read as tense rather than calm, so silence is the stage-appropriate choice until a new music system is designed. Don't "fix" `startMusic()` returning early.
 
 ---

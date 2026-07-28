@@ -431,7 +431,9 @@ function switchTab(tabName) {
       ReelsEngine.init(container);
     }
   }
-  if (tabName === 'lider') renderLeaderboard();
+  // 'lider' sekmesi artık İLERLEME ekranını gösteriyor. renderLeaderboard()
+  // silinmedi, yalnızca çağrılmıyor — bkz. index.html #lider-legacy.
+  if (tabName === 'lider') renderProgress();
   if (tabName === 'profil') { renderSettings(); renderFavorites(); }
 }
 
@@ -609,8 +611,166 @@ function renderMissionList(containerId, missions) {
   `).join('');
 }
 
-// ==================== RENDER: LİDER ====================
+// ==================== RENDER: İLERLEME ====================
+//
+// KURAL: bu ekran YALNIZCA gerçekten kalıcı olan veriyi gösterir.
+// Referans tasarımdaki sayılar (18 rozet, %72 koleksiyon, "10/10 oyun
+// denendi") mockup verisidir; karşılıkları kodda YOKTUR. Uydurulmuş bir
+// sayı olmayan bir sistemi varmış gibi gösterir ve sonra sessizce yanlış
+// kalır — o yüzden burada ya gerçek değer vardır ya "Yakında" yazar.
+//
+// BUGÜN GERÇEKTEN KALICI OLANLAR:
+//   ph_streak           → giriş serisi + toplam gün (StreakSystem)
+//   ph_diamonds         → elmas (DiamondSystem)
+//   gh_fav              → favori oyun sayısı
+//   ph_watersort_level  → tamamlanan bölüm (İksir Sıralama)
+//   ph_screw_level      → tamamlanan bölüm (Vida Ustası)
+//   bp_hi               → rekor (Bulmaca Blokları)
+//   gh_hi_game2048      → rekor (2048)
+//   ph_daily_v1         → günlük bulmaca serisi (DailyChallenge)
+//
+// KASITLI OLARAK GÖSTERİLMEYENLER:
+//   • Oynanma sayısı — gh_plays_* SADECE Keşfet akışından başlatılınca
+//     artıyor (reels.js). Ana sayfadan/favorilerden oynanan oyun
+//     sayılmıyor, yani "kaç oyun denedin" toplamı yanlış çıkardı.
+//   • Bölüm ilerleme ÇUBUĞU — oyunların toplam bölüm sayısı (LEVELS.length)
+//     kendi kapanışlarının içinde, dışarı açılmıyor. Paydası bilinmeyen
+//     bir çubuk uydurma yüzde demektir; sayı yazıyoruz, çubuk değil.
+//   • Rozet/başarım sistemi — ne veri modeli ne kazanma mantığı var.
+//     Ayrı bir tasarım turunun işi (bkz. "Yakında" kartı).
+//
+// Ok Bulmaca ve Sudoku bilerek listede değil: arrowPuzzle rekoru yalnızca
+// OKUNUYOR, hiç yazılmıyor (games.js phHighScore('arrowPuzzle') çağrısı
+// değersiz) — yani her zaman 0 gösterirdi. Sudoku ise skor tutmuyor,
+// sadece günlük bölümünde görünüyor.
 
+// Rekor okuma: anahtar sözleşmesi ui-kit.js'teki phHighScore'a ait
+// (blockPuzzle → bp_hi, diğerleri → gh_hi_<id>). Burada tekrar türetmek
+// iki ayrı doğruluk kaynağı yaratırdı.
+function _phBest(gameId) {
+  if (typeof phHighScore === 'function') return phHighScore(gameId) || 0;
+  return 0;
+}
+function _phInt(key) {
+  try { return parseInt(localStorage.getItem(key) || '0', 10) || 0; } catch (e) { return 0; }
+}
+
+// DİKKAT: seviye anahtarları OYNANACAK bölümün 0-tabanlı indeksini tutuyor
+// (games.js: bölüm bitince level++ sonra kaydediliyor). Dolayısıyla saklanan
+// sayı doğrudan TAMAMLANAN bölüm adedidir — +1 eklemek yanlış olur.
+const PROGRESS_TRACKS = [
+  { name:'İksir Sıralama',   emoji:'🧪', kind:'level', read:() => _phInt('ph_watersort_level') },
+  { name:'Vida Ustası',      emoji:'🔩', kind:'level', read:() => _phInt('ph_screw_level') },
+  { name:'Bulmaca Blokları', emoji:'🧱', kind:'score', read:() => _phBest('blockPuzzle') },
+  { name:'2048',             emoji:'🔢', kind:'score', read:() => _phBest('game2048') },
+];
+
+function renderProgress() {
+  const container = document.getElementById('progress-content');
+  if (!container) return;
+
+  const streakData = StreakSystem.getData();
+  const streak = StreakSystem.getCount();
+  const totalDays = streakData.totalDays || 0;
+  let favCount = 0;
+  try { favCount = (JSON.parse(localStorage.getItem('gh_fav') || '[]') || []).length; } catch (e) {}
+
+  const tiles = [
+    { icon:'🔥', value:streak,                     label:'GÜN SERİSİ' },
+    { icon:'📅', value:totalDays,                  label:'TOPLAM GÜN' },
+    { icon:'💎', value:DiamondSystem.get(),        label:'ELMAS' },
+    { icon:'❤️', value:favCount,                   label:'FAVORİ' },
+  ];
+
+  const tilesHTML = tiles.map((t, i) => `
+    <div class="prg-tile anim-in" style="animation-delay:${i*50}ms">
+      <span class="prg-tile-icon">${t.icon}</span>
+      <span class="prg-tile-val">${t.value.toLocaleString()}</span>
+      <span class="prg-tile-lbl">${t.label}</span>
+    </div>
+  `).join('');
+
+  // ── Oyun ilerlemesi ──
+  const tracks = PROGRESS_TRACKS.map(t => ({ ...t, value: t.read() }));
+  const started = tracks.filter(t => t.value > 0);
+  const tracksHTML = started.length === 0
+    ? `<div class="prg-empty">
+         <span class="prg-empty-icon">🎮</span>
+         <div>Henüz kayıtlı ilerlemen yok</div>
+         <div class="prg-empty-cta" onclick="switchTab('home')">Bir oyun oyna, burada görünsün →</div>
+       </div>`
+    : tracks.map((t, i) => `
+        <div class="prg-row anim-in${t.value > 0 ? '' : ' prg-row-idle'}" style="animation-delay:${i*50}ms">
+          <span class="prg-row-emoji">${t.emoji}</span>
+          <span class="prg-row-name">${t.name}</span>
+          <span class="prg-row-val">${
+            t.value === 0 ? 'Henüz başlamadın'
+              : t.kind === 'level' ? t.value + ' bölüm'
+              : t.value.toLocaleString() + ' puan'
+          }</span>
+        </div>
+      `).join('');
+
+  // ── Günlük bulmaca serisi ── (DailyChallenge yalnızca katılan oyunları döner)
+  let dailyHTML = '';
+  if (typeof DailyChallenge !== 'undefined') {
+    const ids = DailyChallenge.games();
+    if (ids.length) {
+      dailyHTML = `
+        <div class="section">
+          <h3 class="section-title">🗓️ GÜNLÜK BULMACA SERİSİ</h3>
+          ${ids.map(id => {
+            const st = DailyChallenge.state(id);
+            const name = GAME_NAME_BY_ID[id] || id;
+            return `
+              <div class="prg-row">
+                <span class="prg-row-emoji">${st.doneToday ? '✅' : '🗓️'}</span>
+                <span class="prg-row-name">${name}</span>
+                <span class="prg-row-val">${st.streak} gün<span class="prg-row-sub"> · rekor ${st.best}</span></span>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+  }
+
+  container.innerHTML = `
+    <div class="prg-hero">
+      <div class="prg-avatar"><span>😎</span></div>
+      <div class="prg-hero-info">
+        <span class="prg-hero-name">Oyuncu</span>
+        <span class="prg-hero-tag">${streak > 0 ? `🔥 ${streak} günlük seri` : 'Seriyi başlat!'}</span>
+      </div>
+    </div>
+
+    <div class="prg-stats">${tilesHTML}</div>
+
+    <div class="section">
+      <h3 class="section-title">🎮 OYUN İLERLEMEN</h3>
+      ${tracksHTML}
+    </div>
+
+    ${dailyHTML}
+
+    <div class="section">
+      <h3 class="section-title">🏅 ROZETLER</h3>
+      <div class="prg-soon">
+        <span class="prg-soon-icon">🏅</span>
+        <div class="prg-soon-text">
+          <span class="prg-soon-title">Rozetler yakında</span>
+          <span class="prg-soon-desc">Başarım sistemi henüz hazır değil — hazır olunca kazandıkların burada birikecek.</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ==================== RENDER: LİDER ====================
+//
+// ŞU AN ÇAĞRILMIYOR. 'lider' sekmesi İlerleme ekranını gösteriyor
+// (bkz. switchTab). Fonksiyon ve LEADERBOARD dizisi bilerek duruyor:
+// bu verinin nereye taşınacağına karar verilmedi ve geri dönüşün ucuz
+// kalması isteniyor. Okuduğu #lider-podium/#lider-list kapsayıcıları
+// index.html'de gizli olarak duruyor, yani çağrıldığı an çalışır.
 function renderLeaderboard() {
   const sorted = [...LEADERBOARD].sort((a,b) => b.score - a.score);
 
@@ -950,7 +1110,9 @@ function showToast(msg) {
   DiamondSystem.updateUI();
   PlusSystem.updateUI();
   renderHome();
-  renderLeaderboard();
+  // renderLeaderboard() değil: 'lider' sekmesi artık İlerleme ekranını
+  // gösteriyor. Eskisi açılışta GİZLİ kapsayıcılara boşuna çiziyordu.
+  renderProgress();
   renderSettings();
   
   // Update streak badge

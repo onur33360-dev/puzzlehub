@@ -3,7 +3,7 @@
   "appName": "PuzzleHub",
   "webDir": "www",
   "android": {
-    "backgroundColor": "#110820",
+    "backgroundColor": "#14142E",
     "allowMixedContent": false
   },
   "server": {
