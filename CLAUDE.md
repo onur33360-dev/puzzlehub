@@ -197,11 +197,18 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   silently died. The slot is unanimated and full-size. Taps that arrive while
   `locked` (the 90–250 ms placement resolution) are **buffered**, not dropped, and
   fire when the lock releases if the finger is still down.
-- **Measuring perf on a warm device invalidates the comparison.** Check
-  `dumpsys thermalservice` (`mName=SKIN` / `mStatus`) before trusting numbers:
-  status ≥ 1 means throttling and this project has already produced two
-  contradictory readings that way. Always capture an **idle baseline in the same
-  thermal state** and compare the delta, not the absolute.
+- **Thermal state is RECORDED, not normalized — this reversed on 2026-07-28.**
+  The old rule ("a warm device invalidates the comparison, re-run it cold") is
+  gone by owner decision: PuzzleHub is optimised for real gameplay, not lab
+  conditions, so if a device throttles during normal play that throttling is part
+  of the player's experience and belongs in the number. Do **not** discard a
+  throttled run and do **not** re-run to get cooler conditions. Do record
+  `dumpsys thermalservice` (`mName=SKIN` / `mStatus`) at start and end next to
+  every number, and report the **tail (P90/P95/P99)** — average FPS hides the
+  dropped-frame clusters players actually feel. The one thing that still
+  invalidates a run is *instrument* error, not device state: the in-app FPS
+  overlay runs its own rAF loop and a `backdrop-filter`, so it must be off while
+  measuring. See `docs/03_PERFORMANCE_RULES.md`.
 - **A new game must be registered in four places:** `PUZZLE_GAMES` and `GAME_MAP` (`app.js`), `REEL_GAMES` and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or visible-but-broken.
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
@@ -406,10 +413,21 @@ never precached — a cold start must not wait on sound files), and requests car
 
 ## 8. Current Priorities / What Not to Assume
 
-**Roadmap lives in `ROADMAP.md`** — read it for the active sprint and the canvas
-migration status. It also carries the sprint-closing rule (build → device test →
-Y6 test → commit → push) and the "never compare perf numbers on a warm device"
-rule. Beyond that:
+**Canvas migration is COMPLETE (2026-07-28).** Block Puzzle and Water Sort both
+render on canvas; Water Sort's DOM↔Canvas benchmark is recorded in
+`docs/04_CANVAS_POLICY.md` (P90 150 ms → 40 ms). Water Sort's DOM renderer is
+retained as **legacy reference code only** — not a development target: don't
+optimise it, don't extend it, and don't treat its lack of upkeep as a defect.
+Reopen the migration only for a critical regression.
+
+**Development focus now (owner-set, in order):** 1. Theme/UI redesign ·
+2. Release preparation · 3. Monetization · 4. Security · 5. Google Play launch
+requirements · 6. New game development.
+
+**Roadmap lives in `ROADMAP.md`** — read it for sprint history. It also carries
+the sprint-closing rule (build → device test → Y6 test → commit → push). Note
+that its thermal-measurement rule is superseded — see the thermal bullet in §5.
+Beyond that:
 - Mocked systems (ads, IAP, leaderboard, Plus validation) are correct-for-now. Don't silently "complete" or productionize them.
 - The four unbuilt Discover games are intentionally unbuilt. Building one is a real feature request, not a bug fix — confirm scope before starting.
 - Don't assume test coverage or a release process exists. `TESTING.md` and `RELEASE.md` are intentionally deferred until closer to launch.

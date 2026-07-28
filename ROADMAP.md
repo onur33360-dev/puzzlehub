@@ -181,14 +181,32 @@ medyan 32ms / p90 40ms / p95 53ms · idle 60fps, board görsel olarak temiz.
 
 ---
 
-## Sprint 4 — Water Sort → Canvas (SIRADAKİ)
+## Sprint 4 — Water Sort → Canvas ✅ (KAPANDI, 2026-07-28)
 
-Mevcut darboğaz: blur, filter, compositing, cam efektleri, sıvı animasyonu.
-Ölçülen davranış: döküşte ~46fps'e düşüyor, en kötü kare 117ms; UI iş parçacığı
-ile GPU birebir aynı sürüyor (sync-blocked) → yine fill-rate.
+İlk deneme **başarısız** kabul edildi: FPS hedeflenirken oyunun hissi bozulmuştu
+(sıvı görünümü, döküş fizizği, cam kalınlığı gitti; tüpler ekran dışına taştı).
+Kural konuldu ve uygulandı: **performans, oyunun hissini bozuyorsa başarısız
+optimizasyondur. Önce doğru oyun, sonra hızlı oyun.**
 
-Block'ta kurulan altyapı (FX katmanı, doku önbelleği, render-scale, sprite'lar)
-yeniden kullanılacak.
+Yeniden inşa edildi, DOM'un premium hissi birebir port edildi:
+
+- **Üç bug:** hareket zarfı (padding'li canvas), `−h·sin θ` kompanzasyonu,
+  ışınlanan sıvı (ara durum + kademeli drain + düşen akış).
+- **Parite:** cam ağzı hacmi, havuz ışıması, menisküs, seam, yan speküler,
+  sütun ışık örtüsü, neon-jel tonu (filtre yerine renge **pişirildi**),
+  slosh (DOM'un kendi eğrileri — gecikme 3.64°/5.54°, aşım 1.49°),
+  katman oturması, geçerli hedef nabzı, seçim ölçeği, olay-tetiklemeli sheen.
+- **Perf:** sprite cache + incremental update + dirty region; idle **sıfır**.
+- **Dokunma:** `click` → `pointerdown` + tampon (gecikme hissi çözüldü).
+
+**Ölçüm (A51, gerçek koşul):** P90 **150 ms → 40 ms**, P99 200 → 48 ms,
+üretilen kare +%80. Fark ortalamada değil **kuyrukta** — "ekran sürekli
+yenileniyor" şikâyetinin kaynağı buydu. Tam tablo ve koşullar:
+`docs/04_CANVAS_POLICY.md`.
+
+**DOM renderer duruyor — legacy referans.** Geliştirme hedefi değil:
+optimize edilmeyecek, genişletilmeyecek. Kritik regresyon çıkmadıkça
+migration kapalıdır.
 
 ---
 
@@ -200,10 +218,16 @@ Hiçbir sprint **push edilmeden** bırakılmaz. Sıra:
 APK build → gerçek cihaz testi → Huawei Y6 testi → commit → push
 ```
 
-Ölçüm yaparken: **sıcak cihazda karşılaştırma geçersizdir.**
-`dumpsys thermalservice` → `mName=SKIN` / `mStatus` ≥ 1 ise throttling var.
-Her zaman **aynı termal durumda idle baz çizgisi** al ve farkı karşılaştır,
-mutlak sayıyı değil.
+Ölçüm yaparken **termal durum normalize EDİLMEZ** (2026-07-28'de değişti).
+PuzzleHub laboratuvar koşuluna değil gerçek oynanışa göre optimize ediliyor;
+cihaz normal kullanımda throttling'e giriyorsa bu oyuncunun deneyiminin bir
+parçasıdır ve sayıya dahildir. Throttled bir turu atma, soğutup tekrarlama —
+`dumpsys thermalservice` değerini başta ve sonda **kaydet**, ve ortalamayı
+değil **kuyruğu (P90/P95/P99)** raporla. Ayrıntı: `docs/03_PERFORMANCE_RULES.md`.
+
+Tek istisna cihaz değil **ölçüm aracıdır**: uygulama içi FPS overlay kendi rAF
+döngüsünü ve `backdrop-filter`'ını çalıştırdığı için ölçüm sırasında KAPALI
+olmalı.
 
 ---
 

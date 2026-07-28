@@ -188,10 +188,66 @@ migration itself.
 | Game | Renderer | Benchmark (DOM → Canvas) | DOM removed |
 |---|---|---|---|
 | Block Puzzle | Canvas | DOM drag 24 fps (41.7 ms median, worst 209 ms) with main thread idle at 1.1 ms → GPU fill-rate bound; Canvas holds 60 | yes |
-| Water Sort | Canvas | **not yet measured — open obligation** | no — kept as parity reference until Phase 4 completes |
+| Water Sort | Canvas | **P90 150 ms → 40 ms** (see full table below) | no — legacy reference, kept |
 
 A migration with an empty benchmark cell has not satisfied step 3 and
 its legacy renderer must not be removed.
+
+### Water Sort — DOM vs Canvas (2026-07-28)
+
+Galaxy A51 (SM-A515F), Android 13. Level 9, 7 tubes. Identical scripted
+tap sequence (21 source→target pairs × 3 rounds), in-app FPS overlay
+disabled. DOM build = `aac2084`, Canvas build = branch head.
+
+| Metric | DOM | Canvas | Change |
+|---|---|---|---|
+| Frames produced | 1326 | **2387** | +80 % throughput |
+| Frame time P50 | 34 ms | **30 ms** | −12 % |
+| Frame time P90 | 150 ms | **40 ms** | **−73 %** |
+| Frame time P95 | 150 ms | **42 ms** | −72 % |
+| Frame time P99 | 200 ms | **48 ms** | −76 % |
+| Janky frames | 74.9 % | **65.7 %** | −9.2 pts |
+| GPU P50 | 8 ms | 10 ms | +2 ms |
+| GPU P90 | 10 ms | 15 ms | +5 ms |
+| Thermal (start → end) | 39.1 → 40.2 °C, status 1 → 2 | 33.3 → 36.3 °C, status 0 | not normalized (see below) |
+
+**The result is in the tail, not the average.** Median frame time barely
+moved; P90 dropped from 150 ms to 40 ms. A 150 ms frame is six dropped
+frames in a row, which is exactly the "screen keeps refreshing itself"
+complaint that motivated the migration. Average FPS never showed this.
+
+**The bottleneck was not the GPU.** DOM's GPU time is *lower* than
+Canvas's (8 ms vs 10 ms) while its total frame time is far worse — the
+cost was layout/paint and re-rasterising a filter on a moving element.
+Canvas asks slightly more of the GPU and gives the main thread back.
+
+**Conditions, recorded as measured:**
+
+-   Thermal state was **intentionally not normalized**. PuzzleHub is
+    optimised for real gameplay, not laboratory conditions; if a device
+    throttles during normal play, that throttling is part of the user's
+    experience and belongs in the number. The DOM run was throttling
+    (status 1→2), the Canvas run was not.
+-   Boards are generated randomly and are not seeded, so the two runs did
+    not play identical boards. Tube count and level were identical.
+
+Both facts are recorded rather than corrected. The migration decision
+rests on real gameplay performance.
+
+### Water Sort — Checklist Status
+
+1.  Visual parity approved — **done** (owner approved on device)
+2.  Device testing completed — **done** (Galaxy A51)
+3.  DOM vs Canvas benchmark documented — **done** (above)
+4.  Performance improvement recorded here — **done**
+5.  Commit — **done**
+6.  Remove legacy DOM renderer — **deferred**
+7.  Commit again — **deferred**
+
+**The Water Sort Canvas migration is CLOSED.** Steps 6–7 are deliberately
+not executed: the DOM renderer stays as legacy reference code. It is no
+longer a development target — do not optimise it, do not extend it, and
+do not treat its absence of upkeep as a defect.
 
 ------------------------------------------------------------------------
 

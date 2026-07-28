@@ -79,18 +79,29 @@ FPS Overlay
 
 # Measurement Validity
 
-A measurement is only valid if the conditions are controlled.
+We measure **real gameplay, not laboratory conditions.**
 
--   Check thermal state first (`dumpsys thermalservice`). SKIN
-    `mStatus` ≥ 1 means the device is throttling; absolute numbers are
-    not comparable.
--   Capture an idle baseline in the **same** thermal state and compare
-    the delta, not the absolute.
+Thermal state is deliberately **not** normalized. If a device throttles
+during normal play, that throttling is part of the player's experience
+and belongs in the number. Do not discard a throttled run, and do not
+re-run a benchmark to obtain cooler conditions.
+
+Rules:
+
+-   **Record** the thermal state (`dumpsys thermalservice`, SKIN value
+    and `mStatus`) next to every number, at start and end. Record it as
+    data, not as a reason to reject the run.
+-   State the device, the build, the level/scenario and the input
+    sequence beside every number, so a run can be repeated.
+-   Use an identical input sequence across the builds being compared.
 -   Disable in-app development overlays before measuring. An overlay that
     runs its own rAF loop, or uses `backdrop-filter`, is measuring
-    itself.
--   State the device, the build and the thermal state next to every
-    number.
+    itself — this is instrument error, not a device condition, so it
+    must be removed.
+-   Report the tail (P90/P95/P99), not just the average. A dropped-frame
+    cluster is what players feel; average FPS routinely hides it.
+-   Note any uncontrolled variable honestly (random level layouts,
+    differing thermal state) rather than silently correcting for it.
 
 ------------------------------------------------------------------------
 
