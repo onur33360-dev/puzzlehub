@@ -206,6 +206,15 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; PuzzleHub is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked.
+- **`waterSort`'s DOM renderer is still in `games.js` ON PURPOSE — do NOT delete it as dead code.**
+  The unused DOM functions (`buildTubeEl`, `pourTransform`, `pourStream`, `drainSource`,
+  `syncLiquidShade`, …) and the `.wsrt-tube` / `.wsrt-body` / `.wsrt-layer` CSS are the
+  **visual parity reference** for the canvas migration: their comments carry the measured
+  reasoning behind every effect (why the spill coefficient is 3.4, why the return curve is
+  220 ms, why the seam sits on the bottom edge). Deleting them loses the spec while the
+  migration is still open. Removal is the **last step of the migration**, gated on the
+  checklist in `docs/04_CANVAS_POLICY.md` — of which step 3 (DOM vs Canvas benchmark) is
+  **not yet done**. Same rule applies to any future migration.
 - **`flowConnect` has a polished demo animation but no real game behind it.** Marked `playable:false` on purpose — a backlog item, not an oversight to quietly complete. (`waterSort` and `arrowPuzzle` were built earlier; `jigsawCard` is in progress, see below.)
 - **`jigsawCard` (Resim Kaydır) tiles must stay exactly `100/N%` wide.** The image is split
   with `background-position` percentages divided by **N-1**, not N, and that math assumes the

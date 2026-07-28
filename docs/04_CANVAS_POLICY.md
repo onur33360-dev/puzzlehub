@@ -157,6 +157,44 @@ Every Canvas migration must prove:
 
 ------------------------------------------------------------------------
 
+# The Legacy DOM Renderer
+
+While a migration is in progress the **DOM renderer stays in the
+codebase**. It is the visual parity reference: it is the only record of
+what the game is supposed to look like, and its comments carry the
+measured reasoning behind each effect.
+
+Do not delete it as "dead code". Removing it is the **final step of the
+migration**, not part of the implementation.
+
+## Migration Completion Checklist
+
+Removal is allowed only after every step is complete, in order:
+
+1.  Visual parity approved by the product owner.
+2.  Device testing completed.
+3.  DOM vs Canvas benchmark documented.
+4.  Performance improvement recorded in this document (see below).
+5.  Commit.
+6.  Remove the legacy DOM renderer.
+7.  Commit again.
+
+Steps 6 and 7 are a separate commit from step 5 on purpose: if the
+removal turns out to be wrong, it can be reverted without losing the
+migration itself.
+
+## Recorded Migrations
+
+| Game | Renderer | Benchmark (DOM → Canvas) | DOM removed |
+|---|---|---|---|
+| Block Puzzle | Canvas | DOM drag 24 fps (41.7 ms median, worst 209 ms) with main thread idle at 1.1 ms → GPU fill-rate bound; Canvas holds 60 | yes |
+| Water Sort | Canvas | **not yet measured — open obligation** | no — kept as parity reference until Phase 4 completes |
+
+A migration with an empty benchmark cell has not satisfied step 3 and
+its legacy renderer must not be removed.
+
+------------------------------------------------------------------------
+
 # Commit Rule
 
 Canvas work requires:
