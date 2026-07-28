@@ -9301,6 +9301,7 @@ PuzzleGames.jigsawCard = (() => {
   let N = 3, board = null, moves = 0, won = false;
   let startedAt = 0, timerId = 0, seed = null, winT = 0;
   let level = 1, image = null, imageOk = false;
+  let imgRetryT = 0;                  // bekleyen yeniden deneme (bkz. loadImage)
 
   // ═══════════ RESİM HAVUZU ═══════════
   // Veri; kod değil. 1000+ seviyeye çıkmak = bu diziye satır eklemek.
@@ -9649,13 +9650,40 @@ PuzzleGames.jigsawCard = (() => {
 
   // Resmi ÖNDEN yükle: yarısı boyalı tahta göstermektense numaralarla
   // başlayıp gelince boyuyoruz. Ağ hatasında oyun yine oynanır kalıyor.
+  // Görsel ağdan geliyor ve TEK denemede pes etmek kabul edilemez: bir saniyelik
+  // bağlantı kesintisi, o seviyeyi oyuncu yeniden başlatana kadar "numaralı
+  // kareler" moduna düşürüyordu (sahada görüldü). Artık üstel geri çekilmeli
+  // 3 deneme var — 400ms, 800ms.
+  //
+  // İki tuzak birlikte kapatıldı:
+  //  1) `done` YALNIZCA BİR KEZ çağrılır. Önbellekten gelen bir görselde hem
+  //     `complete` hem `onload` doğru olabiliyor; eskiden ikisi de tetiklenip
+  //     tahtayı iki kez kurabiliyordu.
+  //  2) Bekleyen deneme zamanlayıcısı cleanup'ta iptal edilir. Aksi hâlde
+  //     oyundan çıktıktan sonra ateşlenip kopmuş DOM'a çiziyordu
+  //     (01_ARCHITECTURE: cleanup timers'ı bırakmaz).
+  const IMG_TRIES = 3, IMG_BACKOFF = 400;
   function loadImage(img, done) {
     imageOk = false;
-    const pre = new Image();
-    pre.onload = () => { imageOk = true; done(); };
-    pre.onerror = () => { imageOk = false; done(); };
-    pre.src = img.url;
-    if (pre.complete && pre.naturalWidth) { imageOk = true; done(); }
+    if (imgRetryT) { clearTimeout(imgRetryT); imgRetryT = 0; }
+    let finished = false, tries = 0;
+    const finish = (ok) => {
+      if (finished) return;
+      finished = true; imageOk = ok; done();
+    };
+    const attempt = () => {
+      tries++;
+      const pre = new Image();
+      pre.onload = () => finish(true);
+      pre.onerror = () => {
+        if (tries >= IMG_TRIES) { finish(false); return; }
+        imgRetryT = setTimeout(() => { imgRetryT = 0; attempt(); },
+          IMG_BACKOFF * Math.pow(2, tries - 1));
+      };
+      pre.src = img.url;
+      if (pre.complete && pre.naturalWidth) finish(true);
+    };
+    attempt();
   }
 
   // Parçaları yeniden KURMADAN taşı: hamle başına DOM yaratılmıyor,
@@ -9857,6 +9885,9 @@ PuzzleGames.jigsawCard = (() => {
     // Bekleyen kazanma zamanlayıcısı sökülmezse oyundan çıktıktan SONRA
     // ateşlenip kopmuş DOM üzerine game over kutusu açıyor.
     if (winT) { clearTimeout(winT); winT = 0; }
+    // Bekleyen görsel yeniden-denemesi de sökülmeli — çıktıktan sonra
+    // ateşlenirse kopmuş DOM üzerine tahtayı yeniden kurardı.
+    if (imgRetryT) { clearTimeout(imgRetryT); imgRetryT = 0; }
     clearEvs();
     if (atmoEl) { atmoEl.remove(); atmoEl = null; }
     if (container) {
