@@ -54,7 +54,15 @@
   --yellow: #fbbf24;
 
   --tab-bg: #101028;
+  /* Sekme başına aktif renk. --tab-active geri düşüş değeri olarak duruyor:
+     data-tab'ı bu listede olmayan yeni bir sekme eklenirse renksiz kalmaz.
+     rgb üçlüleri aktif sekmenin arkasındaki yumuşak dolgu içindir —
+     rgba() hex token tüketemiyor (bkz. --accent-rgb). */
   --tab-active: #A78BFA;
+  --tab-active-ana:          #A78BFA;  --tab-active-ana-rgb:      167,139,250;
+  --tab-active-kesfet:       #F472B6;  --tab-active-kesfet-rgb:   244,114,182;
+  --tab-active-ilerleme:     #60A5FA;  --tab-active-ilerleme-rgb:  96,165,250;
+  --tab-active-profil:       #FBBF24;  --tab-active-profil-rgb:   251,191,36;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -151,6 +159,27 @@ a { color:inherit; text-decoration:none; }
 .tab.active .tab-label { color:var(--tab-active); }
 .tab.active .tab-icon { transform:scale(1.15); }
 .tab:active { transform:scale(0.92); }
+
+/* ── Sekme başına aktif renk ──
+   Seçiciler DOM'daki gerçek data-tab değerlerine bağlı: home / discover /
+   lider / profil. Token adları Türkçe (ana/kesfet/ilerleme/profil) çünkü
+   ürün dili öyle; anahtarlar İngilizce çünkü kod dili öyle (CLAUDE.md §6).
+   'lider' anahtarı tarihsel — sekme İLERLEME'yi gösteriyor ama anahtarı
+   değişmedi (bkz. CLAUDE.md §5).
+
+   İkon EMOJİ olduğu için ona renk verilemez; onun yerine aktif sekmenin
+   arkasına o rengin yumuşak bir dolgusu konuyor. Bilerek filter/blur
+   kullanılmadı — düşük uçlu WebView'de filtre en pahalı şey
+   (docs/03_PERFORMANCE_RULES.md), oysa düz bir arka plan bedava. */
+.tab[data-tab="home"].active     .tab-label { color:var(--tab-active-ana); }
+.tab[data-tab="discover"].active .tab-label { color:var(--tab-active-kesfet); }
+.tab[data-tab="lider"].active    .tab-label { color:var(--tab-active-ilerleme); }
+.tab[data-tab="profil"].active   .tab-label { color:var(--tab-active-profil); }
+
+.tab[data-tab="home"].active     { background:rgba(var(--tab-active-ana-rgb),.13); }
+.tab[data-tab="discover"].active { background:rgba(var(--tab-active-kesfet-rgb),.13); }
+.tab[data-tab="lider"].active    { background:rgba(var(--tab-active-ilerleme-rgb),.13); }
+.tab[data-tab="profil"].active   { background:rgba(var(--tab-active-profil-rgb),.13); }
 
 /* ========== HOME HEADER ========== */
 .home-header {
