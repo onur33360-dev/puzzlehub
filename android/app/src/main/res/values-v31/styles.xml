@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ANDROID 12+ (API 31) ACILIS EKRANI — OLCULMUS DAVRANIS, TAHMIN DEGIL.
+
+  Android 12 ile birlikte acilis ekrani PLATFORMUN isi oldu. Sistem, launcher
+  ikonunu windowSplashScreenBackground uzerinde ORTALAYARAK gosterir ve eski
+  yontemi (values/styles.xml icindeki android:background="@drawable/splash")
+  TAMAMEN YOK SAYAR.
+
+  Galaxy A51 / Android 13'te dogrudan olculdu: tam ekran splash gorseli hic
+  cizilmedi, yerine ikon geldi. drawable-port-* dosyalari SILINMEDI cunku
+  Android 11 ve altinda hala calisan yol onlar.
+
+  BURADAKI TEK DUZELTME ZEMIN RENGI: varsayilan zemin SIYAH geliyordu, oysa
+  uygulama #14142E ile aciliyor. Ikisi ayrisinca acilista gozle gorulur bir
+  renk sicramasi oluyordu (colors.xml'deki ayni uyarinin bu platformdaki
+  karsiligi).
+
+  postSplashScreenTheme: sistem splash'i bittiginde Activity'nin gececegi
+  tema. Yazilmazsa launch temasi uzerinde kalir ve @drawable/splash arka plan
+  olarak WebView'in ARKASINDA asili durur — bos yere bellek tutar.
+-->
+<resources>
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:windowSplashScreenBackground">@color/phBackground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <item name="android:statusBarColor">@color/phBackground</item>
+        <item name="android:navigationBarColor">@color/phBackground</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+</resources>

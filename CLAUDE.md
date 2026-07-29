@@ -437,12 +437,34 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   Same story on Home: the random-game button and the rewarded-ad tile are not in the mockup
   and are no longer rendered, so `playRandomGame()` and `RewardedAd.showForDiamonds()` have
   no home-screen caller (the ad flow is still reachable from the game-over screen).
-- **`assets/icons/icon-192.png` and `icon-512.png` are JPEGs with a `.png` name.** Both are
-  byte-identical, both 1024×1024, 379 KB each, and both are precached by the service
-  worker — so every version bump re-downloads 758 KB of icon. `manifest.json` also
-  declares them `purpose: "any maskable"`, but JPEG has no alpha and maskable icons get
-  cropped to the launcher's shape. Fix this when the new logo lands, not before; the
-  full recipe is in `assets/README.md`.
+- **The broken JPEG-named-`.png` icons are FIXED (2026-07-29).** `assets/icons/` now holds
+  three real PNGs generated from `assets/logo.png`: `icon-192` and `icon-512`
+  (`purpose: "any"`) plus a separate `icon-maskable-512` with safe-zone padding
+  (`purpose: "maskable"`). They are written with `png({palette:true})` — 474 KB → 92 KB for
+  the 512, which matters because all three sit in the service-worker precache and are
+  re-downloaded on every `APP_VERSION` bump.
+- **Icon/splash regeneration has a MANDATORY ORDER, and the tool fights you twice.**
+  Full recipe with the measurements behind it: `assets/README.md`. The two traps:
+  1. `npm run assets:android` regenerates its own splash images and **overwrites** the
+     hand-prepared ones, so icons must be generated FIRST and the 10 splash files copied
+     over the result SECOND. The tool's own splash uses a generic 1.5 aspect ratio that
+     crops most of the composition on a real 2.222 phone screen.
+  2. It also creates `drawable-night` / `drawable-{port,land}-night-*` / `-ldpi` folders
+     that did not exist before. **A device in dark mode picks the `-night-` variant**, so
+     the hand-made splash silently never appears — this actually happened on the test
+     device (`ui_night_mode=2`). Those folders are deleted on purpose; the tool recreates
+     them every run, so delete them again.
+  It also silently reformats `AndroidManifest.xml` (whitespace and self-closing tags only,
+  no functional change) — don't be alarmed by that diff.
+- **On Android 12+ the full-screen splash image is NEVER shown — measured, not assumed.**
+  Since API 31 the platform owns the launch screen: it centres the launcher icon on
+  `windowSplashScreenBackground` and **ignores** the legacy
+  `android:background="@drawable/splash"` in `values/styles.xml`. Verified on the test
+  device (Galaxy A51, Android 13): the artwork never drew. `values-v31/styles.xml` exists
+  to set that background to `@color/phBackground`; the default was black and produced a
+  visible colour jump into the app. The 10 splash PNGs are kept for Android ≤11, and they
+  are **not free** — they took the debug APK from 5.3 MB to 14 MB, weight that modern
+  devices carry without ever using it. Whether that trade stays is a product call.
 - **Background music is globally disabled** behind `MUSIC_DISABLED` in `games.js`'s `GameAudio`, and `#btn-music` in `index.html` is hidden. The synthesized pad/beat engine underneath is intact and deliberately untouched — the existing composition read as tense rather than calm, so silence is the stage-appropriate choice until a new music system is designed. Don't "fix" `startMusic()` returning early.
 
 ---
