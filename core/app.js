@@ -202,12 +202,12 @@ const StreakSystem = {
   checkIn() {
     const data = this.getData();
     const today = new Date().toDateString();
-    
+
     if (data.lastDate === today) return false; // Already checked in
-    
+
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     if (data.lastDate === yesterday.toDateString()) {
       // Streak continues
       data.count = (data.count || 0) + 1;
@@ -217,17 +217,47 @@ const StreakSystem = {
     } else {
       data.count = 1;
     }
-    
+
     data.lastDate = today;
     data.totalDays = (data.totalDays || 0) + 1;
+
+    // Hafta satırının ✓ işaretleri buradan besleniyor. count BU İŞE
+    // YARAMAZ: seri bozulduğunda sıfırlanmıyor, bir azaltılıyor (yukarıya
+    // bak), dolayısıyla "son N gün girildi" anlamına gelmiyor. Hangi günün
+    // gerçekten alındığını bilmenin tek yolu günü kaydetmek.
+    // Son 21 gün yeterli: ekranda yalnızca içinde bulunulan Pzt–Paz
+    // gösteriliyor, fazlası anahtarı gereksiz büyütür.
+    const key = StreakSystem.dayKey();
+    const days = Array.isArray(data.days) ? data.days : [];
+    if (days.indexOf(key) === -1) days.push(key);
+    data.days = days.slice(-21);
+
     this.saveData(data);
     return true;
   },
-  
+
+  // YEREL takvim günü — UTC olsaydı gün bazı bölgelerde gün ortasında
+  // değişirdi (core/rng.js ve core/daily.js'teki aynı gerekçe).
+  dayKey(date) {
+    const d = date || new Date();
+    return d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
+  },
+
+  // Gerçekten giriş yapılmış günler. ESKİ KAYITLARDA `days` YOKTUR:
+  // alan 2026-07-29'da eklendi ve geriye dönük doldurulamaz (o bilgi hiç
+  // tutulmamıştı). Eski kullanıcıda satır ilk check-in'e kadar boş görünür
+  // — uydurmaktansa doğrusu bu.
+  claimedDays() {
+    const days = this.getData().days;
+    return new Set(Array.isArray(days) ? days : []);
+  },
+
   getCount() {
     return this.getData().count || 0;
   },
-  
+
   getDayInWeek() {
     // Gerçek takvim günü: Pzt=0, Sal=1, Çar=2, Per=3, Cum=4, Cmt=5, Paz=6
     const day = new Date().getDay(); // JS: 0=Pazar, 1=Pzt...6=Cmt
@@ -604,12 +634,25 @@ function renderDailyRewards() {
   const alreadyClaimed = streakData.lastDate === today;
   const currentDayIdx = StreakSystem.getDayInWeek();
   
-  // Mockup panel 1 "7 Günlük Seri": geçmiş günler yeşil ✓, bugün dolu mor
-  // daire içinde gün numarası, gelecek günler sadece çerçeve.
+  // Mockup panel 1 "7 Günlük Seri": alınmış günler yeşil ✓, bugün dolu mor
+  // daire içinde gün numarası, kalanlar sadece çerçeve.
   // Elmas miktarı etiketi mockup'ta yok — kaldırıldı, tablo yerinde duruyor
   // (claimDailyReward hâlâ oradan okuyor).
+  //
+  // ✓ YALNIZCA GERÇEKTEN GİRİŞ YAPILAN GÜNE VERİLİR (2026-07-29 kararı).
+  // Eskiden koşul `i < currentDayIdx` idi: bugünden önceki HER gün, ödül
+  // alınmış olsun olmasın işaretleniyordu. Bu, hafta satırının "2 gün
+  // tamamlandı" derken İlerleme ekranının "0 Gün Seri" demesine yol
+  // açıyordu — aynı veriden iki farklı hikâye.
+  const claimed = StreakSystem.claimedDays();
+  // Bu haftanın Pazartesi'si: bugünden, haftadaki sıra kadar geri.
+  const monday = new Date();
+  monday.setDate(monday.getDate() - currentDayIdx);
+
   container.innerHTML = DAILY_REWARD_TABLE.map((reward, i) => {
-    const done = (i < currentDayIdx) || (alreadyClaimed && i <= currentDayIdx);
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const done = claimed.has(StreakSystem.dayKey(d));
     const isToday = i === currentDayIdx;
     let cls = 'sw-day';
     let mark;
