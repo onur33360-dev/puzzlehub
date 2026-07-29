@@ -29,82 +29,56 @@
 
       <!-- ====== ANA EKRAN ====== -->
       <div id="screen-home" class="screen active">
-        <!-- Üst bar -->
+        <!-- Üst bar — mockup panel 1: logo · seri rozeti · avatar.
+             PLUS rozeti buradan KALDIRILDI (Profil'deki satıra taşındı);
+             elmas göstergesi de mockup'ta header'da yok, mağazaya erişim
+             yine Profil satırından. Her ikisinin de tek erişim kapısı
+             oldukları için taşındılar, silinmediler. -->
         <header class="home-header">
-          <div class="plus-badge" id="plus-badge" onclick="showPlusPage()">
-            <span class="plus-icon">👑</span>
-            <span class="plus-text">PLUS</span>
-          </div>
-          <div class="brand">
-            <span class="brand-text">PUZZLE<span class="brand-accent">HUB</span></span>
-            <span class="brand-sub">HOŞGELDİN! 👋</span>
+          <div class="brand-mark">
+            <span class="brand-logo">🧩</span>
+            <span class="brand-name">PuzzleHub</span>
           </div>
           <div class="header-right">
-            <div class="diamond-display" onclick="openShop()">
-              <span class="diamond-icon">💎</span>
-              <span class="diamond-count">100</span>
+            <div class="streak-chip" onclick="switchTab('lider')">
+              <span class="streak-fire">🔥</span>
+              <span class="streak-info">
+                <span class="streak-num" id="hdr-streak">0</span>
+                <span class="streak-label">Günlük Seri</span>
+              </span>
             </div>
-            <div class="avatar-circle">
-              <span>😎</span>
-            </div>
+            <div class="avatar-circle" data-ph-avatar onclick="switchTab('profil')"></div>
           </div>
         </header>
 
-        <!-- Streak & Reklam Kartı — elmas göstergesi header'da olduğu için
-             burada tekrarlanmıyor (çift gösterimi kaldırıldı). -->
-        <div class="economy-card">
-          <div class="eco-item">
-            <span class="eco-icon">🔥</span>
-            <div class="eco-info">
-              <span class="eco-value" id="eco-streak">0</span>
-              <span class="eco-label">GÜN STREAK</span>
-            </div>
-          </div>
-          <div class="eco-divider"></div>
-          <div class="eco-item eco-ad-btn" onclick="RewardedAd.showForDiamonds(10)">
-            <span class="eco-icon">📺</span>
-            <div class="eco-info">
-              <span class="eco-value" style="color:var(--accent)">+10💎</span>
-              <span class="eco-label">REKLAM İZLE</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Günlük Ödüller -->
-        <div class="section">
-          <h3 class="section-title">🎁 GÜNLÜK ÖDÜLLER</h3>
-          <div class="daily-rewards" id="daily-rewards"></div>
-        </div>
-
-        <!-- Günlük Meydan Okuma — core/daily.js dolduruyor.
+        <!-- Bugünün Meydan Okuması — core/daily.js dolduruyor.
              Katılan oyun yoksa bölüm tamamen gizlenir. -->
         <div class="section" id="daily-challenge-section" style="display:none">
-          <h3 class="section-title">🗓️ GÜNLÜK MEYDAN OKUMA</h3>
+          <h3 class="section-title">Bugünün Meydan Okuması</h3>
           <div id="daily-challenge-list"></div>
         </div>
 
-        <!-- Favori Oyunlar -->
+        <!-- Bugünün Görevleri -->
         <div class="section">
-          <h3 class="section-title">⭐ FAVORİ OYUNLARIN</h3>
-          <div id="fav-games" class="fav-games-row"></div>
-        </div>
-
-        <!-- Hızlı Oyna -->
-        <div class="section">
-          <button class="random-game-btn" id="btn-random" onclick="playRandomGame()">
-            <span class="random-icon">🎲</span>
-            <span class="random-text">Rastgele Puzzle!</span>
-          </button>
-        </div>
-
-        <!-- Görevler -->
-        <div class="section">
-          <h3 class="section-title">⚡ GÜNLÜK GÖREVLER</h3>
+          <h3 class="section-title">Bugünün Görevleri</h3>
           <div id="daily-missions"></div>
         </div>
+
+        <!-- 7 Günlük Seri -->
         <div class="section">
-          <h3 class="section-title">📅 HAFTALIK GÖREVLER</h3>
-          <div id="weekly-missions"></div>
+          <h3 class="section-title">7 Günlük Seri</h3>
+          <div class="streak-week" id="daily-rewards"></div>
+        </div>
+
+        <!-- Haftalık Ödül -->
+        <div class="section">
+          <div class="weekly-chest" id="weekly-chest" onclick="claimWeeklyReward()">
+            <div class="wc-info">
+              <span class="wc-title">Haftalık Ödül</span>
+              <span class="wc-desc">Tüm görevleri tamamla, ödülü kap!</span>
+            </div>
+            <span class="wc-chest">🎁</span>
+          </div>
         </div>
       </div>
 
@@ -119,9 +93,6 @@
            turda kazancı yok — liderlik tablosunun nereye gideceğine karar
            verilince tek seferde yapılır. -->
       <div id="screen-lider" class="screen">
-        <header class="page-header">
-          <h2 class="page-title">📊 İlerleme</h2>
-        </header>
         <div id="progress-content"></div>
 
         <!-- LİDERLİK TABLOSU — GİZLİ, SİLİNMEDİ.
@@ -138,22 +109,36 @@
 
       <!-- ====== PROFİL EKRANI ====== -->
       <div id="screen-profil" class="screen">
-        <header class="page-header">
-          <h2 class="page-title">👤 Profil</h2>
-        </header>
-        <div class="profile-card-section">
-          <div class="profile-card">
-            <div class="profile-avatar-big"><span>😎</span></div>
-            <div class="profile-info">
-              <span class="profile-name">Oyuncu</span>
-              <span class="profile-tag">Altın Kahraman • 1,240 puan</span>
-            </div>
+        <!-- Hero — mockup panel 4: mor gradyan, yıldız/puzzle süsleri,
+             beyaz halkalı büyük avatar, isim ve unvan. -->
+        <div class="pf-hero">
+          <span class="pf-deco pf-deco-1">⭐</span>
+          <span class="pf-deco pf-deco-2">🧩</span>
+          <span class="pf-deco pf-deco-3">⭐</span>
+          <span class="pf-deco pf-deco-4">🧩</span>
+          <div class="pf-avatar-ring">
+            <span class="pf-avatar" data-ph-avatar></span>
+          </div>
+          <span class="pf-name">Oyuncu</span>
+          <!-- TODO: unvan/rütbe sistemi kurulunca gerçek veriye bağlanacak -->
+          <span class="pf-title">🏅 Bulmaca Kahramanı</span>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Favori Oyunlar</h3>
+          <div id="fav-games-list" class="pf-fav-grid"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Vitrindeki Rozetler</h3>
+          <!-- TODO: rozet sistemi kurulunca gerçek veriye bağlanacak -->
+          <div class="pf-showcase">
+            <span class="pf-badge pf-badge-gold">👑</span>
+            <span class="pf-badge pf-badge-blue">⚡</span>
+            <span class="pf-badge pf-badge-purple">⭐</span>
           </div>
         </div>
-        <div class="section">
-          <h3 class="section-title">❤️ Favori Oyunlar</h3>
-          <div id="fav-games-list" class="fav-games-row"></div>
-        </div>
+
         <div class="settings-section" id="settings-list"></div>
       </div>
 
@@ -350,7 +335,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.28.0';
+    const APP_VERSION = '1.29.0';
 
     // Sıralı yükleme: games.js → ui-kit.js → reels.js → app.js
     // (app.js, games.js'teki PuzzleGames/GameAudio ve reels.js'teki

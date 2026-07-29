@@ -130,19 +130,68 @@ function renderDailyChallenge() {
     const diff = g.dailyDifficulty && g.DIFFICULTIES && g.DIFFICULTIES[g.dailyDifficulty]
       ? g.DIFFICULTIES[g.dailyDifficulty].label : '';
 
-    return '<button class="daily-card' + (st.doneToday ? ' done' : '') + '" ' +
-             'onclick="DailyChallenge.start(\'' + id + '\')">' +
-             '<span class="daily-emoji">' + emoji + '</span>' +
-             '<span class="daily-info">' +
-               '<span class="daily-name">' + name + (diff ? ' · ' + diff : '') + '</span>' +
-               '<span class="daily-sub">' +
-                 (st.doneToday ? 'Bugün tamamlandı' : 'Bugünün bulmacası hazır') +
-               '</span>' +
-             '</span>' +
-             '<span class="daily-right">' +
-               (st.doneToday ? '<span class="daily-check">✓</span>' : '') +
-               (st.streak > 0 ? '<span class="daily-streak">🔥 ' + st.streak + '</span>' : '') +
-             '</span>' +
-           '</button>';
+    // Mockup panel 1: solda tahta önizlemesi, sağda ad · zorluk, ödül ve
+    // "Başla" butonu. Önizleme GERÇEK günün tahtasından geliyor (bkz.
+    // previewFor) — sahte bir görsel değil.
+    return '<div class="dc-card' + (st.doneToday ? ' done' : '') + '">' +
+             previewFor(id, emoji) +
+             '<div class="dc-body">' +
+               '<span class="dc-name">' + name + (diff ? ' - ' + diff : '') + '</span>' +
+               // TODO: XP ekonomisi kurulunca gerçek ödüle bağlanacak.
+               '<span class="dc-reward">⭐ 50 XP</span>' +
+               '<button class="dc-btn" onclick="DailyChallenge.start(\'' + id + '\')">' +
+                 (st.doneToday ? 'Tekrar Oyna' : 'Başla') +
+               '</button>' +
+             '</div>' +
+             (st.doneToday ? '<span class="dc-check">✓</span>' : '') +
+             (st.streak > 0 ? '<span class="dc-streak">🔥 ' + st.streak + '</span>' : '') +
+           '</div>';
   }).join('');
+}
+
+// ───────── Tahta önizlemesi ─────────
+// Mockup'taki mini sudoku ızgarası. Günün tohumu deterministik olduğu için
+// oyuncunun birazdan oynayacağı TAHTANIN TA KENDİSİNDEN üretiliyor —
+// dekoratif bir görsel değil, bulmacanın sol üst 3x3'ü.
+//
+// İKİ ÖNLEM ZORUNLU:
+//  1) SONUÇ ÖNBELLEKLENİR. generate() bir sudoku üreticisi çalıştırıyor;
+//     ana ekran her render'da yeniden üretmek boşa CPU demek. Tohum gün
+//     içinde sabit olduğu için tek üretim yeter.
+//  2) try/catch ŞART. Üretici bir gün hata verirse ana ekranın TAMAMI
+//     boş kalırdı; hata durumunda sessizce emoji'ye düşüyoruz.
+const _previewCache = {};
+
+function previewFor(gameId, fallbackEmoji) {
+  if (gameId !== 'sudoku') {
+    return '<div class="dc-preview dc-preview-emoji">' + fallbackEmoji + '</div>';
+  }
+  const seed = DailyChallenge.seedFor(gameId);
+  const key = gameId + ':' + seed;
+
+  if (!(key in _previewCache)) {
+    _previewCache[key] = null;
+    try {
+      const g = PuzzleGames[gameId];
+      if (g && typeof g.generate === 'function') {
+        const res = g.generate(DailyChallenge.difficultyFor(gameId), seed);
+        if (res && res.puzzle) _previewCache[key] = res.puzzle;
+      }
+    } catch (e) { /* önizleme opsiyonel — kart yine de çalışır */ }
+  }
+
+  const puzzle = _previewCache[key];
+  if (!puzzle) {
+    return '<div class="dc-preview dc-preview-emoji">' + fallbackEmoji + '</div>';
+  }
+
+  // Sol üst 3x3 blok: 81'lik dizide satır r, sütun c → r*9 + c.
+  let cells = '';
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const v = puzzle[r * 9 + c];
+      cells += '<span class="dc-cell">' + (v ? v : '') + '</span>';
+    }
+  }
+  return '<div class="dc-preview">' + cells + '</div>';
 }

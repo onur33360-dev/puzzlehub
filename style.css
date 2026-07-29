@@ -158,27 +158,33 @@ a { color:inherit; text-decoration:none; }
   margin-bottom:16px;
 }
 
-.streak-badge {
-  display:flex; align-items:center; gap:4px;
-  background: rgba(251,191,36,0.12);
-  border:1px solid rgba(251,191,36,0.25);
-  padding:6px 12px; border-radius:var(--radius-full);
+/* Mockup panel 1 header: solda logo+ad, sağda seri rozeti ve avatar. */
+.brand-mark { display:flex; align-items:center; gap:8px; }
+.brand-logo { font-size:24px; line-height:1; }
+.brand-name {
+  font-family:var(--font-display); font-size:19px; font-weight:800;
+  letter-spacing:-.2px; color:var(--text);
 }
-.streak-fire { font-size:18px; }
-.streak-info { display:flex; flex-direction:column; align-items:center; line-height:1; }
-.streak-num { font-size:16px; font-weight:900; color:var(--yellow); }
-.streak-label { font-size:8px; font-weight:700; color:var(--yellow); letter-spacing:1px; }
 
-.brand { text-align:center; }
-.brand-text { font-family:var(--font-display); font-size:22px; font-weight:900; letter-spacing:1px; }
-.brand-accent { color:var(--accent); }
-.brand-sub { display:block; font-size:11px; color:var(--text-secondary); font-weight:500; }
+.header-right { display:flex; align-items:center; gap:10px; }
+
+.streak-chip {
+  display:flex; align-items:center; gap:6px;
+  padding:5px 10px; border-radius:var(--radius-full);
+  background: rgba(251,191,36,0.12);
+  border:1px solid rgba(251,191,36,0.22);
+}
+.streak-fire { font-size:15px; line-height:1; }
+.streak-info { display:flex; flex-direction:column; line-height:1.1; }
+.streak-num { font-size:14px; font-weight:900; color:var(--yellow); }
+.streak-label { font-size:9px; font-weight:600; color:var(--text-secondary); white-space:nowrap; }
 
 .avatar-circle {
-  width:42px; height:42px; border-radius:50%;
+  width:40px; height:40px; border-radius:50%;
   background: linear-gradient(135deg, var(--accent), var(--cyan));
   display:flex; align-items:center; justify-content:center;
-  font-size:22px; box-shadow: 0 0 16px rgba(var(--accent-rgb),0.3);
+  font-size:21px; flex-shrink:0;
+  box-shadow: 0 0 14px rgba(var(--accent-rgb),0.3);
 }
 
 /* ========== LIG CARD ========== */
@@ -372,85 +378,322 @@ a { color:inherit; text-decoration:none; }
   background:rgba(34,211,238,0.1);
   font-size:13px; font-weight:800; color:var(--cyan);
 }
+/* ============================================================
+   MOCKUP EKRANLARI — Ana Sayfa / İlerleme / Profil
+   ============================================================
+   Sahibinin 5 panelli tasarım mockup'ının 1, 3 ve 4. panellerinin
+   birebir karşılığı. KEŞFET (panel 2) buraya dahil DEĞİL — o ekran
+   kendi CSS'ini reels.js içinde runtime'da enjekte ediyor ve bu
+   dosyadan yalnızca body kalıtımı alıyor (bkz. CLAUDE.md §5).
 
-/* ========== İLERLEME (prg-) ==========
-   'lider' sekmesinin yeni içeriği. Renklerin tamamı yukarıdaki :root
-   token'larından geliyor — sabit hex YOK, böylece tema güncellemesi bu
-   ekrana ayrıca dokunmadan iner. Referans tasarımdaki ilerleme çubukları
-   bilerek yok: paydaları (oyunların toplam bölüm sayısı) koda açık değil,
-   uydurma yüzde çizmektense sayı yazıyoruz (bkz. app.js renderProgress). */
+   Renkler tamamen :root token'larından. Sabit hex yalnızca rozet/
+   başarım gibi ÇOK RENKLİ dekoratif öğelerde var; onlar da anlamsal
+   palet renkleri (jewel tonları), marka rengi değil.
+   ============================================================ */
+
+/* ── Bölüm başlığı — mockup'ta cümle düzeni, hafif soluk ── */
+.section-title {
+  font-size:15px; font-weight:700; letter-spacing:0;
+  margin-bottom:10px; color:var(--text);
+}
+
+/* ============ ANA SAYFA ============ */
+
+/* ── Bugünün Meydan Okuması (dc-) ── */
+.dc-card {
+  position:relative;
+  display:flex; align-items:center; gap:14px;
+  padding:14px; border-radius:var(--radius-lg);
+  background:var(--bg-card-solid);
+  border:1px solid rgba(255,255,255,0.07);
+}
+.dc-card.done { opacity:.9; }
+
+/* Mini tahta: günün GERÇEK bulmacasının sol üst 3x3'ü (daily.js). */
+.dc-preview {
+  display:grid; grid-template-columns:repeat(3, 1fr);
+  width:96px; height:96px; flex-shrink:0;
+  border-radius:10px; overflow:hidden;
+  background:#f3ead4;
+  border:1px solid rgba(0,0,0,.35);
+}
+.dc-cell {
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-display);
+  font-size:15px; font-weight:700; color:#2f2410;
+  border-right:1px solid rgba(0,0,0,.16);
+  border-bottom:1px solid rgba(0,0,0,.16);
+}
+.dc-cell:nth-child(3n) { border-right:none; }
+.dc-cell:nth-child(n+7) { border-bottom:none; }
+/* Sudoku dışı oyunlar için sade emoji kutusu. */
+.dc-preview-emoji {
+  display:flex; align-items:center; justify-content:center;
+  font-size:40px; background:var(--bg-element); border-color:rgba(255,255,255,.08);
+}
+
+.dc-body { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.dc-name { font-size:16px; font-weight:800; }
+.dc-reward { font-size:12px; font-weight:700; color:var(--yellow); }
+.dc-btn {
+  margin-top:2px; padding:9px 16px; border-radius:var(--radius-full);
+  background:linear-gradient(180deg, #fcd34d 0%, var(--yellow) 40%, #e79c17 100%);
+  color:#3b2708; font-size:14px; font-weight:800;
+  align-self:flex-start; min-width:110px;
+  box-shadow:0 3px 10px rgba(251,191,36,.28);
+  transition:transform var(--ph-duration-micro, 100ms) ease;
+}
+.dc-btn:active { transform:scale(.94); }
+
+.dc-check {
+  position:absolute; top:10px; right:12px;
+  font-size:15px; font-weight:900; color:var(--green);
+}
+.dc-streak {
+  position:absolute; bottom:10px; right:12px;
+  font-size:11px; font-weight:800; color:var(--yellow);
+}
+
+/* ── Bugünün Görevleri (ms-) ── */
+.ms-row {
+  display:flex; align-items:center; gap:12px;
+  padding:12px 14px; margin-bottom:8px;
+  border-radius:var(--radius-md);
+  background:var(--bg-card); border:1px solid rgba(255,255,255,0.06);
+}
+.ms-icon {
+  width:34px; height:34px; border-radius:10px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:17px;
+}
+/* Görev ikonlarının renkleri mockup'tan: mavi / kırmızı / kehribar. */
+.ms-blue  { background:linear-gradient(135deg,#3b82f6,#1d4ed8); }
+.ms-red   { background:linear-gradient(135deg,#f87171,#dc2626); }
+.ms-amber { background:linear-gradient(135deg,#fcd34d,#d97706); }
+
+.ms-body { flex:1; display:flex; flex-direction:column; gap:7px; min-width:0; }
+.ms-name { font-size:13px; font-weight:600; }
+.ms-bar {
+  height:5px; border-radius:5px; overflow:hidden;
+  background:rgba(255,255,255,0.08);
+}
+.ms-fill {
+  height:100%; border-radius:5px;
+  background:linear-gradient(90deg, var(--accent), var(--accent-light));
+  transition:width .6s ease;
+}
+.ms-count {
+  font-size:12px; font-weight:700; color:var(--text-secondary);
+  white-space:nowrap;
+}
+
+/* ── 7 Günlük Seri (sw-) ── */
+.streak-week {
+  display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;
+}
+.sw-cell { display:flex; flex-direction:column; align-items:center; gap:5px; }
+.sw-day {
+  width:34px; height:34px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px; font-weight:800;
+}
+.sw-done {
+  background:rgba(34,197,94,.16);
+  border:1.5px solid var(--green); color:var(--green);
+}
+.sw-today {
+  background:var(--accent); color:#fff;
+  border:1.5px solid var(--accent-light);
+  box-shadow:0 0 14px rgba(var(--accent-rgb),.45);
+}
+.sw-future {
+  border:1.5px solid rgba(255,255,255,0.16);
+  color:var(--text-muted);
+}
+.sw-label { font-size:10px; font-weight:600; color:var(--text-secondary); }
+
+/* ── Haftalık Ödül sandığı (wc-) ── */
+.weekly-chest {
+  display:flex; align-items:center; gap:12px;
+  padding:14px 16px; border-radius:var(--radius-lg);
+  background:linear-gradient(135deg, rgba(var(--accent-rgb),0.22), rgba(var(--accent-rgb),0.06));
+  border:1px solid rgba(var(--accent-rgb),0.28);
+}
+.wc-info { flex:1; display:flex; flex-direction:column; gap:3px; min-width:0; }
+.wc-title { font-size:15px; font-weight:800; }
+.wc-desc { font-size:11px; color:var(--text-secondary); line-height:1.4; }
+.wc-chest { font-size:40px; flex-shrink:0; }
+
+/* ============ İLERLEME ============ */
 
 .prg-hero {
   display:flex; align-items:center; gap:14px;
-  padding:16px 18px; margin-bottom:16px;
-  border-radius:var(--radius-xl);
-  background:var(--bg-card); border:1px solid rgba(255,255,255,0.08);
+  margin:4px 0 18px;
 }
 .prg-avatar {
-  width:52px; height:52px; border-radius:50%; flex-shrink:0;
-  background:linear-gradient(135deg, var(--accent), var(--cyan));
-  display:flex; align-items:center; justify-content:center; font-size:26px;
+  width:54px; height:54px; border-radius:50%; flex-shrink:0;
+  background:var(--bg-card-solid);
+  border:2px solid rgba(255,255,255,0.14);
+  display:flex; align-items:center; justify-content:center; font-size:28px;
 }
-.prg-hero-info { display:flex; flex-direction:column; gap:3px; }
-.prg-hero-name { font-size:18px; font-weight:800; }
-.prg-hero-tag { font-size:12px; color:var(--text-secondary); }
+.prg-hero-name { font-size:21px; font-weight:800; font-family:var(--font-display); }
 
-/* 4'lü sayaç ızgarası — hepsi gerçek localStorage değeri. */
+/* 4'lü sayaç ızgarası. Yalnızca "Seri" gerçek veri (StreakSystem);
+   diğer üçü placeholder — bkz. app.js renderProgress TODO'ları. */
 .prg-stats {
   display:grid; grid-template-columns:repeat(4, 1fr); gap:8px;
-  margin-bottom:22px;
+  margin-bottom:20px;
 }
 .prg-tile {
-  display:flex; flex-direction:column; align-items:center; gap:3px;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
   padding:12px 4px; border-radius:var(--radius-md);
   background:var(--bg-card); border:1px solid rgba(255,255,255,0.06);
 }
-.prg-tile-icon { font-size:18px; }
-.prg-tile-val { font-size:17px; font-weight:800; font-family:var(--font-display); }
-.prg-tile-lbl {
-  font-size:9px; font-weight:700; letter-spacing:.3px;
-  color:var(--text-muted); text-align:center;
-}
-
-/* Oyun ilerlemesi / günlük seri satırı */
-.prg-row {
-  display:flex; align-items:center; gap:12px;
-  padding:13px 14px; margin-bottom:6px;
-  border-radius:var(--radius-md);
-  background:var(--bg-card); border:1px solid rgba(255,255,255,0.06);
-}
-.prg-row-emoji { font-size:22px; flex-shrink:0; }
-.prg-row-name { flex:1; font-size:14px; font-weight:700; }
-.prg-row-val {
-  font-size:13px; font-weight:800; color:var(--accent);
+.prg-tile-icon { font-size:19px; }
+.prg-tile-val {
+  font-size:15px; font-weight:800; font-family:var(--font-display);
   white-space:nowrap;
 }
-.prg-row-sub { font-weight:600; color:var(--text-muted); }
-/* Henüz oynanmamış oyun: satır duruyor ama öne çıkmıyor. */
-.prg-row-idle { opacity:.55; }
-.prg-row-idle .prg-row-val { color:var(--text-muted); font-weight:600; }
+.prg-tile-lbl {
+  font-size:9px; font-weight:600; color:var(--text-muted);
+  text-align:center; line-height:1.2;
+}
 
-.prg-empty {
-  text-align:center; padding:22px 14px;
+/* ── Oyun Başarımları (ach-) ── */
+.ach-card {
+  display:flex; gap:12px; align-items:flex-start;
+  padding:12px 14px; margin-bottom:8px;
   border-radius:var(--radius-md);
   background:var(--bg-card); border:1px solid rgba(255,255,255,0.06);
-  color:var(--text-secondary); font-size:13px;
 }
-.prg-empty-icon { font-size:26px; display:block; margin-bottom:6px; }
-.prg-empty-cta { margin-top:8px; color:var(--accent); font-size:12px; font-weight:700; }
+.ach-icon {
+  width:44px; height:44px; border-radius:10px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:22px;
+}
+.ach-body { flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; }
+.ach-name { font-size:14px; font-weight:700; }
 
-/* "Yakında" kartı — inşa EDİLMEMİŞ bir sistemin yerini tutar. Sahte sayı
-   göstermek yerine sistemin henüz olmadığını açıkça söyler. */
-.prg-soon {
-  display:flex; align-items:flex-start; gap:12px;
-  padding:16px; border-radius:var(--radius-md);
-  background:var(--bg-element);
-  border:1px dashed rgba(255,255,255,0.12);
+.ach-chips { display:flex; gap:6px; }
+.ach-chip {
+  flex:1; display:flex; align-items:center; gap:5px; min-width:0;
+  padding:5px 7px; border-radius:8px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.06);
 }
-.prg-soon-icon { font-size:24px; opacity:.6; flex-shrink:0; }
-.prg-soon-text { display:flex; flex-direction:column; gap:4px; }
-.prg-soon-title { font-size:14px; font-weight:700; color:var(--text-secondary); }
-.prg-soon-desc { font-size:12px; line-height:1.5; color:var(--text-muted); }
+.ach-chip-icon { font-size:12px; flex-shrink:0; }
+.ach-chip-text { display:flex; flex-direction:column; line-height:1.25; min-width:0; }
+.ach-chip-label {
+  font-size:9px; font-weight:600; color:var(--text-secondary);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.ach-chip-val { font-size:9px; font-weight:700; color:var(--text-muted); }
+
+.ach-bar { height:5px; border-radius:5px; background:rgba(255,255,255,0.08); overflow:hidden; }
+.ach-fill {
+  height:100%; border-radius:5px;
+  background:linear-gradient(90deg, var(--accent), var(--accent-light));
+}
+
+/* ── Son Kazanılan Rozetler (rb-) ── */
+.rb-row { display:flex; gap:12px; }
+.rb-badge {
+  width:52px; height:52px; border-radius:14px;
+  display:flex; align-items:center; justify-content:center; font-size:25px;
+  border:1px solid rgba(255,255,255,0.12);
+}
+.rb-blue   { background:linear-gradient(135deg,#60a5fa,#1d4ed8); }
+.rb-purple { background:linear-gradient(135deg,var(--accent-light),var(--accent-dark)); }
+.rb-gold   { background:linear-gradient(135deg,#fcd34d,#d97706); }
+.rb-red    { background:linear-gradient(135deg,#f87171,#b91c1c); }
+
+/* ============ PROFİL ============ */
+
+/* Hero — mor gradyan, süs öğeleri, beyaz halkalı avatar. */
+.pf-hero {
+  position:relative; overflow:hidden;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  padding:26px 16px 22px; margin-bottom:20px;
+  border-radius:var(--radius-xl);
+  background:linear-gradient(160deg, var(--accent) 0%, var(--accent-dark) 55%, #3b1d7a 100%);
+}
+/* Süsler dekoratif — pointer-events yok ki avatara dokunmayı engellemesinler. */
+.pf-deco { position:absolute; pointer-events:none; opacity:.55; }
+.pf-deco-1 { top:14px;  left:26px;  font-size:20px; }
+.pf-deco-2 { top:22px;  right:30px; font-size:17px; }
+.pf-deco-3 { bottom:22px; right:24px; font-size:15px; }
+.pf-deco-4 { bottom:18px; left:32px;  font-size:18px; }
+
+.pf-avatar-ring {
+  width:88px; height:88px; border-radius:50%;
+  background:rgba(255,255,255,.12);
+  border:3px solid rgba(255,255,255,.85);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 6px 20px rgba(0,0,0,.3);
+}
+.pf-avatar { font-size:46px; line-height:1; }
+.pf-name {
+  font-size:20px; font-weight:800; font-family:var(--font-display);
+  color:#fff; margin-top:4px;
+}
+.pf-title { font-size:12px; font-weight:600; color:rgba(255,255,255,.82); }
+
+/* ── Favori Oyunlar ızgarası ── */
+.pf-fav-grid { display:flex; gap:10px; flex-wrap:wrap; }
+.pf-fav {
+  width:54px; height:54px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid rgba(255,255,255,0.1);
+  transition:transform var(--ph-duration-micro, 100ms) ease;
+}
+.pf-fav:active { transform:scale(.92); }
+.pf-fav-emoji { font-size:26px; }
+.pf-fav-empty {
+  color:var(--accent-light); font-size:13px; font-weight:600;
+  padding:10px 0;
+}
+
+/* ── Vitrindeki Rozetler ── */
+.pf-showcase { display:flex; gap:14px; }
+.pf-badge {
+  width:62px; height:68px;
+  display:flex; align-items:center; justify-content:center; font-size:30px;
+  /* Kalkan silueti: rozetlerin "madalya" değil "arma" okunmasını sağlıyor. */
+  clip-path:polygon(50% 0%, 100% 14%, 100% 62%, 50% 100%, 0% 62%, 0% 14%);
+  border:none;
+}
+.pf-badge-gold   { background:linear-gradient(160deg,#fde68a,#d97706); }
+.pf-badge-blue   { background:linear-gradient(160deg,#93c5fd,#1d4ed8); }
+.pf-badge-purple { background:linear-gradient(160deg,var(--accent-light),var(--accent-dark)); }
+
+/* ── Avatar seçici ── */
+.av-scrim {
+  position:fixed; inset:0; z-index:9998; display:none;
+  align-items:center; justify-content:center; padding:24px;
+  background:rgba(6,6,18,.72);
+}
+.av-box {
+  width:100%; max-width:320px;
+  display:flex; flex-direction:column; gap:14px;
+  padding:20px; border-radius:var(--radius-xl);
+  background:var(--bg-card-solid);
+  border:1px solid rgba(255,255,255,0.1);
+  box-shadow:0 20px 50px rgba(0,0,0,.55);
+}
+.av-head { font-size:16px; font-weight:800; text-align:center; }
+.av-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+.av-pick {
+  aspect-ratio:1; border-radius:12px; font-size:26px;
+  background:var(--bg-element);
+  border:1.5px solid transparent;
+}
+.av-pick.sel {
+  border-color:var(--accent);
+  background:rgba(var(--accent-rgb),.16);
+}
+.av-close {
+  padding:10px; border-radius:var(--radius-full);
+  background:rgba(255,255,255,0.06);
+  font-size:14px; font-weight:700; color:var(--text-secondary);
+}
 
 /* ========== SETTINGS ========== */
 .profile-card-section { margin-bottom:20px; }

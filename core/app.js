@@ -15,13 +15,21 @@ const PUZZLE_GAMES = [
   { name:'Resim Kaydır', emoji:'🖼️', rating:4.9, badge:'yeni', desc:'Fotoğrafı kaydır, tamamla', bg:'linear-gradient(135deg,#123a4a,#06121c)' },
 ];
 
+// Mockup panel 1 "Bugünün Görevleri" ile birebir üç görev.
+// TODO: görev takibi kurulunca gerçek veriye bağlanacak. Bugün hiçbir
+// sayaç yazılmıyor — playGame()/showGameOver() ilerleme kaydetmiyor,
+// o yüzden progress değerleri statik. İkincisi ("Günlük meydan okumayı
+// tamamla") takip gelmeden de türetilebilir: DailyChallenge.state()
+// .doneToday zaten bu bilgiyi tutuyor.
 const DAILY_MISSIONS = [
-  { icon:'🎮', name:'3 Oyun Oyna', desc:'Herhangi 3 oyun bitir', progress:2, total:3, reward:'+50' },
-  { icon:'🏆', name:'1 Oyun Kazan', desc:'Bir oyunda birinci ol', progress:0, total:1, reward:'+30' },
-  { icon:'⏱️', name:'10 dk Oyna', desc:'Toplam 10 dakika oyna', progress:7, total:10, reward:'+40' },
-  { icon:'🎲', name:'Rastgele Oyna', desc:'Rastgele oyun denemesi', progress:0, total:1, reward:'+20' },
+  { icon:'🎮', tone:'blue',  name:'3 oyun oyna',                     progress:1, total:3 },
+  { icon:'🎯', tone:'red',   name:'Günlük meydan okumayı tamamla',   progress:0, total:1 },
+  { icon:'⭐', tone:'amber', name:'Kişisel rekorunu geliştir',       progress:0, total:1 },
 ];
 
+// ŞU AN RENDER EDİLMİYOR. Mockup'ın ana sayfasında haftalık görev listesi
+// yok, yerine "Haftalık Ödül" sandığı var. Dizi silinmedi: sandığın
+// "tüm görevleri tamamla" koşulu kurulduğunda tüketilecek kaynak bu.
 const WEEKLY_MISSIONS = [
   { icon:'🔥', name:'7 Gün Giriş', desc:'7 gün üst üste gir', progress:4, total:7, reward:'+200' },
   { icon:'⭐', name:'15 Oyun Kazan', desc:'15 oyun kazanma', progress:6, total:15, reward:'+300' },
@@ -39,18 +47,28 @@ const LEADERBOARD = [
   { name:'Acemi', avatar:'🐣', score:500 },
 ];
 
+// Profil satırları. İlk üçü mockup panel 4'ten; ardından Plus ve Mağaza
+// geliyor — ikisi de header'dan KALDIRILDIĞI için (mockup'ta yoklar)
+// uygulamadaki tek erişim kapıları burası. Kalanlar mevcut ayarlar.
+// `fn` verilirse çalıştırılır, verilmezse `action` toast olarak gösterilir.
 const SETTINGS = [
+  { icon:'👤', label:'Avatarını Düzenle', fn:'openAvatarPicker()' },
+  // TODO: profil çerçevesi sistemi kurulunca gerçek ekrana bağlanacak
+  { icon:'🖼️', label:'Profil Çerçevesi', action:'Profil çerçeveleri yakında!' },
+  // Tema seçici bu turda kurulmadı; tek tema var ve "Özel Temalar" Plus'ın
+  // reklam ettiği bir avantaj — bu yüzden satır Plus sayfasına yönlendiriyor.
+  { icon:'🎨', label:'Tema Seçimi', fn:'showPlusPage()' },
+  { icon:'👑', label:"Plus'a Geç", fn:'showPlusPage()' },
+  { icon:'💎', label:'Elmas Mağazası', fn:'openShop()' },
   { icon:'🔔', label:'Bildirimler', action:'Bildirimler yakında!' },
   { icon:'🔊', label:'Ses Ayarları', action:'Ses ayarları yakında!' },
-  { icon:'🎨', label:'Tema', action:'Tema ayarları yakında!' },
   { icon:'🌐', label:'Dil', action:'Dil: Türkçe' },
-  { icon:'📊', label:'İstatistikler', action:'İstatistikler yakında!' },
   { icon:'⭐', label:'Puanla', action:'Uygulama puanlama yakında!' },
   { icon:'📤', label:'Paylaş', action:'Paylaşım yakında!' },
   // Sürüm tek kaynaktan (index.html APP_VERSION) okunur; burada sabit
   // yazmak bump'ta kaydırır. typeof guard'ı app.js'in izole yüklendiği
   // (test) durumda ReferenceError'ı önler.
-  { icon:'ℹ️', label:'Hakkında', action:'PuzzleHub v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.27.1') },
+  { icon:'ℹ️', label:'Hakkında', action:'PuzzleHub v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0') },
 ];
 
 const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
@@ -104,6 +122,67 @@ const DiamondSystem = {
     }
   }
 };
+
+// ==================== AVATAR ====================
+//
+// Avatar eskiden ÜÇ AYRI YERDE sabit yazılıydı (header, profil, ilerleme)
+// ve hiçbiri diğerinden haberdar değildi — birini değiştirmek diğer ikisini
+// sessizce tutarsız bırakıyordu. Artık tek kaynak burası: DOM'da
+// `data-ph-avatar` niteliği taşıyan her öğe buradan doldurulur, yani yeni
+// bir yerde avatar göstermek için o niteliği eklemek yeterli.
+const AvatarSystem = {
+  _key: 'ph_avatar',
+  DEFAULT: '🦊',
+  // Seçenekler tek bir emoji listesi — ayrı bir görsel varlık yok, bu
+  // yüzden ne indirme ne lisans sorunu var (bkz. CLAUDE.md §6 ses politikası
+  // ile aynı mantık).
+  CHOICES: ['🦊','😎','🐺','🦁','🐱','🐯','🐻','🐼','🐸','🐨','🦉','🐧'],
+
+  get() {
+    try { return localStorage.getItem(this._key) || this.DEFAULT; }
+    catch (e) { return this.DEFAULT; }
+  },
+  set(emoji) {
+    try { localStorage.setItem(this._key, emoji); } catch (e) {}
+    this.updateUI();
+  },
+  updateUI() {
+    const v = this.get();
+    document.querySelectorAll('[data-ph-avatar]').forEach(el => { el.textContent = v; });
+  },
+};
+
+// Basit seçici — mockup'ta ayrı bir ekran yok, bu yüzden mevcut modal
+// dilini kullanan hafif bir ızgara.
+function openAvatarPicker() {
+  const cur = AvatarSystem.get();
+  const grid = AvatarSystem.CHOICES.map(e =>
+    `<button class="av-pick${e === cur ? ' sel' : ''}" onclick="pickAvatar('${e}')">${e}</button>`
+  ).join('');
+  let el = document.getElementById('avatar-picker');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'avatar-picker';
+    el.className = 'av-scrim';
+    el.onclick = (ev) => { if (ev.target === el) closeAvatarPicker(); };
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="av-box">
+      <span class="av-head">Avatarını Seç</span>
+      <div class="av-grid">${grid}</div>
+      <button class="av-close" onclick="closeAvatarPicker()">Kapat</button>
+    </div>`;
+  el.style.display = 'flex';
+}
+function pickAvatar(emoji) {
+  AvatarSystem.set(emoji);
+  if (typeof GameAudio !== 'undefined') { GameAudio.play('tab'); GameAudio.haptic('micro'); }
+  closeAvatarPicker();
+}
+function closeAvatarPicker() {
+  const el = document.getElementById('avatar-picker');
+  if (el) el.style.display = 'none';
+}
 
 // ==================== STREAK SİSTEMİ ====================
 
@@ -185,6 +264,7 @@ function claimDailyReward() {
   if (streak === 30) DiamondSystem.add(200, '30 gün streak! 👑');
   
   renderDailyRewards();
+  updateStreakUI();
 }
 
 // ==================== ÖDÜLLÜ REKLAM ====================
@@ -502,6 +582,14 @@ window.__phHandleBack = __phHandleBack;
 
 // ==================== RENDER: ANA SAYFA ====================
 
+// Header'daki seri rozeti tek yerden güncellenir — ödül alındığında
+// sayının anında değişmesi için claimDailyReward de bunu çağırıyor.
+function updateStreakUI() {
+  const n = StreakSystem.getCount();
+  const el = document.getElementById('hdr-streak');
+  if (el) el.textContent = n || '0';
+}
+
 function renderHome() {
   if (typeof renderDailyChallenge === 'function') renderDailyChallenge();
   renderDailyRewards();
@@ -516,28 +604,31 @@ function renderDailyRewards() {
   const alreadyClaimed = streakData.lastDate === today;
   const currentDayIdx = StreakSystem.getDayInWeek();
   
+  // Mockup panel 1 "7 Günlük Seri": geçmiş günler yeşil ✓, bugün dolu mor
+  // daire içinde gün numarası, gelecek günler sadece çerçeve.
+  // Elmas miktarı etiketi mockup'ta yok — kaldırıldı, tablo yerinde duruyor
+  // (claimDailyReward hâlâ oradan okuyor).
   container.innerHTML = DAILY_REWARD_TABLE.map((reward, i) => {
-    let cls = 'reward-day';
-    let content = '';
-    
-    if (alreadyClaimed && i <= currentDayIdx) {
-      // Already claimed days
-      cls += ' claimed';
-      content = `<span class="reward-check">✓</span>`;
-    } else if (!alreadyClaimed && i === currentDayIdx) {
-      // Today — claimable
-      cls += ' today claimable';
-      content = `<span class="reward-icon glow">${reward.icon}</span>`;
-    } else if (i < currentDayIdx) {
-      cls += ' claimed';
-      content = `<span class="reward-check">✓</span>`;
+    const done = (i < currentDayIdx) || (alreadyClaimed && i <= currentDayIdx);
+    const isToday = i === currentDayIdx;
+    let cls = 'sw-day';
+    let mark;
+
+    if (done) {
+      cls += ' sw-done';
+      mark = '✓';
+    } else if (isToday) {
+      cls += ' sw-today';
+      mark = String(i + 1);
     } else {
-      content = `<span class="reward-icon" style="opacity:.4">${reward.icon}</span>`;
+      cls += ' sw-future';
+      mark = String(i + 1);
     }
-    return `<div class="${cls}" ${(!alreadyClaimed && i === currentDayIdx) ? 'onclick="claimDailyReward()"' : ''}>
-      ${content}
-      <span class="reward-label">${reward.day}</span>
-      <span class="reward-amount">${reward.amount}💎</span>
+
+    const claimable = !alreadyClaimed && isToday;
+    return `<div class="sw-cell">
+      <div class="${cls}" ${claimable ? 'onclick="claimDailyReward()"' : ''}>${mark}</div>
+      <span class="sw-label">${reward.day}</span>
     </div>`;
   }).join('');
 }
@@ -565,24 +656,26 @@ function renderFavorites() {
       </div>
     </div>`;
   
+  // Mockup panel 4: kare ikon karoları (isim yok, sadece oyun ikonu).
   const badgeHTML = favGames.map((g, i) => `
-    <div class="fav-badge anim-in" style="animation-delay:${i*40}ms" onclick="switchTab('discover')">
-      <span class="fav-badge-emoji" style="background:linear-gradient(135deg,${g.gradient[0]},${g.gradient[1]})">${g.emoji}</span>
-      <span class="fav-badge-name">${g.name}</span>
+    <div class="pf-fav anim-in" style="animation-delay:${i*40}ms;background:linear-gradient(135deg,${g.gradient[0]},${g.gradient[1]})"
+         onclick="playGameById('${g.id}')" title="${g.name}">
+      <span class="pf-fav-emoji">${g.emoji}</span>
     </div>
   `).join('');
-  
-  // Anasayfa container (fav-games)
+
+  // Ana sayfa container'ı mockup'ta YOK — kaldırıldı. Guard duruyor ki
+  // ileride geri gelirse tek satırla çalışsın.
   const homeContainer = document.getElementById('fav-games');
   if (homeContainer) {
     homeContainer.innerHTML = favGames.length === 0 ? emptyHTML : badgeHTML;
   }
-  
+
   // Profil container (fav-games-list)
   const profileContainer = document.getElementById('fav-games-list');
   if (profileContainer) {
     profileContainer.innerHTML = favGames.length === 0
-      ? '<p style="color:var(--text-muted);text-align:center;padding:12px;font-size:13px">❤️ Keşfet ekranından favorilere ekle!</p>'
+      ? '<p class="pf-fav-empty" onclick="switchTab(\'discover\')">❤️ Keşfet\'ten favorilerine ekle →</p>'
       : badgeHTML;
   }
 }
@@ -590,178 +683,141 @@ function renderFavorites() {
 // ==================== RENDER: GÖREVLER ====================
 
 function renderMissions() {
+  // Haftalık liste artık ana sayfada yok (mockup'ta yerine ödül sandığı var).
   renderMissionList('daily-missions', DAILY_MISSIONS);
-  renderMissionList('weekly-missions', WEEKLY_MISSIONS);
 }
 
 function renderMissionList(containerId, missions) {
   const container = document.getElementById(containerId);
+  if (!container) return;
   container.innerHTML = missions.map((m, i) => `
-    <div class="mission-card anim-in" style="animation-delay:${i * 60}ms">
-      <span class="mission-icon">${m.icon}</span>
-      <div class="mission-info">
-        <span class="mission-name">${m.name}</span>
-        <span class="mission-desc">${m.desc}</span>
-        <div class="mission-progress-bar">
-          <div class="mission-progress-fill" style="width:${(m.progress/m.total)*100}%"></div>
-        </div>
+    <div class="ms-row anim-in" style="animation-delay:${i * 60}ms">
+      <span class="ms-icon ms-${m.tone}">${m.icon}</span>
+      <div class="ms-body">
+        <span class="ms-name">${m.name}</span>
+        <div class="ms-bar"><div class="ms-fill" style="width:${(m.progress / m.total) * 100}%"></div></div>
       </div>
-      <span class="mission-reward">${m.reward} ⭐</span>
+      <span class="ms-count">${m.progress} / ${m.total}</span>
     </div>
   `).join('');
 }
 
+// TODO: görev takibi kurulunca "tüm görevler tamamlandı mı" koşuluna ve
+// gerçek ödül verme akışına bağlanacak. Bugün sandık dekoratif.
+function claimWeeklyReward() {
+  showToast('🎁 Haftalık ödül yakında!');
+}
+
 // ==================== RENDER: İLERLEME ====================
 //
-// KURAL: bu ekran YALNIZCA gerçekten kalıcı olan veriyi gösterir.
-// Referans tasarımdaki sayılar (18 rozet, %72 koleksiyon, "10/10 oyun
-// denendi") mockup verisidir; karşılıkları kodda YOKTUR. Uydurulmuş bir
-// sayı olmayan bir sistemi varmış gibi gösterir ve sonra sessizce yanlış
-// kalır — o yüzden burada ya gerçek değer vardır ya "Yakında" yazar.
+// Mockup panel 3'ün birebir karşılığı. Ekrandaki değerlerin ÇOĞU şu an
+// STATİK — arkalarındaki sistemler (rozet, koleksiyon, başarım) henüz
+// kurulmadı. Bu bilinçli bir geliştirme-build kararı: canlı kullanıcı yok,
+// amaç tasarımı cihazda görmek. Her placeholder'ın başında TODO var.
 //
-// BUGÜN GERÇEKTEN KALICI OLANLAR:
-//   ph_streak           → giriş serisi + toplam gün (StreakSystem)
-//   ph_diamonds         → elmas (DiamondSystem)
-//   gh_fav              → favori oyun sayısı
-//   ph_watersort_level  → tamamlanan bölüm (İksir Sıralama)
-//   ph_screw_level      → tamamlanan bölüm (Vida Ustası)
-//   bp_hi               → rekor (Bulmaca Blokları)
-//   gh_hi_game2048      → rekor (2048)
-//   ph_daily_v1         → günlük bulmaca serisi (DailyChallenge)
+// GERÇEK VERİYE BAĞLI OLAN: "Seri" kutusu (StreakSystem).
 //
-// KASITLI OLARAK GÖSTERİLMEYENLER:
-//   • Oynanma sayısı — gh_plays_* SADECE Keşfet akışından başlatılınca
-//     artıyor (reels.js). Ana sayfadan/favorilerden oynanan oyun
-//     sayılmıyor, yani "kaç oyun denedin" toplamı yanlış çıkardı.
-//   • Bölüm ilerleme ÇUBUĞU — oyunların toplam bölüm sayısı (LEVELS.length)
-//     kendi kapanışlarının içinde, dışarı açılmıyor. Paydası bilinmeyen
-//     bir çubuk uydurma yüzde demektir; sayı yazıyoruz, çubuk değil.
-//   • Rozet/başarım sistemi — ne veri modeli ne kazanma mantığı var.
-//     Ayrı bir tasarım turunun işi (bkz. "Yakında" kartı).
+// SİSTEMİ OLMAYANLAR (hepsi TODO ile işaretli):
+//   • Rozet sayısı, koleksiyon yüzdesi, Oyun Başarımları çipleri,
+//     Son Kazanılan Rozetler → rozet/başarım sistemi yok.
+//   • "Oyun Denedi" → gh_plays_* SADECE Keşfet akışından artıyor
+//     (reels.js), ana sayfadan oynanan sayılmıyor; gerçek değeri
+//     bağlamak yanlış toplam gösterirdi. Payda (10) oynanabilir oyun
+//     sayısı, o gerçek.
 //
-// Ok Bulmaca ve Sudoku bilerek listede değil: arrowPuzzle rekoru yalnızca
-// OKUNUYOR, hiç yazılmıyor (games.js phHighScore('arrowPuzzle') çağrısı
-// değersiz) — yani her zaman 0 gösterirdi. Sudoku ise skor tutmuyor,
-// sadece günlük bölümünde görünüyor.
+// NOT: bu ekran daha önce gerçek bölüm/rekor verisi gösteriyordu
+// (ph_watersort_level, ph_screw_level, bp_hi, gh_hi_game2048). Mockup'ta
+// o bölüm yok. Veriler yerinde duruyor ve okunabilir — rozet sistemi
+// gelince "Oyun Başarımları" çubuklarının gerçek paydası olabilirler.
 
-// Rekor okuma: anahtar sözleşmesi ui-kit.js'teki phHighScore'a ait
-// (blockPuzzle → bp_hi, diğerleri → gh_hi_<id>). Burada tekrar türetmek
-// iki ayrı doğruluk kaynağı yaratırdı.
-function _phBest(gameId) {
-  if (typeof phHighScore === 'function') return phHighScore(gameId) || 0;
-  return 0;
-}
-function _phInt(key) {
-  try { return parseInt(localStorage.getItem(key) || '0', 10) || 0; } catch (e) { return 0; }
-}
+// TODO: rozet sistemi kurulunca gerçek veriye bağlanacak.
+// Mockup panel 3'teki üç kart birebir.
+const ACHIEVEMENT_CARDS = [
+  { name:'Bulmaca Blokları', emoji:'🧱', grad:['#7c3aed','#5b21b6'], pct:62,
+    chips:[{ icon:'🧩', label:'Satır Ustası', val:'10/10' }, { icon:'🎖️', label:'Renk Mimarı', val:'12/20' }] },
+  { name:'Sudoku', emoji:'🔢', grad:['#1d4ed8','#1e3a8a'], pct:55,
+    chips:[{ icon:'🧩', label:'Zihin Kıvılcımı', val:'10/10' }, { icon:'🎖️', label:'Sessiz Çözümcü', val:'12/20' }] },
+  { name:'Kelime Avı', emoji:'🔍', grad:['#0891b2','#155e75'], pct:48,
+    chips:[{ icon:'🧩', label:'Kelime Dedektifi', val:'10/10' }, { icon:'🎖️', label:'Harf Şampiyonu', val:'12/20' }] },
+];
 
-// DİKKAT: seviye anahtarları OYNANACAK bölümün 0-tabanlı indeksini tutuyor
-// (games.js: bölüm bitince level++ sonra kaydediliyor). Dolayısıyla saklanan
-// sayı doğrudan TAMAMLANAN bölüm adedidir — +1 eklemek yanlış olur.
-const PROGRESS_TRACKS = [
-  { name:'İksir Sıralama',   emoji:'🧪', kind:'level', read:() => _phInt('ph_watersort_level') },
-  { name:'Vida Ustası',      emoji:'🔩', kind:'level', read:() => _phInt('ph_screw_level') },
-  { name:'Bulmaca Blokları', emoji:'🧱', kind:'score', read:() => _phBest('blockPuzzle') },
-  { name:'2048',             emoji:'🔢', kind:'score', read:() => _phBest('game2048') },
+// TODO: rozet sistemi kurulunca gerçek veriye bağlanacak.
+const RECENT_BADGES = [
+  { icon:'🔟', tone:'blue' },
+  { icon:'🧩', tone:'purple' },
+  { icon:'👑', tone:'gold' },
+  { icon:'🔥', tone:'red' },
 ];
 
 function renderProgress() {
   const container = document.getElementById('progress-content');
   if (!container) return;
 
-  const streakData = StreakSystem.getData();
   const streak = StreakSystem.getCount();
-  const totalDays = streakData.totalDays || 0;
-  let favCount = 0;
-  try { favCount = (JSON.parse(localStorage.getItem('gh_fav') || '[]') || []).length; } catch (e) {}
 
   const tiles = [
-    { icon:'🔥', value:streak,                     label:'GÜN SERİSİ' },
-    { icon:'📅', value:totalDays,                  label:'TOPLAM GÜN' },
-    { icon:'💎', value:DiamondSystem.get(),        label:'ELMAS' },
-    { icon:'❤️', value:favCount,                   label:'FAVORİ' },
+    // TODO: oynanan oyun takibi kurulunca gerçek veriye bağlanacak
+    { icon:'🎮', value:'10/10',        label:'Oyun Denedi' },
+    // TODO: rozet sistemi kurulunca gerçek veriye bağlanacak
+    { icon:'🛡️', value:'18',           label:'Rozet' },
+    { icon:'🔥', value:streak + ' Gün', label:'Seri' },
+    // TODO: koleksiyon tanımı + sistemi kurulunca gerçek veriye bağlanacak
+    { icon:'🧩', value:'%72',          label:'Koleksiyon' },
   ];
 
   const tilesHTML = tiles.map((t, i) => `
     <div class="prg-tile anim-in" style="animation-delay:${i*50}ms">
       <span class="prg-tile-icon">${t.icon}</span>
-      <span class="prg-tile-val">${t.value.toLocaleString()}</span>
+      <span class="prg-tile-val">${t.value}</span>
       <span class="prg-tile-lbl">${t.label}</span>
     </div>
   `).join('');
 
-  // ── Oyun ilerlemesi ──
-  const tracks = PROGRESS_TRACKS.map(t => ({ ...t, value: t.read() }));
-  const started = tracks.filter(t => t.value > 0);
-  const tracksHTML = started.length === 0
-    ? `<div class="prg-empty">
-         <span class="prg-empty-icon">🎮</span>
-         <div>Henüz kayıtlı ilerlemen yok</div>
-         <div class="prg-empty-cta" onclick="switchTab('home')">Bir oyun oyna, burada görünsün →</div>
-       </div>`
-    : tracks.map((t, i) => `
-        <div class="prg-row anim-in${t.value > 0 ? '' : ' prg-row-idle'}" style="animation-delay:${i*50}ms">
-          <span class="prg-row-emoji">${t.emoji}</span>
-          <span class="prg-row-name">${t.name}</span>
-          <span class="prg-row-val">${
-            t.value === 0 ? 'Henüz başlamadın'
-              : t.kind === 'level' ? t.value + ' bölüm'
-              : t.value.toLocaleString() + ' puan'
-          }</span>
+  const achHTML = ACHIEVEMENT_CARDS.map((a, i) => `
+    <div class="ach-card anim-in" style="animation-delay:${i*60}ms">
+      <span class="ach-icon" style="background:linear-gradient(135deg,${a.grad[0]},${a.grad[1]})">${a.emoji}</span>
+      <div class="ach-body">
+        <span class="ach-name">${a.name}</span>
+        <div class="ach-chips">
+          ${a.chips.map(c => `
+            <span class="ach-chip">
+              <span class="ach-chip-icon">${c.icon}</span>
+              <span class="ach-chip-text">
+                <span class="ach-chip-label">${c.label}</span>
+                <span class="ach-chip-val">${c.val}</span>
+              </span>
+            </span>`).join('')}
         </div>
-      `).join('');
+        <div class="ach-bar"><div class="ach-fill" style="width:${a.pct}%"></div></div>
+      </div>
+    </div>
+  `).join('');
 
-  // ── Günlük bulmaca serisi ── (DailyChallenge yalnızca katılan oyunları döner)
-  let dailyHTML = '';
-  if (typeof DailyChallenge !== 'undefined') {
-    const ids = DailyChallenge.games();
-    if (ids.length) {
-      dailyHTML = `
-        <div class="section">
-          <h3 class="section-title">🗓️ GÜNLÜK BULMACA SERİSİ</h3>
-          ${ids.map(id => {
-            const st = DailyChallenge.state(id);
-            const name = GAME_NAME_BY_ID[id] || id;
-            return `
-              <div class="prg-row">
-                <span class="prg-row-emoji">${st.doneToday ? '✅' : '🗓️'}</span>
-                <span class="prg-row-name">${name}</span>
-                <span class="prg-row-val">${st.streak} gün<span class="prg-row-sub"> · rekor ${st.best}</span></span>
-              </div>`;
-          }).join('')}
-        </div>`;
-    }
-  }
+  const badgesHTML = RECENT_BADGES.map((b, i) => `
+    <span class="rb-badge rb-${b.tone} anim-in" style="animation-delay:${i*60}ms">${b.icon}</span>
+  `).join('');
 
   container.innerHTML = `
     <div class="prg-hero">
-      <div class="prg-avatar"><span>😎</span></div>
-      <div class="prg-hero-info">
-        <span class="prg-hero-name">Oyuncu</span>
-        <span class="prg-hero-tag">${streak > 0 ? `🔥 ${streak} günlük seri` : 'Seriyi başlat!'}</span>
-      </div>
+      <div class="prg-avatar" data-ph-avatar></div>
+      <span class="prg-hero-name">Oyuncu</span>
     </div>
 
     <div class="prg-stats">${tilesHTML}</div>
 
     <div class="section">
-      <h3 class="section-title">🎮 OYUN İLERLEMEN</h3>
-      ${tracksHTML}
+      <h3 class="section-title">Oyun Başarımları</h3>
+      ${achHTML}
     </div>
-
-    ${dailyHTML}
 
     <div class="section">
-      <h3 class="section-title">🏅 ROZETLER</h3>
-      <div class="prg-soon">
-        <span class="prg-soon-icon">🏅</span>
-        <div class="prg-soon-text">
-          <span class="prg-soon-title">Rozetler yakında</span>
-          <span class="prg-soon-desc">Başarım sistemi henüz hazır değil — hazır olunca kazandıkların burada birikecek.</span>
-        </div>
-      </div>
+      <h3 class="section-title">Son Kazanılan Rozetler</h3>
+      <div class="rb-row">${badgesHTML}</div>
     </div>
   `;
+
+  // Hero avatarı innerHTML ile YENİ oluşturuldu — tek kaynaktan doldur.
+  AvatarSystem.updateUI();
 }
 
 // ==================== RENDER: LİDER ====================
@@ -803,12 +859,16 @@ function renderLeaderboard() {
 
 function renderSettings() {
   const container = document.getElementById('settings-list');
-  container.innerHTML = SETTINGS.map((s, i) => `
-    <button class="setting-row anim-in" style="animation-delay:${i*40}ms" onclick="showToast('${s.action}')">
-      <span>${s.icon} ${s.label}</span>
-      <span>→</span>
-    </button>
-  `).join('');
+  if (!container) return;
+  container.innerHTML = SETTINGS.map((s, i) => {
+    // fn varsa doğrudan çalıştırılır; yoksa action toast olarak gösterilir.
+    const act = s.fn ? s.fn : `showToast('${s.action}')`;
+    return `
+    <button class="setting-row anim-in" style="animation-delay:${i*40}ms" onclick="${act}">
+      <span class="sr-left"><span class="sr-icon">${s.icon}</span>${s.label}</span>
+      <span class="sr-arrow">›</span>
+    </button>`;
+  }).join('');
 }
 
 // renderFavorites() zaten yukarıda tek bir fonksiyon olarak tanımlandı
@@ -1109,20 +1169,14 @@ function showToast(msg) {
 (function initApp() {
   DiamondSystem.updateUI();
   PlusSystem.updateUI();
+  AvatarSystem.updateUI();
   renderHome();
   // renderLeaderboard() değil: 'lider' sekmesi artık İlerleme ekranını
   // gösteriyor. Eskisi açılışta GİZLİ kapsayıcılara boşuna çiziyordu.
   renderProgress();
   renderSettings();
-  
-  // Update streak badge
-  const streakCount = StreakSystem.getCount();
-  const streakNum = document.querySelector('.streak-num');
-  if (streakNum) streakNum.textContent = streakCount || '0';
-  
-  // Update eco-streak
-  const ecoStreak = document.getElementById('eco-streak');
-  if (ecoStreak) ecoStreak.textContent = streakCount || '0';
+  renderFavorites();
+  updateStreakUI();
 
   // Uygulama açılış sesi — soft bloom (müzik geçici olarak kapalı, bkz. playGame())
   document.addEventListener('click', function _firstTouch() {

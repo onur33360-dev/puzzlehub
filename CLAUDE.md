@@ -398,15 +398,45 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   gone entirely) is undecided. Their containers still exist in `index.html` inside a
   hidden `#lider-legacy`, so restoring the screen is: drop the `display:none`, call the
   function. Deleting either half breaks that.
-- **The İlerleme screen shows only data that is actually persisted — keep it that way.**
-  The reference mockup shows badge counts, a collection percentage and "games tried"
-  totals; none of those systems exist. Two traps if you extend it: (1) `gh_plays_*` is
-  incremented **only** by `reels.js` when a game is launched from the Discover feed, so
-  any "games played" total silently undercounts everything launched from Home;
-  (2) games' `LEVELS.length` is closed over inside each IIFE, so a level **progress bar**
-  has no honest denominator — that is why levels render as a number, not a bar.
-  Arrow Puzzle is absent from the list because `phHighScore('arrowPuzzle')` is only ever
-  *read*, never written, so it would display 0 forever.
+- **Home / İlerleme / Profil carry STATIC PLACEHOLDER numbers on purpose (2026-07-29).**
+  These three screens were rebuilt to match the owner's design mockup one-for-one, and the
+  mockup shows values for systems that do not exist yet: badge counts, a collection
+  percentage, per-game achievement chips, recently-earned badges, the weekly-reward claim,
+  the mission progress bars, the "⭐ 50 XP" label and the profile title. They render as
+  written in the mockup. This is an **explicit owner decision for a pre-launch dev build**
+  with no live users — the earlier "never show a number you can't back" rule was suspended
+  for these screens, not forgotten. **Every placeholder carries a `TODO:` comment naming
+  the system that will replace it** — grep `TODO:` in `core/app.js`, `core/daily.js` and
+  `index.html` before assuming a value is real. Do not delete those comments; they are the
+  only marker separating real data from mockup data.
+  What IS real on these screens: the 7-day streak row and the header streak chip
+  (`StreakSystem`), the daily-challenge card including its **mini board preview, which is
+  generated from the actual daily seed** (`core/daily.js` `previewFor`), and the favourites
+  grid (`gh_fav`).
+  The traps that made the old rule necessary still stand, so read them before wiring any of
+  it to real data: (1) `gh_plays_*` is incremented **only** by `reels.js` when a game starts
+  from the Discover feed, so a "games played" total silently undercounts everything launched
+  from Home; (2) each game's `LEVELS.length` is closed over inside its IIFE, so a level
+  progress bar has no honest denominator; (3) `phHighScore('arrowPuzzle')` is only ever
+  *read*, never written, so Arrow would show 0 forever.
+- **`previewFor()` in `core/daily.js` must keep its cache and its `try/catch`.** It runs the
+  real Sudoku generator to draw the mini board, so without the per-seed cache every home
+  render pays for a full puzzle generation, and without the `catch` a generator failure
+  would blank the **entire home screen** instead of falling back to an emoji tile.
+- **The avatar has ONE source: `AvatarSystem` (`ph_avatar`, default 🦊).** It used to be a
+  hardcoded emoji in three unrelated places that silently drifted apart. Any element with
+  the `data-ph-avatar` attribute is filled from it — that attribute is the whole contract,
+  so new avatar spots need no new code. Anything that rebuilds avatar markup via
+  `innerHTML` must call `AvatarSystem.updateUI()` afterwards (`renderProgress` does).
+- **The PLUS badge and the diamond display are gone from the home header — they moved, they
+  were not removed.** The mockup's header is logo + streak + avatar only, but those two
+  elements were the **only** entry points to the Plus page and the diamond shop, so both now
+  live as rows in the Profile settings list (`SETTINGS` in `app.js`, entries with `fn`).
+  Delete those rows and two whole screens become unreachable. `PlusSystem.updateUI()` still
+  looks for `#plus-badge` and is null-guarded, which is why nothing crashes.
+  Same story on Home: the random-game button and the rewarded-ad tile are not in the mockup
+  and are no longer rendered, so `playRandomGame()` and `RewardedAd.showForDiamonds()` have
+  no home-screen caller (the ad flow is still reachable from the game-over screen).
 - **`assets/icons/icon-192.png` and `icon-512.png` are JPEGs with a `.png` name.** Both are
   byte-identical, both 1024×1024, 379 KB each, and both are precached by the service
   worker — so every version bump re-downloads 758 KB of icon. `manifest.json` also
