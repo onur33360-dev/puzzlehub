@@ -21,8 +21,87 @@
   <link rel="stylesheet" href="core/design-tokens.css" />
   <link rel="stylesheet" href="core/components.css" />
   <link rel="stylesheet" href="style.css" />
+
+  <!-- ============================================================
+       AÇILIŞ SAHNESİNİ HEMEN GÖSTER — <head>'de olması ZORUNLU.
+       ============================================================
+       Neden ayrı ve neden burada: eklentinin "launch" splash'i
+       Android 12+'ta tam ekran görseli KULLANMIYOR. Eklenti kaynağında
+       showOnLaunch(), API 31 ve üstünde androidx installSplashScreen'e
+       düşüyor — o da platformun ikon ekranı, drawable'ı çizmez.
+       Ölçüldü (Galaxy A51 / Android 13): launchShowDuration 0 da 3000
+       de sahneyi göstermedi, akış "ikon → Ana Sayfa" olarak kaldı.
+
+       show() ise farklı bir yol: showDialog(..., isLaunchSplash=false)
+       ile drawable'ı tam ekran çizer ve bu HER sürümde çalışır.
+       Bu yüzden sahneyi elle açıyoruz.
+
+       <head>'de çağrılıyor ki WebView uygulama kabuğunu boyamadan
+       katman yerinde olsun; gövdenin sonuna bırakılsa arada bir kare
+       boş kabuk görünebilirdi.
+       autoHide:false — kapatma kararı bizde (aşağıdaki zamanlayıcı).
+       ============================================================ -->
+  <style>
+    /* Açılış sahnesi. Stil SATIR İÇİ, bilerek: ayrı bir dosyaya konsaydı
+       o inene kadar bir kare boş ekran görünebilirdi. Zemin rengi görselden
+       ÖNCE yazılı, böylece görsel yüklenmeden de doğru renk var. */
+    #ph-splash {
+      position: fixed; inset: 0; z-index: 99999;
+      background: #14142E url('assets/icons/splash-hero.jpg') center center / cover no-repeat;
+      opacity: 1; transition: opacity 280ms ease;
+    }
+    #ph-splash.ph-out { opacity: 0; pointer-events: none; }
+  </style>
 </head>
 <body>
+  <div id="ph-splash"></div>
+  <!-- ============================================================
+       NATIVE İKON EKRANINI, SAHNE BOYANDIKTAN SONRA BIRAK
+       ============================================================
+       Bu üç satır, "iki kopuk ekran" şikâyetinin çözümü.
+
+       Ölçülen davranışlar (Galaxy A51 / Android 13):
+       • Eklentinin launch splash'i API 31+'ta SADECE ikon gösterir —
+         androidx installSplashScreen'e düşüyor, drawable'ı çizmiyor
+         (SplashScreen.java showWithAndroid12API).
+       • Eklentinin programatik show()'u da sahneyi çizemedi: varsayılan
+         yolda görsel, yüksekliği WRAP_CONTENT olan ve çocuğu olmayan bir
+         view'in arka planı (yükseklik 0). layoutName ile özel düzen
+         verildi, APK'ya girdi, "Layout not found" uyarısı da çıkmadı —
+         ekran yine düz kaldı.
+       • DOM katmanı ise sorunsuz çiziliyor.
+
+       Bu yüzden sahne DOM'da, ikon fazı ise launchAutoHide:false ile
+       ekranda TUTULUYOR. Sıra şu: ikon durur → sahnenin görseli GERÇEKTEN
+       yüklenip boyanır → ancak o zaman hide() ile ikon bırakılır. Böylece
+       aradaki boş kabuk karesi hiç görünmez; oyuncu ikondan doğrudan
+       sahneye geçer.
+
+       İki kare beklemek (çift rAF) şart: onload görselin ÇÖZÜLDÜĞÜNÜ
+       söyler, EKRANA ÇİZİLDİĞİNİ değil. Tek karede bırakılırsa ikon,
+       sahne boyanmadan kalkabilir.
+       ============================================================ -->
+  <script>
+    (function () {
+      var sp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SplashScreen;
+      if (!sp || typeof sp.hide !== 'function') return; // tarayıcı: native katman yok
+      var img = new Image();
+      var released = false;
+      function release() {
+        if (released) return;
+        released = true;
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { sp.hide({ fadeOutDuration: 200 }); });
+        });
+      }
+      img.onload = release;
+      // Görsel bir sebeple yüklenemezse ikon sonsuza kadar kalmasın.
+      img.onerror = release;
+      setTimeout(release, 2000);
+      img.src = 'assets/icons/splash-hero.jpg';
+    })();
+  </script>
+
   <div id="app">
     <!-- Ana içerik alanı (tab'lar üstünde scroll) -->
     <div id="main-content">
@@ -335,7 +414,68 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.30.0';
+    const APP_VERSION = '1.32.0';
+
+    // ============================================================
+    // AÇILIŞ EKRANI — @capacitor/splash-screen ile
+    // ============================================================
+    // Splash artık DOM'da değil, NATIVE bir katman. Eklenti onu
+    // Activity açılır açılmaz gösteriyor, yani WebView daha HTML'i
+    // ayrıştırmadan sahne ekranda oluyor. Önceki DOM overlay
+    // yaklaşımında bu mümkün değildi: WebView boyanana kadar sistemin
+    // ikon ekranı duruyor, sonra sahne beliriyordu — iki kopuk ekran.
+    //
+    // launchAutoHide:false (capacitor.config.json) — kapatma kararı
+    // eklentinin değil, BİZİM. Kapatma zamanı aşağıda.
+    //
+    // `import` KULLANILAMAZ: bu projede paketleyici yok (CLAUDE.md §1),
+    // ES modülü çözümlenmez. Capacitor native eklentileri çalışma
+    // zamanında zaten window.Capacitor.Plugins altında duruyor; doğru
+    // erişim yolu bu.
+    // ------------------------------------------------------------
+    // PH_SPLASH_MIN_MS: sahnenin EN AZ görünme süresi.
+    // "EN AZ" kritik: splash süre dolduğunda DEĞİL, süre dolduğunda VE
+    // uygulama hazır olduğunda kalkar. Sadece süreye bakılsaydı, init
+    // gecikince splash kalkar ve oyuncu yarı boş bir ana ekran görürdü.
+    const PH_SPLASH_MIN_MS = 1200;
+    const PH_SPLASH_MAX_MS = 3000;
+
+    (function () {
+      const t0 = Date.now();
+      let hidden = false;
+
+      // Sahne DOM'da olduğu için kapanış da DOM tarafında. Native ikon
+      // fazı bundan ÖNCE, sahne boyanır boyanmaz bırakılıyor (gövdenin
+      // başındaki script).
+      function hideSplash(reason) {
+        if (hidden) return;
+        hidden = true;
+        const el = document.getElementById('ph-splash');
+        console.log('[PuzzleHub] splash kapandı (' + reason + ') t=' + (Date.now() - t0) + 'ms');
+        if (!el) return;
+        el.classList.add('ph-out');
+        // Sönme bitince DOM'dan çıkar: tam ekran bir katman saydam olsa
+        // bile kompozitörde durmaya devam eder.
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+      }
+
+      // app.js yüklendiğinde çağrılır. initApp bir IIFE — script
+      // değerlendirilirken çalışıp bittiği için onload tetiklendiğinde
+      // ana ekran gerçekten çizilmiş oluyor.
+      window.__phAppReady = function () {
+        const initMs = Date.now() - t0;
+        console.log('[PuzzleHub] init ' + initMs + 'ms (min ' + PH_SPLASH_MIN_MS + 'ms)');
+        setTimeout(function () { hideSplash('hazır'); }, Math.max(0, PH_SPLASH_MIN_MS - initMs));
+      };
+
+      // Emniyet supabı: bir script çökerse __phAppReady hiç çağrılmaz ve
+      // splash sonsuza kadar ekranda kalırdı — uygulamayı tamamen
+      // kullanılamaz yapan bir hata.
+      setTimeout(function () {
+        if (!hidden) console.warn('[PuzzleHub] init sinyali gelmedi, splash zorla kapatıldı');
+        hideSplash('zaman aşımı');
+      }, PH_SPLASH_MAX_MS);
+    })();
 
     // Sıralı yükleme: games.js → ui-kit.js → reels.js → app.js
     // (app.js, games.js'teki PuzzleGames/GameAudio ve reels.js'teki
@@ -358,7 +498,10 @@
             // daily.js app.js'ten ÖNCE: app.js ilk render'da
             // renderDailyChallenge()'ı çağırıyor.
             loadScript('core/daily.js', function(){
-              loadScript('core/app.js');
+              // Zincirin SONU: app.js değerlendirildiğinde initApp çalışmış
+              // ve ana ekran çizilmiş olur — açılış ekranının kalkabileceği
+              // an tam olarak burası.
+              loadScript('core/app.js', function(){ window.__phAppReady(); });
             });
           });
         });

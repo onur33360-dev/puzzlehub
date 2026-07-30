@@ -53,6 +53,8 @@ const SHELL_ASSETS = [
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
   './assets/icons/icon-maskable-512.png',
+  // Acilis sahnesi — index.html'in satir ici stilinden okunuyor.
+  './assets/icons/splash-hero.jpg',
 ];
 
 // media kovasının üst sınırı. Ses varlıkları geldiğinde bu kova

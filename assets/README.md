@@ -88,19 +88,62 @@ Yeni bir dosya eklenirse **iki listeye birden** girmeli: `sw.js` içindeki
 
 ---
 
-## Android 12+ (API 31): tam ekran splash GÖSTERİLMİYOR
+## Açılış ekranı mimarisi — ölçülmüş, tahmin değil
 
-Ölçüldü, tahmin değil — Galaxy A51 / Android 13:
+Hepsi Galaxy A51 / Android 13'te cihaz üzerinde doğrulandı.
 
-Android 12 ile acılış ekranı platformun işi oldu. Sistem launcher ikonunu
-`windowSplashScreenBackground` üzerinde ortalar ve eski yöntemi
-(`values/styles.xml` içindeki `android:background="@drawable/splash"`)
-**tamamen yok sayar.** Yani yukarıdaki 10 splash dosyası yalnızca
-**Android 11 ve altında** görünür.
+### Android 12+ iki ayrı şeyi birden kırıyor
 
-`values-v31/styles.xml` bu platformda zemini `#14142E` yapıyor; varsayılan
-siyahtı ve uygulamaya geçişte gözle görülür bir renk sıçraması oluyordu.
+**1) Native tam ekran splash gösterilmiyor.** API 31'den beri açılış ekranı
+platformun işi: sistem launcher ikonunu ortalar ve eski
+`android:background="@drawable/splash"` yöntemini **yok sayar**. Aynısı
+`@capacitor/splash-screen` için de geçerli — eklentinin `showOnLaunch()`
+metodu API 31+'ta `androidx installSplashScreen`'e düşüyor
+(`SplashScreen.java` → `showWithAndroid12API`), yani drawable'ı çizmiyor.
+`launchShowDuration` 0 da 3000 de denendi; ikisinde de sahne çıkmadı.
 
-**Açık maliyet:** splash PNG'leri APK'yı 5,3 MB → 14 MB çıkardı ve bu ağırlığın
-tamamı Android ≤11 içindir. Modern cihazlarda ölü yük. Bırakılıp
-bırakılmayacağı ürün kararı — bkz. CLAUDE.md §5.
+**2) Eklentinin programatik `show()`'u da çizemiyor.** Varsayılan yolda
+(`showDialog`) görsel şu view'in **arka planı** olarak atanıyor:
+
+```java
+new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+```
+
+Yükseklik `WRAP_CONTENT` ve LinearLayout'un hiç çocuğu yok → yükseklik sıfır →
+arka plan hiç çizilmiyor. `layoutName` ile tam ekran özel bir düzen de verildi
+(APK'ya girdi, "Layout not found" uyarısı çıkmadı) — ekran yine düz kaldı.
+Logcat `show`'un native tarafa ulaştığını ve hata dönmediğini gösteriyor.
+
+### Çalışan çözüm: ikon eklentide, sahne DOM'da
+
+Sahne **HTML katmanı** olarak çiziliyor (`index.html` → `#ph-splash`,
+`assets/icons/splash-hero.jpg`). DOM tarafı her Android sürümünde sorunsuz.
+
+Eklenti tek bir iş için duruyor: **ikon fazını tutmak.**
+`launchAutoHide: false` ile sistemin ikon ekranı `hide()` çağrılana kadar
+ekranda kalıyor. Sıra şu:
+
+1. İkon ekranı durur (eklenti tutuyor)
+2. Sahnenin görseli **gerçekten yüklenir ve boyanır** (`Image.onload` + çift `rAF`)
+3. Ancak o zaman `SplashScreen.hide()` → ikon çekilir, altından sahne çıkar
+4. En az 1200 ms + uygulama hazır → sahne CSS ile söner → Ana Sayfa
+
+Bu sıralamanın amacı **aradaki boş kabuk karesini yok etmek**. Eklenti
+kullanılmasaydı ikon, WebView boyanmadan kalkar ve oyuncu bir an düz renk
+görürdü — "iki kopuk ekran" şikâyetinin kaynağı buydu.
+
+Çift `rAF` şart: `onload` görselin **çözüldüğünü** söyler, **çizildiğini**
+değil. Tek karede bırakılırsa ikon, sahne boyanmadan kalkabilir.
+
+Ayar noktaları `index.html`: `PH_SPLASH_MIN_MS` (sahnenin en az görünme
+süresi), `PH_SPLASH_MAX_MS` (emniyet supabı).
+
+### Android 11 ve altı
+
+Orada eski yol hâlâ çalışıyor, bu yüzden 10 density dosyası duruyor.
+`values-v31/styles.xml` yalnızca API 31+ için zemini `#14142E` yapıyor;
+varsayılan siyahtı ve uygulamaya geçişte gözle görülür renk sıçraması vardı.
+
+**Açık maliyet:** splash PNG'leri APK'yı 5,3 MB → ~14 MB çıkarıyor ve bu
+ağırlığın tamamı Android ≤11 içindir; modern cihazlarda ölü yük. Kaldırılırsa
+o sürümlerde yalnızca ikon+renk kalır. Ürün kararı — bkz. CLAUDE.md §5.

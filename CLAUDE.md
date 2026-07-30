@@ -456,15 +456,44 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      them every run, so delete them again.
   It also silently reformats `AndroidManifest.xml` (whitespace and self-closing tags only,
   no functional change) — don't be alarmed by that diff.
-- **On Android 12+ the full-screen splash image is NEVER shown — measured, not assumed.**
-  Since API 31 the platform owns the launch screen: it centres the launcher icon on
-  `windowSplashScreenBackground` and **ignores** the legacy
-  `android:background="@drawable/splash"` in `values/styles.xml`. Verified on the test
-  device (Galaxy A51, Android 13): the artwork never drew. `values-v31/styles.xml` exists
-  to set that background to `@color/phBackground`; the default was black and produced a
-  visible colour jump into the app. The 10 splash PNGs are kept for Android ≤11, and they
-  are **not free** — they took the debug APK from 5.3 MB to 14 MB, weight that modern
-  devices carry without ever using it. Whether that trade stays is a product call.
+- **The launch scene is a DOM layer; the plugin only HOLDS the icon phase. Both halves
+  are load-bearing — measured on a Galaxy A51 / Android 13, not assumed.**
+  Two independent things break on Android 12+, and knowing both is what makes the current
+  design non-obvious:
+  1. **No native full-screen splash.** Since API 31 the platform owns the launch screen —
+     it centres the launcher icon and **ignores** `android:background="@drawable/splash"`.
+     `@capacitor/splash-screen` does not escape this: its `showOnLaunch()` falls through to
+     `androidx installSplashScreen` on API 31+ (`SplashScreen.java` →
+     `showWithAndroid12API`). `launchShowDuration` 0 and 3000 were both tried; neither drew
+     the scene.
+  2. **The plugin's programmatic `show()` cannot draw it either.** In `showDialog()` the
+     image is set as the *background* of a `LinearLayout` created with
+     `LayoutParams(MATCH_PARENT, WRAP_CONTENT)` that has **no children** — height resolves
+     to zero, so the background never paints. A full-screen custom `layoutName` was also
+     tried (it reached the APK, no "Layout not found" warning) and the screen still stayed
+     flat. logcat confirms `show` reaches native and returns no error.
+
+  So the scene lives in **HTML** (`index.html` → `#ph-splash` +
+  `assets/icons/splash-hero.jpg`), which renders reliably on every version, and the plugin
+  is kept for exactly one job: `launchAutoHide: false` pins the system icon screen until we
+  call `hide()`. The order matters — icon held → scene image actually **painted**
+  (`Image.onload` + **double** `rAF`) → only then `hide()`. Without the plugin the icon
+  would drop before the WebView paints and the player would see a flash of flat colour;
+  that gap was the original "two disjointed screens" complaint. The double `rAF` is not
+  superstition: `onload` means *decoded*, not *drawn* — release after one frame and the
+  icon can lift before the scene paints. Tuning knobs: `PH_SPLASH_MIN_MS`,
+  `PH_SPLASH_MAX_MS`.
+  `values-v31/styles.xml` sets the icon phase's background to `@color/phBackground`; the
+  default was black and produced a visible colour jump. The 10 density splash PNGs are kept
+  for Android ≤11, where the legacy path still works, and they are **not free** — they take
+  the debug APK from 5.3 MB to ~14 MB, weight modern devices carry without ever using it.
+  Whether that trade stays is a product call.
+- **`@capacitor/splash-screen` is the first Capacitor PLUGIN (2026-07-30) and must stay
+  pinned to the v7 line.** npm resolves `@capacitor/splash-screen` to 8.x by default, which
+  demands `@capacitor/core >= 8` and fails against this project's Capacitor 7. Install
+  `@capacitor/splash-screen@^7` — do **not** reach for `--force`/`--legacy-peer-deps`, which
+  would install a plugin mismatched with the runtime. Per §6 a plugin is a fresh decision
+  each time; this one is approved, others are not covered by it.
 - **Background music is globally disabled** behind `MUSIC_DISABLED` in `games.js`'s `GameAudio`, and `#btn-music` in `index.html` is hidden. The synthesized pad/beat engine underneath is intact and deliberately untouched — the existing composition read as tense rather than calm, so silence is the stage-appropriate choice until a new music system is designed. Don't "fix" `startMusic()` returning early.
 
 ---
