@@ -51,10 +51,52 @@
       opacity: 1; transition: opacity 280ms ease;
     }
     #ph-splash.ph-out { opacity: 0; pointer-events: none; }
+
+    /* ---- Yükleme çubuğu -------------------------------------------
+       Konum yüzdeyle veriliyor, px ile DEĞİL: sahne `cover` ile
+       kırpıldığı için sabit bir px değeri farklı en/boy oranlarında
+       kompozisyonun farklı yerine düşer. %9 dip, suyun yansımasının
+       üstüne oturur ve karakteri kesmez. */
+    .ph-splash-bar {
+      position: absolute; left: 50%; bottom: 9%;
+      transform: translateX(-50%);
+      width: min(58%, 320px);
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .ph-splash-track {
+      width: 100%; height: 6px; border-radius: 999px;
+      background: rgba(10, 8, 30, 0.55);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5),
+                  0 0 0 1px rgba(192, 132, 252, .18);
+      overflow: hidden;
+    }
+    .ph-splash-fill {
+      width: 0%; height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, #7C3AED 0%, #8B5CF6 45%, #C084FC 100%);
+      box-shadow: 0 0 10px rgba(139, 92, 246, .9),
+                  0 0 22px rgba(192, 132, 252, .55);
+    }
+    /* Yüzde metni sistem yazı tipiyle, marka yazı tipiyle DEĞİL:
+       Outfit/Inter Google Fonts'tan geliyor ve splash sırasında henüz
+       inmemiş olabilir — inince metnin ortasında bir font takası
+       görünürdü. tabular-nums ise rakam genişliği değişince metnin
+       zıplamasını engelliyor. */
+    .ph-splash-pct {
+      font: 600 12px/1 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      letter-spacing: .12em;
+      font-variant-numeric: tabular-nums;
+      color: rgba(233, 224, 255, .82);
+      text-shadow: 0 1px 6px rgba(0, 0, 0, .6);
+    }
   </style>
 </head>
 <body>
-  <div id="ph-splash"></div>
+  <div id="ph-splash">
+    <div class="ph-splash-bar">
+      <div class="ph-splash-track"><div class="ph-splash-fill" id="ph-splash-fill"></div></div>
+      <div class="ph-splash-pct" id="ph-splash-pct">0%</div>
+    </div>
+  </div>
   <!-- ============================================================
        NATIVE İKON EKRANINI, SAHNE BOYANDIKTAN SONRA BIRAK
        ============================================================
@@ -414,7 +456,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.32.0';
+    const APP_VERSION = '1.33.0';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile
@@ -433,16 +475,25 @@
     // zamanında zaten window.Capacitor.Plugins altında duruyor; doğru
     // erişim yolu bu.
     // ------------------------------------------------------------
-    // PH_SPLASH_MIN_MS: sahnenin EN AZ görünme süresi.
-    // "EN AZ" kritik: splash süre dolduğunda DEĞİL, süre dolduğunda VE
-    // uygulama hazır olduğunda kalkar. Sadece süreye bakılsaydı, init
-    // gecikince splash kalkar ve oyuncu yarı boş bir ana ekran görürdü.
-    const PH_SPLASH_MIN_MS = 1200;
-    const PH_SPLASH_MAX_MS = 3000;
+    // PH_SPLASH_TARGET_MS: sahnenin sabit görünme süresi ve yükleme
+    // çubuğunun 0 → 100 yolculuğunun tam uzunluğu.
+    // Gerçek init bunun çok altında (ölçüm: ~586 ms). Çubuk bilerek
+    // beklenir: her açılış aynı ritimde olsun diye ilk-açılış /
+    // tekrar-açılış ayrımı YOK, düz 6 saniye. Bu bir sahne süresi
+    // tercihi, teknik bir zorunluluk değil.
+    // Süre "EN AZ" olmaya devam ediyor: splash yalnızca süre dolduğunda
+    // DEĞİL, süre dolduğunda VE uygulama hazır olduğunda kalkar. Sadece
+    // süreye bakılsaydı init gecikince oyuncu yarı boş bir ana ekran
+    // görürdü. Bu durumda çubuk %100'de bekler.
+    const PH_SPLASH_TARGET_MS = 6000;
+    // Emniyet üst sınırı: ~1500 ms tampon. Bu ana kadar hazır sinyali
+    // gelmezse çubuk %100'e çekilir ve splash zorla kapatılır.
+    const PH_SPLASH_MAX_MS = 7500;
 
     (function () {
       const t0 = Date.now();
       let hidden = false;
+      let ready = false;
 
       // Sahne DOM'da olduğu için kapanış da DOM tarafında. Native ikon
       // fazı bundan ÖNCE, sahne boyanır boyanmaz bırakılıyor (gövdenin
@@ -459,20 +510,82 @@
         setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
       }
 
+      // ---- Yükleme çubuğu ----------------------------------------
+      const barFill = document.getElementById('ph-splash-fill');
+      const barPct = document.getElementById('ph-splash-pct');
+      let lastPct = -1;
+
+      // Yavaşlayan (ease-out) eğri: hızlı başlar, sona doğru sakinleşir,
+      // PH_SPLASH_TARGET_MS'te tam 100'e değer.
+      // Üs neden 1.8, neden klasik kübik (1-(1-t)^3) değil: kübik %99'a
+      // 6 saniyenin 4.6'sında varır, kalan 1.4 saniyeyi orada geçirir ve
+      // çubuk donmuş görünür. 1.8, yavaşlama hissini verirken sonuna
+      // kadar gözle görülür biçimde ilerlemeye devam eder.
+      function eased(t) { return 1 - Math.pow(1 - t, 1.8); }
+
+      // p: 0..1. Genişlik yazılıyor (transform: scaleX DEĞİL): scaleX
+      // çubuğun parıltısını (box-shadow) da yatayda gerer, ışık lekesi
+      // yamulur. Yerleşim maliyeti önemsiz — overflow:hidden bir kabın
+      // içindeki tek, 6px yüksekliğinde, konumlandırılmış eleman.
+      function paintBar(p) {
+        if (barFill) barFill.style.width = (p * 100).toFixed(2) + '%';
+        const v = Math.round(p * 100);
+        // Metin yalnızca tam sayı değişince yazılıyor: 60 fps'te aynı
+        // değeri tekrar yazmak boşa DOM işi.
+        if (v !== lastPct && barPct) { lastPct = v; barPct.textContent = v + '%'; }
+      }
+
+      function tick() {
+        if (hidden) return;
+        const t = Math.min(1, (Date.now() - t0) / PH_SPLASH_TARGET_MS);
+        paintBar(eased(t));
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      // Zamana bağlı, kareye bağlı DEĞİL: init sırasında ana iş parçacığı
+      // meşgulken rAF duraklar, çubuk sonra doğru yerden devam eder.
+      requestAnimationFrame(tick);
+
+      // Kapanış KARARI rAF'ta DEĞİL, ayrı bir zamanlayıcıda — ölçülerek
+      // düzeltildi: karar tick'in son karesine bağlıyken sekme arka plana
+      // düştüğünde rAF kısıtlanıyor, tick t=1'e hiç varmıyor ve splash
+      // hedefte değil emniyet supabında kapanıyordu (ölçüm: 6000 yerine
+      // 7680 ms). rAF artık sadece aradaki karelerin akıcılığından
+      // sorumlu; süreyi timer belirliyor.
+      setTimeout(function () {
+        paintBar(1);   // rAF kısıtlandıysa çubuk yarıda kalmış olabilir
+        maybeHide();
+      }, PH_SPLASH_TARGET_MS);
+
+      // Kapanış koşulu: çubuk %100 VE uygulama hazır.
+      function maybeHide() {
+        if (hidden || !ready) return;
+        if (Date.now() - t0 < PH_SPLASH_TARGET_MS) return;
+        hideSplash('hazır + çubuk tam');
+      }
+
       // app.js yüklendiğinde çağrılır. initApp bir IIFE — script
       // değerlendirilirken çalışıp bittiği için onload tetiklendiğinde
       // ana ekran gerçekten çizilmiş oluyor.
       window.__phAppReady = function () {
-        const initMs = Date.now() - t0;
-        console.log('[PuzzleHub] init ' + initMs + 'ms (min ' + PH_SPLASH_MIN_MS + 'ms)');
-        setTimeout(function () { hideSplash('hazır'); }, Math.max(0, PH_SPLASH_MIN_MS - initMs));
+        ready = true;
+        console.log('[PuzzleHub] init ' + (Date.now() - t0) + 'ms (sahne ' + PH_SPLASH_TARGET_MS + 'ms)');
+        // Hazır sinyali hedeften SONRA geldiyse (yavaş cihaz) tick zinciri
+        // bitmiş olur; kapanışı burada tetiklemek şart.
+        maybeHide();
       };
 
       // Emniyet supabı: bir script çökerse __phAppReady hiç çağrılmaz ve
       // splash sonsuza kadar ekranda kalırdı — uygulamayı tamamen
       // kullanılamaz yapan bir hata.
       setTimeout(function () {
-        if (!hidden) console.warn('[PuzzleHub] init sinyali gelmedi, splash zorla kapatıldı');
+        if (hidden) return;
+        // İki ayrı arıza, iki ayrı uyarı: uyarı metni "hazır sinyali yok"
+        // derken asıl sebep başka olursa teşhis yanlış yere bakar.
+        if (!ready) console.warn('[PuzzleHub] init sinyali gelmedi, splash zorla kapatıldı');
+        else console.warn('[PuzzleHub] hedef süre kaçırıldı, splash zorla kapatıldı');
+        // Çubuk yarıda kalmışsa önce doldurulur, yoksa sahne %40'ta
+        // sönerdi — bir hatanın üstüne bir de bozuk animasyon.
+        paintBar(1);
         hideSplash('zaman aşımı');
       }, PH_SPLASH_MAX_MS);
     })();

@@ -126,7 +126,7 @@ ekranda kalıyor. Sıra şu:
 1. İkon ekranı durur (eklenti tutuyor)
 2. Sahnenin görseli **gerçekten yüklenir ve boyanır** (`Image.onload` + çift `rAF`)
 3. Ancak o zaman `SplashScreen.hide()` → ikon çekilir, altından sahne çıkar
-4. En az 1200 ms + uygulama hazır → sahne CSS ile söner → Ana Sayfa
+4. Yükleme çubuğu 6000 ms'de %100 + uygulama hazır → sahne CSS ile söner → Ana Sayfa
 
 Bu sıralamanın amacı **aradaki boş kabuk karesini yok etmek**. Eklenti
 kullanılmasaydı ikon, WebView boyanmadan kalkar ve oyuncu bir an düz renk
@@ -135,8 +135,10 @@ görürdü — "iki kopuk ekran" şikâyetinin kaynağı buydu.
 Çift `rAF` şart: `onload` görselin **çözüldüğünü** söyler, **çizildiğini**
 değil. Tek karede bırakılırsa ikon, sahne boyanmadan kalkabilir.
 
-Ayar noktaları `index.html`: `PH_SPLASH_MIN_MS` (sahnenin en az görünme
-süresi), `PH_SPLASH_MAX_MS` (emniyet supabı).
+Ayar noktaları `index.html`: `PH_SPLASH_TARGET_MS` (sahnenin sabit süresi ve
+yükleme çubuğunun tam yolu — 6000 ms), `PH_SPLASH_MAX_MS` (emniyet supabı,
+7500 ms). Süre hâlâ "en az": çubuk dolmuş ama uygulama hazır değilse çubuk
+%100'de bekler.
 
 ### Android 11 ve altı
 

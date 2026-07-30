@@ -481,8 +481,22 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   would drop before the WebView paints and the player would see a flash of flat colour;
   that gap was the original "two disjointed screens" complaint. The double `rAF` is not
   superstition: `onload` means *decoded*, not *drawn* — release after one frame and the
-  icon can lift before the scene paints. Tuning knobs: `PH_SPLASH_MIN_MS`,
+  icon can lift before the scene paints. Tuning knobs: `PH_SPLASH_TARGET_MS`,
   `PH_SPLASH_MAX_MS`.
+- **The splash stays up for a flat 6 s on EVERY launch — that is a deliberate product
+  decision, not a slow boot.** `PH_SPLASH_TARGET_MS` (6000) is both the scene's duration and
+  the exact length of the loading bar's 0→100 travel; real init measures ~586 ms, so the bar
+  is *waiting on purpose*. There is intentionally **no** first-launch / relaunch distinction.
+  Two properties are load-bearing if you touch the timing: (1) the duration is a **minimum**,
+  not a fixed sleep — `maybeHide()` requires bar-complete **AND** `__phAppReady`, so on a slow
+  device the bar parks at 100% instead of dropping the player onto a half-built home screen,
+  which is why `__phAppReady` must also call `maybeHide()` (by then the rAF chain has ended);
+  (2) `PH_SPLASH_MAX_MS` (7500) force-closes and **paints the bar to 100% first** — without
+  that the scene would fade out at ~40% and a script error would look like a broken
+  animation. The bar's ease-out exponent is **1.8, not the usual cubic**: cubic reaches 99%
+  at 4.6 s and spends the last 1.4 s there, reading as frozen. Fill is animated with `width`
+  rather than `transform: scaleX` on purpose — scaleX stretches the glow `box-shadow`
+  horizontally and smears it.
   `values-v31/styles.xml` sets the icon phase's background to `@color/phBackground`; the
   default was black and produced a visible colour jump. The 10 density splash PNGs are kept
   for Android ≤11, where the legacy path still works, and they are **not free** — they take
