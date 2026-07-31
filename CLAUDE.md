@@ -435,8 +435,51 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   Delete those rows and two whole screens become unreachable. `PlusSystem.updateUI()` still
   looks for `#plus-badge` and is null-guarded, which is why nothing crashes.
   Same story on Home: the random-game button and the rewarded-ad tile are not in the mockup
-  and are no longer rendered, so `playRandomGame()` and `RewardedAd.showForDiamonds()` have
-  no home-screen caller (the ad flow is still reachable from the game-over screen).
+  and are no longer rendered, so `playRandomGame()` has no home-screen caller (the ad flow is
+  still reachable from the shop and the game-over screen).
+- **The economy has ONE daily ad budget and it is the load-bearing rule (2026-07-30).**
+  `AdBudget` (`ph_ad_budget`, 3/day from `EconomyConfig.AD_DAILY_LIMIT`) is a **single shared
+  pool** for all five rewarded actions — diamonds, continue, hint, undo, 2x score. There are
+  deliberately **no per-action counters**: spending the budget on diamonds is what makes
+  saving diamonds matter, because continue then costs diamonds or nothing. Its daily reset
+  copies `StreakSystem.checkIn()`'s `toDateString()` comparison **on purpose** — two
+  different definitions of "day" would desync at midnight and only show up as a bug hours
+  later.
+  Three rules that must not be re-scattered:
+  1. **`runRewardedAction()` is the only entry point.** It owns all three cases (Plus → no ad
+     at all, budget 0 → refuse, otherwise → ad, then `consume()` inside `onComplete`).
+     `RewardedAd.showForDiamonds/showForContinue` were **deleted** for exactly this reason:
+     they wrapped `show()` directly and were therefore budget-free side doors. Never add a
+     call to `RewardedAd.show()` outside `runRewardedAction`.
+  2. **`consume()` fires on completion, not on open** — a player who dismisses an ad keeps
+     the credit.
+  3. **Every ad-triggering surface shows the remaining count** (`data-ph-ad-budget` for the
+     sentence, `data-ph-ad-budget-short` for in-game badges — same contract as
+     `data-ph-avatar`) and goes *disabled, not hidden*, at zero. Hiding says "no such
+     option"; a greyed row says "come back tomorrow", which is the message that brings the
+     player back.
+- **Plus benefits are now REAL code, and the Plus page's text is a claim the code must
+  back.** `isActive()` used to have exactly one caller (the badge). Now: ads skipped and
+  budget bypassed (`runRewardedAction`), continue free and instant, `+20💎/day` on top of
+  `DAILY_REWARD_TABLE` in `claimDailyReward()`, and a **+50% multiplier that lives in
+  `DiamondSystem.addReward()` only** — `add()` stays unmultiplied so the level-complete `+3`
+  is untouched (a subscription must not accelerate in-game progression). The daily `+20` is
+  paid with `add()`, not `addReward()`, or the Plus bonus would be multiplied by the Plus
+  multiplier. "Erken Erişim" was **removed** (it manufactured value by delaying everyone
+  else); "Özel Görevler" was removed too, because no mission system exists.
+- **Every economy number lives in `EconomyConfig` at the top of `core/app.js`.** games.js
+  reads it through the `econ(key, fallback)` helper **at call time, never at module scope** —
+  load order is games.js → … → app.js, so a top-level `const X = EconomyConfig.Y` throws.
+  The fallback is not defensive noise: `tools/level-metrics.js` loads games.js alone in a vm
+  sandbox where no shell exists.
+- **`offerRewardChoice()` (app.js) is the shared "ad or diamonds?" modal, and 2048's own
+  copy was deleted.** The `.g2-buy*` styles are gone with it; the shared markup is
+  `.ph-offer*` in `components.css`. This is not tidying: two independently-written offer
+  windows are how "UI says there is a limit, code shows unlimited" happened in the first place —
+  the budget/Plus rules must exist in exactly one place.
+  Arrow's hint now costs **10💎 or one ad** (it used to be ad-only, which meant an exhausted
+  budget also killed hints). Score-2x is the **one deliberate exception with no diamond
+  path**: score is earned, not bought.
 - **The broken JPEG-named-`.png` icons are FIXED (2026-07-29).** `assets/icons/` now holds
   three real PNGs generated from `assets/logo.png`: `icon-192` and `icon-512`
   (`purpose: "any"`) plus a separate `icon-maskable-512` with safe-zone padding
@@ -582,6 +625,10 @@ the sprint-closing rule (build → device test → Y6 test → commit → push).
 that its thermal-measurement rule is superseded — see the thermal bullet in §5.
 Beyond that:
 - Mocked systems (ads, IAP, leaderboard, Plus validation) are correct-for-now. Don't silently "complete" or productionize them.
+  **Amended 2026-07-30:** the *delivery* of ads/IAP is still mocked (the 3-second fake video,
+  `buyPackage()`, `purchasePlus()`), but the **economy rules around them are now real** —
+  daily ad budget, diamond prices, Plus benefits. Treat the two halves differently: don't
+  build payment SDKs, but do keep the rules honest (see the economy bullets in §5).
 - The four unbuilt Discover games are intentionally unbuilt. Building one is a real feature request, not a bug fix — confirm scope before starting.
 - Don't assume test coverage or a release process exists. `TESTING.md` and `RELEASE.md` are intentionally deferred until closer to launch.
 

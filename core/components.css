@@ -105,6 +105,52 @@
   padding: var(--ph-space-8);
 }
 
+/* ── Ödül Teklifi (Reward Offer) — reklam mı, elmas mı? ──
+   app.js `offerRewardChoice()` tarafından çizilen paylaşımlı içerik.
+   Oyunlar kendi teklif penceresi dilini icat etmesin diye kabukta:
+   ipucu (Ok Bulmaca) buradan geçiyor, ekonomi noktaları çoğaldıkça
+   diğerleri de geçecek. */
+.ph-offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ph-space-2);
+  min-width: 240px;
+}
+.ph-offer-title {
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--ph-text-primary);
+  margin-bottom: var(--ph-space-2);
+}
+.ph-offer-btn {
+  padding: 12px 16px;
+  border-radius: var(--ph-radius-md);
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: var(--ph-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ph-offer-btn.primary {
+  background: linear-gradient(135deg, var(--ph-jewel-1-base), var(--ph-jewel-1-shadow));
+  border-color: transparent;
+}
+/* Pasif teklif gizlenmiyor, söndürülüyor — "yoktu" değil, "bugünlük
+   bitti"/"bakiyen yetmiyor" demesi gerek (bkz. style.css .go-btn:disabled). */
+.ph-offer-btn:disabled {
+  opacity: .4;
+  filter: grayscale(.7);
+  cursor: default;
+}
+.ph-offer-budget,
+.ph-offer-balance {
+  font-size: 11px;
+  text-align: center;
+  color: var(--ph-text-tertiary, rgba(255,255,255,.45));
+}
+
 /* ── Sıvı Dolum (Liquid Fill) — §13/§14 — gauge/progress dolgusu ──
    Renk, tüketen bileşen tarafından --ph-fill-* özel özellikleriyle
    seçilir (bkz. §3.5 jewel-tone token'ları); tanımsızsa jewel-1

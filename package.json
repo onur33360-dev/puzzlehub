@@ -1,6 +1,6 @@
 {
   "name": "puzzlehub",
-  "version": "1.33.0",
+  "version": "1.34.1",
   "private": true,
   "description": "PuzzleHub — Turkce, mobil-oncelikli casual oyun merkezi",
   "scripts": {

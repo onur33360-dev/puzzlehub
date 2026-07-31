@@ -2,6 +2,37 @@
    GameHup — Uygulama Mantığı
    ============================================ */
 
+// ==================== EKONOMİ AYARLARI ====================
+//
+// TÜM ekonomi sayıları burada. Daha önce dağınıktı: geri alma bedeli
+// games.js'te (2048 IIFE'sinin içinde), devam bedeli continueWithDiamonds
+// içinde, reklam ödülü watchAdForDiamonds içinde, günlük reklam limiti ise
+// HİÇBİR yerde — mağaza metni ayrı, kod sınırsızdı. Denge ayarı yapılacaksa
+// tek dosyada, tek blokta
+// yapılsın; fonksiyon fonksiyon aranmasın.
+//
+// games.js bu objeyi ÇALIŞMA ANINDA okur (bkz. games.js `econ()`), modül
+// değerlendirilirken değil: yükleme sırası games.js → … → app.js.
+const EconomyConfig = {
+  // --- Reklam bütçesi ---
+  // Tek günlük reklam havuzu. Tüm reklamlı ödül/continue/hint/undo/2x
+  // akışları bu 3 haktan düşer.
+  AD_DAILY_LIMIT: 3,
+
+  // --- Elmas kazanımları ---
+  AD_DIAMOND_REWARD: 10,      // reklamla elmas kazan
+  LEVEL_COMPLETE_REWARD: 3,   // seviye tamamlama (Plus çarpanı UYGULANMAZ)
+
+  // --- Elmas harcamaları ---
+  CONTINUE_DIAMONDS: 30,      // game over sonrası devam
+  UNDO_DIAMONDS: 15,          // +1 geri alma
+  HINT_DIAMONDS: 10,          // ipucu — undo'dan ucuz, daha az kritik yardım
+
+  // --- Premium (PlusSystem) ---
+  PLUS_DAILY_DIAMONDS: 20,    // günlük ödülün ÜSTÜNE, ayrı satır
+  PLUS_DIAMOND_MULTIPLIER: 1.5, // reklam + günlük ödül kazanımlarına
+};
+
 // ==================== VERİ ====================
 
 const PUZZLE_GAMES = [
@@ -95,6 +126,20 @@ const DiamondSystem = {
     this._animateAdd();
   },
   
+  // KAZANIM kapısı — Premium çarpanı yalnızca buradan geçenlere işler.
+  // add() ile bilerek ayrı: çarpan reklam ve günlük ödül kazanımlarına
+  // uygulanıyor, seviye tamamlama ödülüne (+3) UYGULANMIYOR. Oyun içi
+  // ilerlemeyi de abonelikle hızlandırmak bir denge kararı olurdu, oysa
+  // burada verilen şey bir abonelik faydası.
+  addReward(amount, reason) {
+    const plus = (typeof PlusSystem !== 'undefined') && PlusSystem.isActive();
+    const total = plus
+      ? Math.round(amount * EconomyConfig.PLUS_DIAMOND_MULTIPLIER)
+      : amount;
+    this.add(total, plus && reason ? reason + ' (Plus +%50)' : reason);
+    return total;
+  },
+
   spend(amount) {
     const current = this.get();
     if (current < amount) {
@@ -285,8 +330,19 @@ function claimDailyReward() {
   }
   const dayIdx = StreakSystem.getDayInWeek();
   const reward = DAILY_REWARD_TABLE[dayIdx];
-  DiamondSystem.add(reward.amount, 'Günlük ödül!');
-  
+  // addReward: günlük ödül Plus'ın +%50 çarpanına TABİ (bkz. 4d).
+  DiamondSystem.addReward(reward.amount, 'Günlük ödül!');
+
+  // Plus günlük bonusu — tablonun ÜSTÜNE, ayrı bir satır olarak.
+  // Tabloyu Plus'a göre değiştirmek yerine ayrı satır olmasının sebebi:
+  // DAILY_REWARD_TABLE haftanın ritmini kuruyor (Paz 100💎 zirvesi), Plus
+  // bunu bozmadan her güne sabit bir taban ekliyor.
+  // add() ile veriliyor, addReward() ile DEĞİL: bu zaten bir Plus faydası,
+  // üstüne bir de Plus çarpanı uygulamak aynı avantajı iki kez saymak olur.
+  if (PlusSystem.isActive()) {
+    DiamondSystem.add(EconomyConfig.PLUS_DAILY_DIAMONDS, 'Plus günlük bonusu 👑');
+  }
+
   // Streak milestones
   const streak = StreakSystem.getCount();
   if (streak === 7) DiamondSystem.add(50, '7 gün streak bonusu! 🔥');
@@ -296,6 +352,97 @@ function claimDailyReward() {
   renderDailyRewards();
   updateStreakUI();
 }
+
+// ==================== GÜNLÜK REKLAM BÜTÇESİ ====================
+//
+// TEK havuz. Reklamla elmas, reklamla devam, reklamla ipucu, reklamla +1
+// geri alma ve reklamla 2x skor — HEPSİ aynı 3 haktan düşer, her aksiyonun
+// kendi sayacı YOK.
+//
+// Neden tek havuz: oyuncu 3 hakkını elmas kazanmaya harcarsa game-over'da
+// reklamla devam edemez, biriktirdiği elmasla devam eder. Elmas biriktirmek
+// ilk kez gerçekten bir işe yarıyor. Ayrı sayaçlar (3 elmas-hakkı + 3
+// devam-hakkı gibi) hem kodu hem UI'ı ikiye katlar, karşılığında hiçbir şey
+// kazandırmaz.
+//
+// Günlük sıfırlama, StreakSystem.checkIn()'deki desenin AYNISI:
+// toDateString() karşılaştırması. Yeni bir tarih deseni icat edilmedi —
+// iki sistem farklı şekilde "gün" tanımlarsa biri sıfırlanırken diğeri
+// sıfırlanmaz ve hata ancak gece yarısı görünür.
+const AdBudget = {
+  _key: 'ph_ad_budget',
+
+  getData() {
+    try { return JSON.parse(localStorage.getItem(this._key) || '{}'); }
+    catch (e) { return {}; }
+  },
+
+  _today() { return new Date().toDateString(); },
+
+  // Sıfırlama TEMBEL: gece yarısını bekleyen bir zamanlayıcı yok (uygulama
+  // kapalıysa çalışmazdı zaten). Kayıtlı tarih bugün değilse sayaç 0 kabul
+  // edilir; ilk consume() kaydı bugüne çevirir.
+  used() {
+    const d = this.getData();
+    return d.date === this._today() ? (d.used || 0) : 0;
+  },
+
+  limit() { return EconomyConfig.AD_DAILY_LIMIT; },
+
+  remaining() { return Math.max(0, this.limit() - this.used()); },
+
+  // Premium bütçeye TABİ DEĞİL (bkz. runRewardedAction: reklam hiç
+  // gösterilmiyor, dolayısıyla harcanacak bir hak da yok).
+  canWatch() {
+    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return true;
+    return this.remaining() > 0;
+  },
+
+  // SADECE reklam başarıyla tamamlandığında çağrılır (RewardedAd.show'un
+  // onComplete'i içinde). Reklamı açıp kapatan oyuncudan hak düşmez.
+  consume() {
+    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return;
+    try {
+      localStorage.setItem(this._key, JSON.stringify({
+        date: this._today(), used: this.used() + 1
+      }));
+    } catch (e) {}
+    this.updateUI();
+  },
+
+  // Oyuncu bütçesini GÖRMELİ, yoksa "hakkım bitti" sürprizi olur ve
+  // bilinçli seçim (reklam mı, elmas mı) yapamaz.
+  label() {
+    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return '👑 Plus: sınırsız';
+    const left = this.remaining();
+    if (left === 0) return '📺 Yarın tekrar gel';
+    return '📺 ' + left + '/' + this.limit() + ' reklam hakkın kaldı';
+  },
+
+  // Oyun içi küçük rozetler için kısa hâl — uzun cümle 28px'lik bir
+  // aksiyon düğmesine sığmıyor, ama sayının GÖRÜNMESİ şart.
+  shortLabel() {
+    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return '👑';
+    const left = this.remaining();
+    // Bütçe bittiğinde rozet elmas bedeline dönüşüyor: aksiyon hâlâ
+    // mümkün, sadece bedeli değişti.
+    return left > 0 ? '📺' + left : '💎';
+  },
+
+  // AvatarSystem ile aynı sözleşme: niteliği taşıyan her öğe doldurulur,
+  // yeni bir gösterim noktası için yeni kod gerekmez.
+  updateUI() {
+    const txt = this.label();
+    document.querySelectorAll('[data-ph-ad-budget]').forEach(el => { el.textContent = txt; });
+    document.querySelectorAll('.shop-free-item [data-ph-ad-budget]').forEach(el => {
+      const row = el.closest('.shop-free-item');
+      if (row) row.classList.toggle('sfi-off', !this.canWatch());
+    });
+    const short = this.shortLabel();
+    document.querySelectorAll('[data-ph-ad-budget-short]').forEach(el => { el.textContent = short; });
+    refreshGameOverOffers();
+  }
+};
 
 // ==================== ÖDÜLLÜ REKLAM ====================
 
@@ -335,22 +482,100 @@ const RewardedAd = {
     }, 3000);
   },
   
-  // Quick reward ad — earn diamonds
-  showForDiamonds(amount) {
-    this.show(
-      { icon: '💎', text: `${amount} Elmas Kazan!` },
-      () => DiamondSystem.add(amount, 'Reklam ödülü!')
-    );
-  },
-  
-  // Continue game ad
-  showForContinue(onContinue) {
-    this.show(
-      { icon: '🔄', text: 'Devam Et!' },
-      onContinue
-    );
-  }
+  // showForDiamonds() / showForContinue() KALDIRILDI (2026-07-30).
+  // İkisi de RewardedAd.show'u doğrudan sarıyordu, yani günlük bütçeye
+  // uğramayan bir yan kapıydı — bütçe sistemi kurulduktan sonra bunları
+  // bırakmak, ileride birinin farkında olmadan sınırsız reklam yolunu
+  // yeniden açması demekti. Reklam-ödül akışlarının TEK girişi artık
+  // runRewardedAction(); show() ise yalnızca onun kullandığı alt katman.
 };
+
+// ==================== REKLAM-ÖDÜL KAPISI ====================
+//
+// Reklamla ödül veren HER aksiyonun tek geçiş noktası. Üç kural burada,
+// bir kez yazılıyor — çağrı noktalarına dağıtılsaydı biri güncellenir,
+// diğerleri sessizce eski kalırdı (bütçesiz reklam hatasının kaynağı
+// tam olarak buydu).
+//
+//   1. Premium  → reklam GÖSTERİLMEZ, bütçeye BAKILMAZ, ödül anında verilir
+//   2. Bütçe 0  → reklam gösterilmez, ödül verilmez, false döner
+//   3. Normal   → reklam gösterilir; TAMAMLANIRSA bütçeden 1 düşer + ödül
+//
+// Dönüş değeri "ödül akışı başladı mı" demektir, "ödül verildi mi" DEMEZ:
+// reklam asenkron. Çağıran tarafın ödül anında iş yapması gerekiyorsa
+// onReward içine yazmalı.
+function runRewardedAction(reward, onReward) {
+  if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) {
+    onReward();
+    return true;
+  }
+  // UI zaten devre dışı bırakılmış olmalı; bu savunma katmanı (oyun
+  // içinden doğrudan çağrılan yollar için).
+  if (!AdBudget.canWatch()) {
+    showToast('📺 Bugünkü reklam hakkın bitti — yarın tekrar gel!');
+    return false;
+  }
+  RewardedAd.show(reward, () => {
+    AdBudget.consume();
+    onReward();
+  });
+  return true;
+}
+
+// Reklam VEYA elmas seçeneği sunan paylaşımlı teklif penceresi.
+// games.js'ten de çağrılır (ipucu), bu yüzden kabukta duruyor: her oyun
+// kendi pencere dilini icat etmesin. Kullanılan sınıflar components.css'in
+// paylaşımlı .ph-modal ailesi.
+//
+// opts: { title, adText, gemCost, gemText, onGrant(source) }
+// gemCost verilmezse elmas satırı hiç çizilmez (skor 2x böyle: elmasla
+// skor satın alınmaz — bkz. doubleScoreWithAd).
+function offerRewardChoice(opts) {
+  const gemCost = opts.gemCost;
+  const plus = (typeof PlusSystem !== 'undefined') && PlusSystem.isActive();
+  const adOk = AdBudget.canWatch();
+  const balance = DiamondSystem.get();
+  const gemOk = gemCost != null && balance >= gemCost;
+
+  const scrim = document.createElement('div');
+  scrim.className = 'ph-modal-scrim';
+  const panel = document.createElement('div');
+  panel.className = 'ph-modal ph-modal-enter';
+  panel.innerHTML =
+    '<div class="ph-offer">' +
+      '<div class="ph-offer-title"></div>' +
+      '<button class="ph-offer-btn primary" data-a="ad"' + (adOk ? '' : ' disabled') + '>' +
+        (plus ? '👑 ' : '📺 ') + (opts.adText || 'Reklam İzle') +
+      '</button>' +
+      '<div class="ph-offer-budget" data-ph-ad-budget></div>' +
+      (gemCost != null
+        ? '<button class="ph-offer-btn" data-a="gem"' + (gemOk ? '' : ' disabled') + '>💎 ' +
+            gemCost + ' → ' + (opts.gemText || 'Al') + '</button>' +
+          '<div class="ph-offer-balance">Bakiyen: 💎 ' + balance.toLocaleString() + '</div>'
+        : '') +
+      '<button class="ph-offer-btn" data-a="no">Vazgeç</button>' +
+    '</div>';
+  // Başlık textContent ile: oyun adı/etiketi HTML olarak yorumlanmasın.
+  panel.querySelector('.ph-offer-title').textContent = opts.title || 'Yardım';
+  panel.querySelector('[data-ph-ad-budget]').textContent = AdBudget.label();
+  scrim.appendChild(panel);
+  document.body.appendChild(scrim);
+
+  const close = () => scrim.remove();
+  panel.addEventListener('click', (e) => {
+    const b = e.target.closest('.ph-offer-btn');
+    if (!b || b.disabled) return;
+    const a = b.dataset.a;
+    if (a === 'no') { close(); return; }
+    if (a === 'gem') {
+      if (DiamondSystem.spend(gemCost)) { close(); opts.onGrant('diamond'); }
+      return;
+    }
+    close();
+    runRewardedAction({ icon: '🎁', text: opts.adText || 'Ödül' }, () => opts.onGrant('ad'));
+  });
+  scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
+}
 
 // ==================== PLUS SİSTEMİ ====================
 
@@ -403,6 +628,57 @@ const PlusSystem = {
   }
 };
 
+// ==================== TEMA ALTYAPISI (Premium kilidi) ====================
+//
+// Bu tur GERÇEK bir tema EKLEMİYOR — görseller/token setleri yok. Eklenen
+// tek şey, Premium kilidinin NEREYE oturacağı: `plusOnly` bayrağı ve tek
+// bir kapı (`ThemeSystem.apply`). Kilit tema geldiğinde yazılsaydı, kontrol
+// büyük ihtimalle tema seçicinin içine gömülür ve ikinci bir giriş yolu
+// (derin bağlantı, ayarlar, kayıtlı tercih) onu atlardı.
+//
+// 'tapinak' rezerve slot: --ph-stone-* token'ları onun için duruyor
+// (bkz. CLAUDE.md §5). ready:false → henüz uygulanamaz.
+const ThemeSystem = {
+  _key: 'ph_theme',
+  DEFAULT: 'gece',
+
+  THEMES: [
+    { id: 'gece',    name: 'Gece Moru',      plusOnly: false, ready: true  },
+    { id: 'tapinak', name: 'Gölge Tapınak',  plusOnly: true,  ready: false },
+  ],
+
+  find(id) { return this.THEMES.find(t => t.id === id) || null; },
+
+  get() {
+    let id;
+    try { id = localStorage.getItem(this._key); } catch (e) {}
+    // Kayıtlı tema kilitlenmişse (abonelik bitti) varsayılana düşülür —
+    // aksi hâlde iptal eden kullanıcı Premium temayı kullanmaya devam eder.
+    return (id && !this.isLocked(id) && this.find(id)) ? id : this.DEFAULT;
+  },
+
+  isLocked(id) {
+    const t = this.find(id);
+    if (!t || !t.plusOnly) return false;
+    return !PlusSystem.isActive();
+  },
+
+  // Tema seçicinin TEK giriş noktası. Bugün çağıran yok (seçici yok);
+  // seçici geldiğinde kilidi yeniden düşünmek yerine bunu çağıracak.
+  apply(id) {
+    const t = this.find(id);
+    if (!t) return false;
+    if (this.isLocked(id)) {
+      showToast('👑 Bu tema Plus üyeliğe özel');
+      showPlusPage();
+      return false;
+    }
+    if (!t.ready) { showToast('🎨 Bu tema yakında'); return false; }
+    try { localStorage.setItem(this._key, id); } catch (e) {}
+    return true;
+  }
+};
+
 let _selectedPlan = 'yearly';
 
 function selectPlan(plan) {
@@ -440,11 +716,19 @@ const DIAMOND_PACKAGES = [
   { id: 'mega', amount: 5000, price: '₺499.99', bonus: 1500, badge: 'En İyi! ⭐' },
 ];
 
+// `soon: true` → sistem henüz YOK. Satır duruyor (mağazanın ne vaat edeceği
+// belli) ama ödül miktarı yerine "Yakında" yazıyor: envanter çıkarıldı,
+// günlük görev takibi (DAILY_MISSIONS statik, hiçbir sayaç yazılmıyor) ve
+// başarım sistemi (showAchievements yalnızca toast atıyor) gerçekten yok.
+// Var olmayan bir ödülü sayı olarak yazmak yanlış vaattir.
+// `dynamic:'ad'` → açıklaması AdBudget'tan geliyor, sabit metin değil:
+// Reklam hakkı metnini ayrı yazıp kodu sınırsız bırakan eski hâlin sebebi tam olarak
+// metnin koddan bağımsız olmasıydı.
 const FREE_DIAMOND_SOURCES = [
-  { icon: '📺', title: 'Reklam İzle', desc: 'Günde 5 kez', reward: '+10💎', action: 'watchAdForDiamonds' },
-  { icon: '🎯', title: 'Günlük Görevler', desc: '3 görev tamamla', reward: '+45💎', action: 'goToHome' },
+  { icon: '📺', title: 'Reklam İzle', desc: '', reward: '+10💎', action: 'watchAdForDiamonds', dynamic: 'ad' },
+  { icon: '🎯', title: 'Günlük Görevler', desc: 'Görev sistemi hazırlanıyor', reward: 'Yakında', action: 'goToHome', soon: true },
   { icon: '📅', title: 'Günlük Ödül', desc: 'Her gün giriş yap', reward: '+5-100💎', action: 'goToHome' },
-  { icon: '🏆', title: 'Başarımlar', desc: 'Hedefleri tamamla', reward: '+10-100💎', action: 'showAchievements' },
+  { icon: '🏆', title: 'Başarımlar', desc: 'Başarım sistemi hazırlanıyor', reward: 'Yakında', action: 'showAchievements', soon: true },
 ];
 
 function openShop() {
@@ -476,17 +760,27 @@ function renderShop() {
   
   // Free sources
   const free = document.getElementById('shop-free');
-  free.innerHTML = FREE_DIAMOND_SOURCES.map(src => `
-    <div class="shop-free-item" onclick="${src.action}()">
+  free.innerHTML = FREE_DIAMOND_SOURCES.map(src => {
+    // Reklam satırı bütçeyi GÖSTERİR ve bütçe bittiğinde pasifleşir —
+    // tıklanıp "hakkın bitti" toast'ı yemek yerine durum baştan görünür.
+    const adRow = src.dynamic === 'ad';
+    const spent = adRow && !AdBudget.canWatch();
+    const desc = adRow ? AdBudget.label() : src.desc;
+    const disabled = spent || src.soon;
+    const cls = 'shop-free-item' + (disabled ? ' sfi-off' : '');
+    const action = disabled ? 'aria-disabled="true"' : 'onclick="' + src.action + '()"';
+    return `
+    <div class="${cls}" ${action}>
       <span class="sfi-icon">${src.icon}</span>
       <div class="sfi-info">
         <span class="sfi-title">${src.title}</span>
-        <span class="sfi-desc">${src.desc}</span>
+        <span class="sfi-desc"${adRow ? ' data-ph-ad-budget' : ''}>${desc}</span>
       </div>
       <span class="sfi-reward">${src.reward}</span>
     </div>
-  `).join('');
-  
+  `;
+  }).join('');
+
   DiamondSystem.updateUI();
 }
 
@@ -495,7 +789,15 @@ function buyPackage(id) {
 }
 
 function watchAdForDiamonds() {
-  RewardedAd.showForDiamonds(10);
+  const amount = EconomyConfig.AD_DIAMOND_REWARD;
+  const ok = runRewardedAction(
+    { icon: '💎', text: amount + ' Elmas Kazan!' },
+    () => DiamondSystem.addReward(amount, 'Reklam ödülü!')
+  );
+  // Mağaza satırının açıklaması ("Bugün 2/3 hakkın kaldı") anında
+  // güncellenmeli; reklam bittiğinde AdBudget.consume() zaten tetikliyor
+  // ama bütçe doluysa satırın pasifleşmesi de görünmeli.
+  if (!ok) renderShop();
 }
 
 function goToHome() {
@@ -1078,16 +1380,72 @@ function showGameOver(win, title, message, opts) {
   if (continueBtn) continueBtn.style.display = win ? 'none' : 'flex';
   if (doubleBtn) doubleBtn.style.display = win ? 'flex' : 'none';
 
-  // Elmasla devam, oyun BAZINDA kapatılabilir. Ok Bulmaca'da devam hakkı
-  // yalnızca ödüllü reklamla veriliyor — elmas can satın alma yok.
+  // Elmasla devam, oyun bazında kapatılabilir; varsayılan artık her
+  // kaybetme ekranında 30💎 veya reklamla devamdır.
   // Yeni bir modal açmak yerine paylaşımlı kutunun bir düğmesi gizleniyor.
-  const diamondBtn = document.querySelector('.go-btn-diamond');
-  if (diamondBtn) diamondBtn.style.display = opts.noDiamond ? 'none' : '';
+  // Karar refreshGameOverOffers'a taşınıyor: Premium'da elmas satırı da
+  // gizleniyor ve iki koşulun tek yerde olması gerekiyor.
+  _gameOverNoDiamond = !!opts.noDiamond;
 
-  // Level complete reward
-  if (win) DiamondSystem.add(3, 'Level tamamlandı!');
+  // Level complete reward — Plus çarpanı BİLEREK yok (add, addReward değil):
+  // abonelik oyun içi ilerlemeyi hızlandırmıyor (bkz. DiamondSystem.addReward).
+  if (win) DiamondSystem.add(EconomyConfig.LEVEL_COMPLETE_REWARD, 'Level tamamlandı!');
 
+  refreshGameOverOffers();
   document.getElementById('game-over').style.display = 'flex';
+}
+
+// Game-over'daki reklam/elmas düğmelerinin metni ve etkinliği. Hem
+// showGameOver'dan hem AdBudget.updateUI'dan çağrılır — ikincisi, oyuncu
+// kutu AÇIKKEN son hakkını harcadığında (reklamla devam → tekrar kaybetme
+// döngüsü) düğmenin kendiliğinden pasifleşmesi için.
+let _gameOverNoDiamond = false;
+
+function refreshGameOverOffers() {
+  const plus = (typeof PlusSystem !== 'undefined') && PlusSystem.isActive();
+  const adOk = AdBudget.canWatch();
+
+  const setBtn = (btn, ico, lbl, enabled) => {
+    if (!btn) return;
+    const i = btn.querySelector('.go-btn-ico');
+    const l = btn.querySelector('.go-btn-lbl');
+    if (i) i.textContent = ico;
+    if (l) l.textContent = lbl;
+    btn.disabled = !enabled;
+  };
+
+  // Devam — reklam satırı. Premium'da reklam yok: düğme "anında devam"
+  // düğmesine dönüşüyor (bkz. continueWithAd).
+  const contAd = document.getElementById('go-continue-ad');
+  if (plus) {
+    setBtn(contAd, '👑', 'Devam Et (Plus)', true);
+  } else if (adOk) {
+    setBtn(contAd, '📺', 'Reklam İzle → Devam Et  (' + AdBudget.remaining() + '/' + AdBudget.limit() + ')', true);
+  } else {
+    setBtn(contAd, '📺', 'Reklam hakkın bitti — yarın tekrar gel', false);
+  }
+
+  // Devam — elmas satırı. Premium'da GİZLİ: ücretsiz devam varken elmas
+  // istemek oyuncuyu cezalandırmak olur.
+  const diamondBtn = document.querySelector('.go-btn-diamond');
+  if (diamondBtn) {
+    const hide = _gameOverNoDiamond || plus;
+    diamondBtn.style.display = hide ? 'none' : '';
+    if (!hide) {
+      const cost = EconomyConfig.CONTINUE_DIAMONDS;
+      setBtn(diamondBtn, '💎', cost + ' Elmas → Devam Et', DiamondSystem.canAfford(cost));
+    }
+  }
+
+  // Skor 2x — yalnızca reklam. Elmas alternatifi bilerek YOK.
+  const dbl = document.getElementById('go-double');
+  if (plus) {
+    setBtn(dbl, '👑', 'Skor 2x (Plus)', true);
+  } else if (adOk) {
+    setBtn(dbl, '📺', 'Reklam İzle → Skor 2x!  (' + AdBudget.remaining() + '/' + AdBudget.limit() + ')', true);
+  } else {
+    setBtn(dbl, '📺', 'Reklam hakkın bitti — yarın tekrar gel', false);
+  }
 }
 
 // Kanca tek kullanımlıktır: alınıp temizlendikten SONRA çağrılır, böylece
@@ -1102,20 +1460,32 @@ function _runGameOverContinuation(source) {
   return true;
 }
 
+// Premium'da (runRewardedAction 1. kural) reklam gösterilmez ve bütçeye
+// bakılmaz — yani "sınırsız ücretsiz devam" faydası ayrı bir kod yolu
+// değil, kapının doğal sonucu.
 function continueWithAd() {
-  RewardedAd.showForContinue(() => {
+  runRewardedAction({ icon: '🔄', text: 'Devam Et!' }, () => {
     if (!_runGameOverContinuation('ad')) showToast('🔄 Devam ediyorsun!');
   });
 }
 
 function continueWithDiamonds() {
-  if (DiamondSystem.spend(30)) {
-    if (!_runGameOverContinuation('diamond')) showToast('💎 30 elmas harcandı — devam!');
+  // Premium'da bu düğme hiç görünmüyor (refreshGameOverOffers), ama
+  // ücretsiz devam hakkı varken elmas harcamak her hâlükârda yanlış.
+  if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) {
+    if (!_runGameOverContinuation('plus')) showToast('👑 Plus: devam ücretsiz!');
+    return;
+  }
+  const cost = EconomyConfig.CONTINUE_DIAMONDS;
+  if (DiamondSystem.spend(cost)) {
+    if (!_runGameOverContinuation('diamond')) showToast('💎 ' + cost + ' elmas harcandı — devam!');
   }
 }
 
+// Elmas alternatifi BİLEREK yok: elmasla skor satın almak oyunun anlamını
+// bozar — skor kazanılır. Ekonominin tek istisnası, gözden kaçırma değil.
 function doubleScoreWithAd() {
-  RewardedAd.show(
+  runRewardedAction(
     { icon: '2️⃣', text: 'Skor 2x!' },
     () => {
       const scoreEl = document.getElementById('game-score');
@@ -1213,6 +1583,9 @@ function showToast(msg) {
   DiamondSystem.updateUI();
   PlusSystem.updateUI();
   AvatarSystem.updateUI();
+  // Reklam bütçesi rozetleri açılışta doğru dolsun; gün değiştiyse
+  // sayaç ilk okumada zaten sıfırdan başlar (tembel sıfırlama).
+  AdBudget.updateUI();
   renderHome();
   // renderLeaderboard() değil: 'lider' sekmesi artık İlerleme ekranını
   // gösteriyor. Eskisi açılışta GİZLİ kapsayıcılara boşuna çiziyordu.

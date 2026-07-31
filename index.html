@@ -274,40 +274,51 @@
             <h2 class="plus-subtitle">P L U S</h2>
           </div>
           
+          <!-- Fayda listesi = kodda GERÇEKTEN uygulanan şeyler.
+               Sayılar app.js EconomyConfig'ten gelir; oradaki değer
+               değişirse buradaki metin de güncellenmeli (metnin koddan
+               bağımsız yaşaması, limit metni ayrı yaşarken sınırsız izleten
+               reklam hatasının kaynağıydı).
+               "Erken Erişim" 2026-07-30'da KALDIRILDI: yeni oyunları bir
+               hafta geciktirmek, ücretsiz oyuncuyu cezalandırarak fayda
+               üretiyordu. Yerine gelen +%50 elmas bonusu, kimsenin
+               deneyimini kısmadan değer veriyor.
+               "Özel Görevler" de kaldırıldı: görev sistemi henüz yok,
+               olmayan bir şeyi vaat eden satır listede duramaz. -->
           <div class="plus-benefits">
             <div class="plus-benefit">
               <span class="pb-icon">🚫</span>
               <div class="pb-info">
                 <span class="pb-title">Reklamsız Deneyim</span>
-                <span class="pb-desc">Hiçbir reklam görmezsin</span>
+                <span class="pb-desc">Ödüller reklamsız ve günlük limitsiz</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">♾️</span>
               <div class="pb-info">
                 <span class="pb-title">Sınırsız Devam Hakkı</span>
-                <span class="pb-desc">Elmas harcamadan devam et</span>
+                <span class="pb-desc">Ne elmas harcarsın ne reklam izlersin</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">💎</span>
               <div class="pb-info">
-                <span class="pb-title">5x Günlük Elmas</span>
-                <span class="pb-desc">Her gün 25💎 (5💎 yerine)</span>
+                <span class="pb-title">Her Gün +20 Elmas</span>
+                <span class="pb-desc">Günlük ödülün üstüne, her gün</span>
+              </div>
+            </div>
+            <div class="plus-benefit">
+              <span class="pb-icon">✨</span>
+              <div class="pb-info">
+                <span class="pb-title">+%50 Elmas Bonusu</span>
+                <span class="pb-desc">Reklam ve günlük ödül kazançlarında</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">🎨</span>
               <div class="pb-info">
                 <span class="pb-title">Özel Temalar</span>
-                <span class="pb-desc">Premium tema koleksiyonu</span>
-              </div>
-            </div>
-            <div class="plus-benefit">
-              <span class="pb-icon">🎯</span>
-              <div class="pb-info">
-                <span class="pb-title">Özel Görevler</span>
-                <span class="pb-desc">Plus-only haftalık görevler</span>
+                <span class="pb-desc">Plus'a özel tema koleksiyonu — yakında</span>
               </div>
             </div>
             <div class="plus-benefit">
@@ -315,13 +326,6 @@
               <div class="pb-info">
                 <span class="pb-title">Profil Rozeti</span>
                 <span class="pb-desc">⭐ Plus rozeti profilinde</span>
-              </div>
-            </div>
-            <div class="plus-benefit">
-              <span class="pb-icon">🔓</span>
-              <div class="pb-info">
-                <span class="pb-title">Erken Erişim</span>
-                <span class="pb-desc">Yeni oyunlara 1 hafta önce eriş</span>
               </div>
             </div>
           </div>
@@ -400,19 +404,23 @@
             <!-- Oyun opts.stats verirse dolar, vermezse gizli kalır. -->
             <div class="go-stats" id="go-stats" style="display:none"></div>
             
-            <!-- Devam Et (sadece kaybettiğinde) -->
+            <!-- Devam Et (sadece kaybettiğinde)
+                 Düğme metinleri ARTIK JS'ten yazılıyor (refreshGameOverOffers):
+                 kalan reklam hakkı, elmas bedeli ve Premium durumu her açılışta
+                 değişiyor. Buradaki metinler yalnızca ilk kare için yedek. -->
             <div id="go-continue" class="go-continue-section" style="display:none">
-              <button class="go-btn go-btn-ad" onclick="continueWithAd()">
-                <span>📺</span> Reklam İzle → Devam Et
+              <button id="go-continue-ad" class="go-btn go-btn-ad" onclick="continueWithAd()">
+                <span class="go-btn-ico">📺</span> <span class="go-btn-lbl">Reklam İzle → Devam Et</span>
               </button>
               <button class="go-btn go-btn-diamond" onclick="continueWithDiamonds()">
-                <span>💎</span> 30 Elmas → Devam Et
+                <span class="go-btn-ico">💎</span> <span class="go-btn-lbl">Elmasla Devam Et</span>
               </button>
             </div>
-            
-            <!-- Skor 2x (sadece kazandığında) -->
+
+            <!-- Skor 2x (sadece kazandığında) — elmas alternatifi BİLEREK yok:
+                 skor kazanılır, satın alınmaz (bkz. doubleScoreWithAd). -->
             <button id="go-double" class="go-btn go-btn-ad" onclick="doubleScoreWithAd()" style="display:none">
-              <span>📺</span> Reklam İzle → Skor 2x!
+              <span class="go-btn-ico">📺</span> <span class="go-btn-lbl">Reklam İzle → Skor 2x!</span>
             </button>
             
             <button class="go-btn go-btn-primary" onclick="restartCurrentGame()">🔄 Tekrar Oyna</button>
@@ -456,7 +464,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.33.0';
+    const APP_VERSION = '1.34.1';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile

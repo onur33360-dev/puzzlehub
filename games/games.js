@@ -6,6 +6,22 @@
 const PuzzleGames = {};
 
 // ═══════════════════════════════════════════════════════════════
+//  EKONOMİ SABİTLERİ — tek kaynak app.js'teki EconomyConfig
+// ═══════════════════════════════════════════════════════════════
+// Değer ÇAĞRI ANINDA okunuyor, modül değerlendirilirken DEĞİL: yükleme
+// sırası games.js → ui-kit → reels → daily → app.js, yani bu dosya
+// çalışırken EconomyConfig henüz tanımlı değil. Üstte `const X =
+// EconomyConfig.Y` yazmak ReferenceError verir.
+//
+// Yedek değer şart: tools/level-metrics.js games.js'i tek başına, bir vm
+// sandbox'ında yükler — orada kabuk hiç yok.
+function econ(key, fallback) {
+  return (typeof EconomyConfig !== 'undefined' && EconomyConfig[key] != null)
+    ? EconomyConfig[key]
+    : fallback;
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  GAMEHUP AUDIO ENGINE v2.0 — Premium Ses & Geri Bildirim
 //  Lo-fi Ambient Synth + 30+ SFX + Adaptif Müzik + Haptic
 // ═══════════════════════════════════════════════════════════════
@@ -817,7 +833,9 @@ PuzzleGames.game2048 = (() => {
   // Bir bedava geri alma. Sonrası reklam veya elmas — böylece geri alma
   // "hata yapmanın bedeli yok" demeye dönüşmüyor, bir kaynak oluyor.
   const FREE_UNDOS = 1;
-  const UNDO_DIAMONDS = 15;
+  // Bedel EconomyConfig'ten okunuyor (fonksiyon, sabit değil — yükleme
+  // sırası, bkz. dosya başındaki econ()).
+  const undoCost = () => econ('UNDO_DIAMONDS', 15);
   const HISTORY_MAX = 8;
   const MILESTONES = [512, 1024, 2048];
 
@@ -1041,19 +1059,11 @@ PuzzleGames.game2048 = (() => {
         background:linear-gradient(180deg,#a78bfa,#7c3aed);color:#fff;
         border:1px solid rgba(220,215,255,.4);box-shadow:0 2px 6px -1px rgba(0,0,0,.6);white-space:nowrap}
 
-      /* Geri alma satın alma seçenekleri — paylaşımlı modal kabuğu. */
-      .g2-buy{display:flex;flex-direction:column;gap:var(--ph-space-3);min-width:240px}
-      .g2-buy-title{font:var(--ph-type-title);color:var(--ph-text-primary);text-align:center;
-        margin-bottom:var(--ph-space-2)}
-      .g2-buy-btn{display:flex;align-items:center;justify-content:center;gap:var(--ph-space-2);
-        min-height:46px;padding:0 var(--ph-space-5);border-radius:var(--ph-radius-sm);cursor:pointer;
-        font:var(--ph-type-body);color:var(--ph-text-primary);border:1px solid rgba(255,255,255,.1);
-        background:linear-gradient(180deg, rgba(255,255,255,.07) 0%, rgba(255,255,255,0) 22%), var(--ph-bg-2)}
-      .g2-buy-btn.primary{background:linear-gradient(180deg,var(--ph-accent-light),var(--ph-accent) 20%);border-color:transparent}
-      .g2-buy-btn:active{transform:scale(.96)}
-      .g2-buy-btn[disabled]{opacity:.4;pointer-events:none}
-      .g2-buy-balance{text-align:center;font:var(--ph-type-caption);
-        color:var(--ph-text-secondary);margin-top:-4px}
+      /* Geri alma teklif penceresinin stili buradan KALDIRILDI (.g2-buy*):
+         pencere artık kabuktaki paylaşımlı offerRewardChoice() tarafından
+         çiziliyor, stili components.css'teki .ph-offer ailesinde. Oyuna
+         özel bir kopya bırakmak, iki teklif penceresinin zamanla
+         ayrışması demekti (bkz. offerUndo'daki not). */
 
       /* ── GEÇERSİZ HAMLE — direnç ──
          Duvara doğru kaydırmak eskiden TAMAMEN sessizdi; oyuncu
@@ -1243,49 +1253,30 @@ PuzzleGames.game2048 = (() => {
     } else {
       // Bedava hak bitti — buton maliyeti gösteriyor, gizlenmiyor.
       undoBtn.classList.add('spent');
-      badge.textContent = '💎' + UNDO_DIAMONDS;
+      badge.textContent = '💎' + undoCost();
     }
   }
 
-  // Bedava hak bittiğinde: reklam veya elmas. Paylaşımlı modal kabuğu
-  // kullanılıyor, oyuna özel bir pencere dili icat edilmiyor.
+  // Bedava hak bittiğinde: reklam veya elmas.
+  //
+  // Pencerenin KENDİSİ artık burada kurulmuyor — kabuktaki paylaşımlı
+  // offerRewardChoice() çiziyor. Sebebi teknik değil, ekonomik: reklam
+  // hakkının kalıp kalmadığı, Premium'un reklamı atlaması ve bütçenin
+  // ekranda gösterilmesi kuralları TEK yerde yaşamalı. Bu pencere kendi
+  // kopyasını tutsaydı, bütçe kuralı değiştiğinde biri güncellenip diğeri
+  // sessizce eski kalırdı — "UI bir limit söylüyor, kod sınırsız izletiyor"
+  // hatasının kaynağı tam olarak buydu.
   function offerUndo() {
-    const scrim = document.createElement('div');
-    scrim.className = 'ph-modal-scrim';
-    const panel = document.createElement('div');
-    panel.className = 'ph-modal ph-modal-enter';
-    // Bakiye gösteriliyor: oyuncudan 15 elmas harcaması isteniyorsa kaç
-    // elması olduğunu görmeli. Yetmiyorsa buton da pasifleşiyor.
-    const bakiye = (typeof DiamondSystem !== 'undefined') ? DiamondSystem.get() : 0;
-    const yeterli = bakiye >= UNDO_DIAMONDS;
-    panel.innerHTML =
-      '<div class="g2-buy">' +
-        '<div class="g2-buy-title">Geri Alma</div>' +
-        '<button class="g2-buy-btn primary" data-a="ad">📺 Reklam İzle → +1</button>' +
-        '<button class="g2-buy-btn" data-a="gem"' + (yeterli ? '' : ' disabled') + '>' +
-          '💎 ' + UNDO_DIAMONDS + ' → +1</button>' +
-        '<div class="g2-buy-balance">Bakiyen: 💎 ' + bakiye.toLocaleString() + '</div>' +
-        '<button class="g2-buy-btn" data-a="no">Vazgeç</button>' +
-      '</div>';
-    scrim.appendChild(panel);
-    document.body.appendChild(scrim);
-
-    const close = () => scrim.remove();
-    panel.addEventListener('click', (e) => {
-      const b = e.target.closest('.g2-buy-btn');
-      if (!b) return;
-      const a = b.dataset.a;
-      if (a === 'no') { close(); return; }
-      if (a === 'gem') {
-        if (DiamondSystem.spend(UNDO_DIAMONDS)) { close(); undosLeft++; refreshUndo(); doUndo(); }
-        return;
-      }
-      close();
-      RewardedAd.show({ icon: '↺', text: '+1 Geri Alma' }, () => {
-        undosLeft++; refreshUndo(); doUndo();
-      });
+    // Kabuk yoksa (games.js'in tek başına yüklendiği test ortamı) sessizce
+    // vazgeç: burada reklamsız bedava hak vermek ekonomiyi delerdi.
+    if (typeof offerRewardChoice !== 'function') return;
+    offerRewardChoice({
+      title: 'Geri Alma',
+      adText: 'Reklam İzle → +1',
+      gemCost: undoCost(),
+      gemText: '+1 Geri Alma',
+      onGrant: () => { undosLeft++; refreshUndo(); doUndo(); }
     });
-    scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
   }
 
   function onUndoTap() {
@@ -8844,14 +8835,12 @@ PuzzleGames.arrowPuzzle = (() => {
   // ───────── Canlar tükendi ─────────
   // Yeni bir modal YOK: platformun paylaşımlı Game Over kutusu iki
   // kancayla kullanılıyor.
-  //   onContinue → ödüllü reklam bittiğinde çalışır. Tahta KORUNUR,
-  //                oyuncu kaldığı yerden sürer.
+  //   onContinue → reklam/elmas/Plus devamı geldiğinde çalışır. Tahta KORUNUR,
+//                oyuncu kaldığı yerden sürer.
   //   onRestart  → "Tekrar Oyna". O ANKİ seviyeyi yeniden kurar; oyunu
   //                1. seviyeye almaz.
   // İkisi de canı tam doldurur — "reklam izlenmezse yeniden başlatma ile
   // devam edilir" kuralı bu iki yolun da oyuncuyu oyunda tutması demek.
-  // Elmasla devam kapalı (noDiamond): bu oyunda devam hakkı yalnızca
-  // reklamla veriliyor.
   function onLivesEmpty() {
     dead = true;
     GameAudio.play('lose');
@@ -8862,7 +8851,6 @@ PuzzleGames.arrowPuzzle = (() => {
       accentLight: 'var(--ph-jewel-1-highlight)',
       accentGlow: 'var(--ph-jewel-1-glow)',
       mark: '✧',
-      noDiamond: true,
       stats: [
         { label: 'Seviye', value: level },
         { label: 'En İyi', value: phHighScore('arrowPuzzle') || '—' },
@@ -9092,6 +9080,9 @@ PuzzleGames.arrowPuzzle = (() => {
     if (diaEl && typeof DiamondSystem !== 'undefined') {
       diaEl.textContent = DiamondSystem.get().toLocaleString();
     }
+    // İpucu rozetindeki kalan reklam hakkı da HUD'ın parçası: elmas
+    // değişince bütçe de değişmiş olabilir (ikisi aynı akışta harcanıyor).
+    if (typeof AdBudget !== 'undefined') AdBudget.updateUI();
   }
 
   // ── Izgara aç/kapa ──
@@ -9114,18 +9105,27 @@ PuzzleGames.arrowPuzzle = (() => {
     GameAudio.haptic('micro');
   }
 
-  // ── İpucu (reklamlı) ──
-  // Ödüllü reklam → serbest bir oku kısa süre vurgula. Reklam olmadan
-  // ipucu YOK — can devamıyla aynı ekonomi, elmas hiç devreye girmiyor.
+  // ── İpucu (reklam VEYA elmas) ──
   // Vurgulanan ok, oyuncunun dokunabileceği (canExit true) gerçek bir
   // hamle: ipucu "nereye bakacağını" söyler, çözümü değil.
+  //
+  // Elmas alternatifi 2026-07-30'da eklendi. Öncesinde ipucunun TEK bedeli
+  // reklamdı; günlük bütçe gelince bu "hakkın bittiyse ipucu da bitti"
+  // demeye başlıyordu. Bedel geri almadan ucuz (10 < 15): ipucu daha az
+  // kritik bir yardım, hamleyi geri almıyor, sadece gösteriyor.
   function requestHint() {
     if (dead || cleared || hintCooling) return;
     const free = freeArrows(board);
     if (!free.length) { showToast('✨ Şu an serbest ok yok'); return; }
-    // Reklam altyapısı yoksa (test) doğrudan göster — akış kilitlenmesin.
-    if (typeof RewardedAd === 'undefined') { revealHint(); return; }
-    RewardedAd.show({ icon: '💡', text: 'İpucu Göster' }, revealHint);
+    // Kabuk yoksa (test) doğrudan göster — akış kilitlenmesin.
+    if (typeof offerRewardChoice !== 'function') { revealHint(); return; }
+    offerRewardChoice({
+      title: 'İpucu',
+      adText: 'Reklam İzle → İpucu',
+      gemCost: econ('HINT_DIAMONDS', 10),
+      gemText: 'İpucu',
+      onGrant: revealHint
+    });
   }
   function revealHint() {
     hintCooling = true;
@@ -9222,7 +9222,10 @@ PuzzleGames.arrowPuzzle = (() => {
         '<button class="ar-action ar-action-hint" data-role="hint">' +
           '<span class="ar-action-ico">💡</span>' +
           '<span class="ar-action-lbl">İpucu</span>' +
-          '<span class="ar-action-tag">📺</span>' +
+          // Rozet ARTIK sabit değil: kalan reklam hakkını gösteriyor
+          // (📺3), hak bitince elmasa dönüyor (💎), Plus'ta taç.
+          // AdBudget.updateUI() dolduruyor.
+          '<span class="ar-action-tag" data-ph-ad-budget-short>📺</span>' +
         '</button>' +
         '<div class="ar-zoom" data-role="zoom">' +
           '<button class="ar-zoom-btn" data-role="zoom-out" aria-label="Uzaklaş">−</button>' +
@@ -9773,7 +9776,6 @@ PuzzleGames.jigsawCard = (() => {
         accentLight: 'var(--ph-accent-light)',
         accentGlow: 'var(--ph-accent)',
         mark: '✦',
-        noDiamond: true,
         stats: [
           { label: 'Hamle', value: moves },
           { label: 'Süre', value: mmss },
