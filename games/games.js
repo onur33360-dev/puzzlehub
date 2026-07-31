@@ -22,6 +22,26 @@ function econ(key, fallback) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  EVRENSEL OYUN OLAYLARI — tek kaynak app.js'teki GameEvents
+// ═══════════════════════════════════════════════════════════════
+// econ() ile AYNI iki gerekçe: (1) app.js bu dosyadan sonra yükleniyor,
+// yani çağrı anında bakılmalı; (2) tools/*.js games.js'i kabuksuz bir vm
+// sandbox'ında çalıştırıyor, orada GameEvents hiç yok.
+//
+// try/catch bilerek: olay sistemi oynanışın YANINDA duruyor, önünde değil.
+// Bir görev/rozet dinleyicisinin hatası oyunu asla düşürmemeli.
+//
+// KULLANIM (tam sözleşme):
+//   gameEvent('game_started', { gameId })
+//   gameEvent('game_ended',   { gameId, result:'won'|'lost'|'quit', score?, durationMs? })
+// 'quit' oyunlardan YAYINLANMAZ — onu kabuk (exitGame) ve turu kendi
+// kendine devralan yeni bir game_started üretir.
+function gameEvent(name, payload) {
+  if (typeof GameEvents === 'undefined') return;
+  try { GameEvents.emit(name, payload); } catch (e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  GAMEHUP AUDIO ENGINE v2.0 — Premium Ses & Geri Bildirim
 //  Lo-fi Ambient Synth + 30+ SFX + Adaptif Müzik + Haptic
 // ═══════════════════════════════════════════════════════════════
@@ -1420,6 +1440,13 @@ PuzzleGames.game2048 = (() => {
 
     if (!hasMoves()) {
       dead = true;
+      // 2048'de 2048 karosuna ULAŞMAK oyunu bitirmez, oyun sürer. Bu yüzden
+      // tek bitiş noktası burasıdır ve sonucu o turda zafer karosuna
+      // ulaşılıp ulaşılmadığı belirler: hedefe varmış bir oyuncuyu, sonradan
+      // tahta tıkandı diye "kaybetti" saymak yanlış olurdu.
+      gameEvent('game_ended', {
+        gameId: 'game2048', result: won ? 'won' : 'lost', score,
+      });
       GameAudio.play('lose');
       // "Devam et" = ölümcül hamleyi geri al. 2048'de anlamlı olan tek
       // devam biçimi bu; rastgele karo silmek tahtayı oyuncunun
@@ -1576,6 +1603,7 @@ PuzzleGames.game2048 = (() => {
     undosLeft = FREE_UNDOS;
     grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
     best = phHighScore('game2048');
+    gameEvent('game_started', { gameId: 'game2048' });
 
     container.classList.add('ph-scene', 'g2-arcane');
     injectCSS();
@@ -1670,6 +1698,7 @@ PuzzleGames.memoryGame = (() => {
 
   function init(c) {
     container = c; moves = 0; matched = 0; locked = false; flipped = [];
+    gameEvent('game_started', { gameId: 'memoryGame' });
     const pairs = [...EMOJIS, ...EMOJIS];
     cards = pairs.sort(() => Math.random() - 0.5).map((e, i) => ({id:i, emoji:e, up:false, done:false}));
     injectStyle('css-memory', `
@@ -1703,7 +1732,13 @@ PuzzleGames.memoryGame = (() => {
         cards[a].done = cards[b].done = true; matched++; flipped = []; locked = false;
         GameAudio.play('match'); GameAudio.haptic(12);
         render();
-        if (matched === EMOJIS.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Eşleştirme Tamamlandı', 'Tüm kartları eşledin.', {
+        if (matched === EMOJIS.length) { GameAudio.play('win'); GameAudio.haptic(25);
+          // Skor oynanış boyunca updateGameScore ile aynı formülden yazılıyor;
+          // olaya da o değer gidiyor ki iki yer birbirinden ayrışmasın.
+          gameEvent('game_ended', {
+            gameId: 'memoryGame', result: 'won', score: Math.max(1000 - moves * 20, 100),
+          });
+          showGameOver(true, 'Eşleştirme Tamamlandı', 'Tüm kartları eşledin.', {
           accent: 'var(--ph-jewel-2-shadow)',
           accentLight: 'var(--ph-jewel-2-highlight)',
           accentGlow: 'var(--ph-jewel-2-glow)',
@@ -1732,6 +1767,7 @@ PuzzleGames.wordSearch = (() => {
 
   function init(c) {
     container = c; found = []; selStart = null;
+    gameEvent('game_started', { gameId: 'wordSearch' });
     grid = Array.from({length:SIZE}, () => Array(SIZE).fill(''));
     placed = [];
     WORDS.forEach(w => placeWord(w));
@@ -1800,7 +1836,11 @@ PuzzleGames.wordSearch = (() => {
       updateGameScore(found.length * 100);
       GameAudio.play('match'); GameAudio.haptic(12);
       render();
-      if (found.length === placed.length) { GameAudio.play('win'); GameAudio.haptic(25); showGameOver(true, 'Kelimeler Bulundu', 'Gizli kelimelerin hepsini buldun.', {
+      if (found.length === placed.length) { GameAudio.play('win'); GameAudio.haptic(25);
+        gameEvent('game_ended', {
+          gameId: 'wordSearch', result: 'won', score: found.length * 100,
+        });
+        showGameOver(true, 'Kelimeler Bulundu', 'Gizli kelimelerin hepsini buldun.', {
           accent: 'var(--ph-jewel-4-shadow)',
           accentLight: 'var(--ph-jewel-4-highlight)',
           accentGlow: 'var(--ph-jewel-4-glow)',
@@ -2406,6 +2446,10 @@ PuzzleGames.sudoku = (() => {
   function init(c, opts) {
     opts = opts || {};
     container = c; selected = -1; startTime = Date.now(); dead = false;
+    // Zorluk değiştirmek de buradan geçiyor (aşağıdaki diffs dinleyicisi
+    // cleanup + init çağırıyor): yeni zorluk = yeni bulmaca = yeni tur.
+    // Eski tur GameEvents tarafından kendiliğinden 'quit' ile kapanır.
+    gameEvent('game_started', { gameId: 'sudoku' });
     container.classList.add('ph-scene', 'sdk-arcane');
 
     // Üretilen her bulmaca TEK ÇÖZÜMLÜ olduğu garanti edilir (üretici her
@@ -2675,9 +2719,12 @@ PuzzleGames.sudoku = (() => {
     GameAudio.play('lose');
     GameAudio.haptic('error');
     render();
-    // Devam kancası: reklam/elmas akışı tamamlanırsa oyuncu bir canla
-    // kaldığı yerden sürer — tahta korunur, sıfırlanmaz.
     const filled = board.filter(x => x !== 0).length;
+    gameEvent('game_ended', { gameId: 'sudoku', result: 'lost' });
+    // Devam kancası: reklam/elmas akışı tamamlanırsa oyuncu bir canla
+    // kaldığı yerden sürer — tahta korunur, sıfırlanmaz. Turu da kabuk
+    // yeniden açar (bkz. app.js _runGameOverContinuation), o yüzden burada
+    // yayınlanan 'lost' devam edilse bile doğru kalır: tur bitmişti.
     showGameOver(false, 'Büyü Tükendi', 'Canların tükendi.', {
       accent: 'var(--ph-jewel-5-shadow)',
       accentLight: 'var(--ph-jewel-5-highlight)',
@@ -2724,6 +2771,11 @@ PuzzleGames.sudoku = (() => {
       const secs = Math.floor((Date.now()-startTime)/1000);
       const finalScore = Math.max(5000 - secs*10, 500);
       updateGameScore(finalScore);
+      // Süre oyunun kendi ölçümünden geçiyor (startTime), GameEvents'in
+      // türetmesinden değil: aynı sayı skoru da belirliyor, ikisi ayrışmasın.
+      gameEvent('game_ended', {
+        gameId: 'sudoku', result: 'won', score: finalScore, durationMs: secs * 1000,
+      });
       GameAudio.play('win'); GameAudio.haptic('win');
       phAtmosphereFlare(atmoEl, 2.2, 620);
 
@@ -4844,6 +4896,11 @@ PuzzleGames.blockPuzzle = (() => {
         // Yeni blok geldikten sonra tekrar kontrol
         setTimeout(() => {
           if (!anyPieceFits()) {
+            // Olay, showGameOver'ın 300 ms'lik gecikmesini BEKLEMİYOR: tur
+            // burada gerçekten bitti, gecikme yalnızca sahnenin nefes payı.
+            // Blok Puzzle'ın kazanma durumu yok (sonsuz mod) — yalnızca
+            // 'lost' yayınlar. Su Sıralama'nın aynadaki hâli.
+            gameEvent('game_ended', { gameId: 'blockPuzzle', result: 'lost', score });
             snd('crystalOver');
             haptic([100,50,100]);
             setTimeout(()=>showGameOver(false,'Yer Kalmadı','Sığacak blok kalmadı.',{
@@ -4859,6 +4916,7 @@ PuzzleGames.blockPuzzle = (() => {
       }, 200);
     } else {
       if (!anyPieceFits()) {
+        gameEvent('game_ended', { gameId: 'blockPuzzle', result: 'lost', score });
         snd('crystalOver');
         haptic([100,50,100]);
         setTimeout(()=>showGameOver(false,'Yer Kalmadı','Sığacak blok kalmadı.',{
@@ -4986,6 +5044,7 @@ PuzzleGames.blockPuzzle = (() => {
   function init(c) {
     container = c;
     score = 0; combo = 0; locked = false;
+    gameEvent('game_started', { gameId: 'blockPuzzle' });
     highScore = parseInt(localStorage.getItem('bp_hi')||'0',10);
     board = Array.from({length:G},()=>Array(G).fill(0));
     pieces = [rndPiece(),rndPiece(),rndPiece()];
@@ -5077,6 +5136,7 @@ PuzzleGames.mazeGame = (() => {
 
   function init(c) {
     container = c; startTime = Date.now(); moveCount = 0;
+    gameEvent('game_started', { gameId: 'mazeGame' });
     generateMaze();
     playerX = 1; playerY = 1; endX = W-2; endY = H-2;
     injectStyle('css-maze', `
@@ -5123,6 +5183,12 @@ PuzzleGames.mazeGame = (() => {
     updateGameScore(Math.max(5000-secs*50-moveCount*5,500));
     render();
     if(playerX===endX&&playerY===endY){
+      // Labirentin kaybetme durumu yok: yalnızca 'won'. Skor da süre/adım
+      // formülünün az önce updateGameScore'a yazdığı değerin aynısı.
+      gameEvent('game_ended', {
+        gameId: 'mazeGame', result: 'won',
+        score: Math.max(5000-secs*50-moveCount*5,500), durationMs: secs*1000,
+      });
       GameAudio.play('win'); GameAudio.haptic(25);
       showGameOver(true,'Çıkışı Buldun','Labirentin çıkışına ulaştın.',{
         accent:'var(--ph-jewel-4-shadow)',accentLight:'var(--ph-jewel-4-highlight)',accentGlow:'var(--ph-jewel-4-glow)',
@@ -5368,6 +5434,9 @@ PuzzleGames.screwPuzzle = (() => {
   // ───────── LOAD LEVEL ─────────
   function loadLevel(lv) {
     const data = LEVELS[lv]; if (!data) return;
+    // Tur = SEVİYE. init() de, seviye ilerlemesi de buradan geçiyor, yani
+    // tek enjeksiyon iki yolu birden kapsıyor.
+    gameEvent('game_started', { gameId: 'screwPuzzle' });
     score = 0; slots = []; undoStack = []; undoUsed = false; animating = false;
     boards = data.boards.map((b,i) => ({...b, idx:i, removed:false, sids:[]}));
     screws = [];
@@ -5566,6 +5635,9 @@ PuzzleGames.screwPuzzle = (() => {
       const empty = MAX_SLOTS - slots.length;
       const bonus = 200 + empty*30;
       score += bonus; updateGameScore(score);
+      // Seviye tamamlandı = tur kazanıldı. Son seviyede kutu açılıyor, ara
+      // seviyelerde loadLevel yeni tur başlatıyor; olay her ikisinde de aynı.
+      gameEvent('game_ended', { gameId: 'screwPuzzle', result: 'won', score });
       snd('win'); haptic([50,30,50]);
       const nxt = level + 1;
       if(nxt < LEVELS.length) localStorage.setItem('ph_screw_level',nxt.toString());
@@ -5592,6 +5664,7 @@ PuzzleGames.screwPuzzle = (() => {
     if(slots.length>=MAX_SLOTS) {
       const cc={}; slots.forEach(c=>{cc[c]=(cc[c]||0)+1;});
       if(!Object.values(cc).some(v=>v>=3)) {
+        gameEvent('game_ended', { gameId: 'screwPuzzle', result: 'lost', score });
         snd('lose'); haptic(100);
         setTimeout(()=>showGameOver(false,'Slotlar Doldu','Boş slot kalmadı.',{
           accent:'var(--ph-jewel-7-shadow)',accentLight:'var(--ph-jewel-7-highlight)',accentGlow:'var(--ph-jewel-7-glow)',
@@ -7448,10 +7521,16 @@ PuzzleGames.waterSort = (() => {
     const bonus = 50 + tubes.length * 20;
     score += bonus;
     updateGameScore(score);
+    gameEvent('game_ended', { gameId: 'waterSort', result: 'won', score });
     GameAudio.play('star'); GameAudio.haptic('star');
     countUpAndCelebrate(bonus, starsForLevel());
   }
   function loadLevel(lv) {
+    // Tur = SEVİYE (init ve seviye ilerlemesi ikisi de buradan geçiyor).
+    // Bu oyun 'lost' YAYINLAMAZ ve bu bir eksiklik değil: tüpler tıkanmaz,
+    // her tahta geri alınabilir, yani kaybetme durumu yoktur. Tek olay +
+    // result alanı tasarımının varlık sebebi tam olarak budur.
+    gameEvent('game_started', { gameId: 'waterSort' });
     level = lv;
     tubes = generateLevel(lv);
     history = [];
@@ -8843,6 +8922,9 @@ PuzzleGames.arrowPuzzle = (() => {
   // devam edilir" kuralı bu iki yolun da oyuncuyu oyunda tutması demek.
   function onLivesEmpty() {
     dead = true;
+    // Skor alanı YOK: bu oyunun ölçüsü seviye, skor değil. Alan isteğe
+    // bağlı olduğu için uydurma bir sayı göndermek yerine boş bırakılıyor.
+    gameEvent('game_ended', { gameId: 'arrowPuzzle', result: 'lost' });
     GameAudio.play('lose');
     GameAudio.haptic('error');
     showGameOver(false, 'Enerji Tükendi',
@@ -8871,6 +8953,9 @@ PuzzleGames.arrowPuzzle = (() => {
 
   function onCleared() {
     cleared = true;
+    // !cleared koruması çağıranda: eşzamanlı çıkışlarda bu fonksiyon birden
+    // fazla kez çalışırsa olay da birden fazla kez yayınlanırdı.
+    gameEvent('game_ended', { gameId: 'arrowPuzzle', result: 'won' });
     GameAudio.play('premium');
     GameAudio.haptic('win');
     phAtmosphereFlare(atmoEl, 2.2, 700);
@@ -8965,6 +9050,9 @@ PuzzleGames.arrowPuzzle = (() => {
 
   function startLevel() {
     cleared = false;
+    // Tur = SEVİYE. init(), onCleared'ın ilerlemesi ve game-over'daki
+    // onRestart — üçü de buradan geçiyor.
+    gameEvent('game_started', { gameId: 'arrowPuzzle' });
     // Elle tasarlanmış seviye varsa o kazanır; yoksa üreteç devreye girer.
     const hand = HAND_LEVELS[level];
     if (hand) {
@@ -9742,6 +9830,13 @@ PuzzleGames.jigsawCard = (() => {
   function finish() {
     won = true;
     stopTimer();
+    // Skor alanı YOK: bu oyunda skor kavramı yok, ölçü hamle ve yıldız.
+    // Süre oyunun kendi sayacından — kazanma kutusu 1100 ms sonra açılıyor,
+    // olay ise gerçekten bittiği anda yayınlanıyor.
+    gameEvent('game_ended', {
+      gameId: 'jigsawCard', result: 'won',
+      durationMs: startedAt ? Date.now() - startedAt : undefined,
+    });
     // Oyunun ödülü: aralıklar ve rozetler kaybolur, fotoğraf TEK PARÇA
     // olur. Oynarken parçalar ayrık duruyor ki tahta okunsun; çözülünce
     // dikişler kapanıyor.
@@ -9807,6 +9902,9 @@ PuzzleGames.jigsawCard = (() => {
   // forcedSize verilirse (3×3/4×4/5×5 düğmeleri) plan boyutu ezilir ama
   // resim aynı kalır — oyuncu aynı resmi başka zorlukta deneyebilsin.
   function startLevel(lv, forcedSize) {
+    // Tur = SEVİYE. init(), 3×3/4×4/5×5 düğmeleri (reset), ↻ Yeniden,
+    // ▸ Sonraki ve game-over'daki onRestart — hepsi buradan geçiyor.
+    gameEvent('game_started', { gameId: 'jigsawCard' });
     const plan = planFor(lv);
     level = lv;
     image = plan.image;

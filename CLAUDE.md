@@ -480,6 +480,51 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   Arrow's hint now costs **10💎 or one ad** (it used to be ad-only, which meant an exhausted
   budget also killed hints). Score-2x is the **one deliberate exception with no diamond
   path**: score is earned, not bought.
+- **All 10 games report through ONE event gate: `GameEvents` (`core/app.js`, 2026-07-31).**
+  This is the foundation the mission and achievement systems will sit on; phase 1 emits
+  events and keeps counters, and deliberately contains **no mission logic, no badge logic
+  and no reward payout**. Games call it through the `gameEvent(name, payload)` helper in
+  `games.js` — same call-time lookup and same two reasons as `econ()` (app.js loads last;
+  `tools/*.js` run games.js in a shell-less vm), plus a `try/catch` so a listener's bug can
+  never take a game down.
+  **Why two events are enough.** There is no `game_won`/`game_lost` pair — one `game_ended`
+  carries `result: 'won'|'lost'|'quit'`. The reason is games with **no lose state**: Water
+  Sort's tubes never jam, so it emits `'won'` only, and Block Puzzle is the mirror image
+  (endless, so `'lost'` only). With separate events those games would look half-integrated,
+  and every game plus every subscriber would have to reason about both. `'quit'` is the same
+  field's third value rather than a third event — leaving is also a way to end.
+  **A round is a LEVEL, not a session.** In the level-based games (Water Sort, Screw, Arrow,
+  Jigsaw) the injection point is `loadLevel`/`startLevel`, not `init` — because level
+  completion emits `game_ended('won')`, and if the level *start* didn't emit too, Water Sort
+  would accumulate 1 start against 40 wins and every derived metric (win rate above all)
+  would be nonsense. `init` reaches those functions anyway, so one injection covers both
+  paths.
+  Three invariants; break one and the counters lie:
+  1. **At most one open round.** A `game_started` arriving while a round is open closes the
+     old one as `'quit'` first. That self-healing is what lets in-game restart buttons
+     (Jigsaw's ↻ / size buttons, Sudoku's difficulty switch) work without being wired
+     individually.
+  2. **`game_ended` with no open round does not touch the counters** (it still reaches
+     listeners, flagged `stray`, plus a `console.warn`). This is the only thing guaranteeing
+     `totalGamesWon <= totalGamesStarted`.
+  3. **"Continue after an ad" reopens the round, it does not start a new one.**
+     `_runGameOverContinuation` calls `GameEvents.reopen()` — the player played one round,
+     not two, and the preserved `startedAt` keeps `durationMs` honest.
+  `durationMs` is derived centrally from the open round; a game may override it when its own
+  timer is the more meaningful number (Sudoku, Maze, Jigsaw do). `score` is optional and
+  deliberately absent where the game has no score concept (Arrow, Jigsaw) — an invented
+  number would be worse than a missing field.
+  Counters live in `ph_game_stats` (`totalGamesStarted`, `totalGamesWon`, `perGame`).
+  **No UI reads them yet — that is phase 2, not an oversight.**
+- **`tools/game-events-test.js` is the official validation tool for the event system.**
+  Plain Node, zero dependencies, same vm+stub pattern as `level-metrics.js` but it also
+  loads `app.js` (what is under test is the contract *between* the two files). Four layers:
+  the GameEvents contract; a **source scan** of every `gameEvent(...)` call in games.js that
+  proves each call's `gameId` matches the game it sits inside (the realistic failure is
+  copy-paste, e.g. Block Puzzle emitting `'waterSort'`); a **live** pass that actually calls
+  all 10 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
+  simulation. `--table` prints the file:line injection table. Run it after touching any
+  game's start/end path.
 - **The broken JPEG-named-`.png` icons are FIXED (2026-07-29).** `assets/icons/` now holds
   three real PNGs generated from `assets/logo.png`: `icon-192` and `icon-512`
   (`purpose: "any"`) plus a separate `icon-maskable-512` with safe-zone padding

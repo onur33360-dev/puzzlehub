@@ -353,6 +353,164 @@ function claimDailyReward() {
   updateStreakUI();
 }
 
+// ==================== EVRENSEL OYUN OLAYLARI ====================
+//
+// 10 oyunun HEPSİNİN çağırdığı tek olay kapısı. Görev/başarım sistemleri
+// buraya abone olur; oyunlar onların varlığından habersiz kalır.
+//
+// ───── NEDEN İKİ OLAY YETİYOR ─────
+// Ayrı `game_won` / `game_lost` olayları yerine tek `game_ended` + `result`
+// alanı var. Sebep, kaybetme durumu OLMAYAN oyunlar: Su Sıralama'da tahta
+// tıkanmaz, oyuncu kaybedemez. Ayrı olaylarda her oyun ikisini de düşünmek,
+// abone olan her sistem ikisini de dinlemek zorunda kalırdı — ve "lost"u hiç
+// yayınlamayan bir oyun, eksik entegre edilmiş gibi görünürdü. Tek olayda
+// Su Sıralama yalnızca result:'won' gönderir; bu bir boşluk değil, o oyunun
+// doğru ve tam ifadesi. 'quit' de üçüncü bir olay değil, aynı alanın üçüncü
+// değeri: oyundan çıkmak da bir bitiş biçimi.
+//
+// ───── TUR (ROUND) KAVRAMI ─────
+// Sayılan birim "oturum" değil TUR: bir kazanma/kaybetme kararının kapsadığı
+// oynanış. Seviyeli oyunlarda (Su Sıralama, Vida, Ok, Resim Kaydır) bu bir
+// SEVİYE, seviyesizlerde (2048, Blok, Hafıza…) tüm oturum. Bu ayrım keyfi
+// değil, zorunlu: seviye tamamlama game_ended('won') yayınlıyorsa, seviye
+// başlangıcı da game_started yayınlamalı — yoksa Su Sıralama'da 1 başlangıca
+// karşı 40 galibiyet birikir ve "kazanma oranı" gibi her türev ölçüm anlamsız
+// olurdu.
+//
+// Değişmezler (bunlar bozulursa sayaçlar yalan söyler):
+//   1. Aynı anda EN FAZLA BİR açık tur olur.
+//   2. game_started açık bir tur bulursa onu önce 'quit' ile kapatır. Oyun içi
+//      "yeniden başlat" düğmelerinin her birini ayrıca yakalamak gerekmesin
+//      diye sistem kendi kendini onarır.
+//   3. Açık tur yokken gelen game_ended sayaçlara İŞLEMEZ (stray). Aksi hâlde
+//      totalGamesWon > totalGamesStarted olabilir; kazanma oranı 1'i aşardı.
+//      Yanlış bağlanmış bir oyun sessizce veri bozmak yerine konsolda görünür.
+const GameEvents = {
+  _key: 'ph_game_stats',
+  _subs: {},
+  _open: null,          // { gameId, startedAt } — o an açık tur
+  _lastRound: null,     // en son kapanan tur (yalnızca reopen için)
+
+  // ───── pub/sub ─────
+  // Bu adımda GERÇEK abone yok; mekanizma sıradaki adımlar (günlük görevler,
+  // rozetler) için hazır duruyor. Dönen fonksiyon aboneliği iptal eder.
+  on(eventName, cb) {
+    if (typeof cb !== 'function') return function () {};
+    (this._subs[eventName] || (this._subs[eventName] = [])).push(cb);
+    const subs = this._subs[eventName];
+    return function off() {
+      const i = subs.indexOf(cb);
+      if (i >= 0) subs.splice(i, 1);
+    };
+  },
+
+  emit(eventName, payload) {
+    payload = payload || {};
+    if (eventName === 'game_started') return this._start(payload);
+    if (eventName === 'game_ended') return this._end(payload);
+    // Bilinmeyen olay: sayaç yok, yalnızca dağıtım. İleride yeni olay
+    // eklemek (örn. 'level_up') buraya dokunmadan mümkün olsun.
+    this._dispatch(eventName, payload);
+  },
+
+  // ───── sayaçlar (ph_game_stats) ─────
+  // Bu adımda bu veriyi GÖSTEREN hiçbir UI yok; amaç sıradaki adımların
+  // okuyacağı ham verinin doğru birikmesi.
+  stats() {
+    let d;
+    try { d = JSON.parse(localStorage.getItem(this._key) || '{}'); }
+    catch (e) { d = {}; }
+    return {
+      totalGamesStarted: d.totalGamesStarted || 0,
+      totalGamesWon: d.totalGamesWon || 0,
+      perGame: d.perGame || {},
+    };
+  },
+
+  forGame(gameId) {
+    const g = this.stats().perGame[gameId];
+    return { started: (g && g.started) || 0, won: (g && g.won) || 0 };
+  },
+
+  _bump(gameId, field) {
+    const s = this.stats();
+    if (field === 'started') s.totalGamesStarted++; else s.totalGamesWon++;
+    const g = s.perGame[gameId] || (s.perGame[gameId] = { started: 0, won: 0 });
+    g[field]++;
+    try { localStorage.setItem(this._key, JSON.stringify(s)); } catch (e) {}
+  },
+
+  // ───── iç uçlar ─────
+  _start(p) {
+    if (!p.gameId) return;
+    // Değişmez 2: açık tur varsa terk edilmiş sayılır.
+    if (this._open) this._end({ gameId: this._open.gameId, result: 'quit' });
+    this._open = { gameId: p.gameId, startedAt: Date.now() };
+    this._bump(p.gameId, 'started');
+    this._dispatch('game_started', { gameId: p.gameId });
+  },
+
+  _end(p) {
+    if (!p.gameId) return;
+    const open = this._open;
+    const stray = !open || open.gameId !== p.gameId;
+    this._open = null;
+    // Kapanan turun başlangıcı saklanıyor: reklamla "devam et" bu turu geri
+    // açıyor ve süresi baştan başlamamalı.
+    if (open) this._lastRound = open;
+    // Süre MERKEZDE hesaplanıyor: her oyunun kendi zamanlayıcısını olaya
+    // taşıması gereksiz tekrar olurdu. Oyun açıkça verirse o kazanır
+    // (kendi ölçümü daha anlamlı olabilir).
+    const durationMs = p.durationMs != null ? p.durationMs
+                     : (open ? Date.now() - open.startedAt : null);
+    const ev = { gameId: p.gameId, result: p.result || 'quit' };
+    if (p.score != null) ev.score = p.score;
+    if (durationMs != null) ev.durationMs = durationMs;
+    if (stray) ev.stray = true;
+
+    if (stray) {
+      // Değişmez 3. Sessizce yutmuyoruz: bu neredeyse her zaman yanlış
+      // bağlanmış bir oyun demektir ve tek görünür işareti burasıdır.
+      console.warn('[GameEvents] açık tur yokken game_ended:', ev.gameId, ev.result);
+    } else if (ev.result === 'won') {
+      this._bump(p.gameId, 'won');
+    }
+    this._dispatch('game_ended', ev);
+  },
+
+  // Reklam/elmasla "devam et": tur BİTMEDİ, yeniden açılıyor. Yeni bir
+  // game_started YAYINLANMIYOR — oyuncu tek tur oynadı, iki tur değil.
+  // startedAt korunuyor ki süre oturumun gerçeğini söylesin.
+  reopen(gameId, startedAt) {
+    if (!gameId) return;
+    const last = this._lastRound;
+    this._open = {
+      gameId,
+      startedAt: startedAt || (last && last.gameId === gameId ? last.startedAt : Date.now()),
+    };
+  },
+
+  // Oyundan çıkış — açık tur varsa 'quit' ile kapanır. Açık tur yoksa
+  // (oyun zaten bitmiş, game-over kutusundan çıkılıyor) hiçbir şey olmaz.
+  abandon() {
+    if (this._open) this._end({ gameId: this._open.gameId, result: 'quit' });
+  },
+
+  openRound() { return this._open; },
+
+  _dispatch(eventName, ev) {
+    const subs = this._subs[eventName];
+    if (!subs) return;
+    // Kopya üzerinde geziliyor: bir dinleyici yayın sırasında abonelikten
+    // çıkarsa dizi altımızdan kaymasın.
+    subs.slice().forEach(cb => {
+      // Bir abonenin hatası oyunu ASLA düşürmemeli — bu sistem oynanışın
+      // yanında duruyor, önünde değil.
+      try { cb(ev); } catch (e) { console.warn('[GameEvents] dinleyici hatası', e); }
+    });
+  },
+};
+
 // ==================== GÜNLÜK REKLAM BÜTÇESİ ====================
 //
 // TEK havuz. Reklamla elmas, reklamla devam, reklamla ipucu, reklamla +1
@@ -1456,6 +1614,11 @@ function _runGameOverContinuation(source) {
   const fn = _gameOverContinuation;
   _gameOverContinuation = null;
   _gameOverRestart = null;        // devam edildi — yeniden başlatma kancası da düştü
+  // Tur YENİDEN AÇILIYOR: oyun bittiğinde game_ended('lost') yayınlandı, ama
+  // oyuncu devam ediyor. Yeni bir game_started yayınlanmıyor (tek tur oynandı,
+  // iki değil); buradaki tek iş, sonraki gerçek bitişin (kazanma ya da çıkış)
+  // "açık tur yok" diye düşmesini engellemek.
+  if (typeof GameEvents !== 'undefined' && _currentGameId) GameEvents.reopen(_currentGameId);
   fn(source);
   return true;
 }
@@ -1521,6 +1684,11 @@ function restartCurrentGame() {
 }
 
 function exitGame() {
+  // Terk edilen tur BURADA kapanıyor, cleanup()'ta değil: cleanup oyunun
+  // kendi işi (dinleyici/rAF sökmek) ve "tur"dan haberi yok. Oyun zaten
+  // bitmişse (game-over kutusundan çıkılıyor) açık tur yoktur, abandon()
+  // hiçbir şey yapmaz — çift sayım riski yok.
+  if (typeof GameEvents !== 'undefined') GameEvents.abandon();
   if (_currentGameId && PuzzleGames[_currentGameId]) {
     PuzzleGames[_currentGameId].cleanup();
   }
