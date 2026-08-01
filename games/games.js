@@ -9517,13 +9517,45 @@ PuzzleGames.jigsawCard = (() => {
   // LİSANS: Unsplash lisansı ticari kullanıma açık ve atıf ZORUNLU değil
   // (CLAUDE.md §6 ses politikasındaki çıtanın aynısı). Watermark yok.
   const IMG = id => 'https://images.unsplash.com/photo-' + id + '?w=1200&h=1200&fit=crop&q=80';
+
+  // ───────── YEREL GARANTİ HAVUZU (2026-08-02) ─────────
+  // Ağ tamamen yokken oyun 8/8 karoyu büyük-numara yedeğine düşürüyordu
+  // ("rakam çıkması"). Üç denemeli geri çekilme kalıcı ağ yokluğunda hiçbir
+  // şey değiştirmiyor, çünkü sorun geçici değil. Çözüm: bir avuç görseli
+  // APK'ya gömmek.
+  //
+  // Bu altı kayıt YENİ görsel DEĞİL — havuzda zaten bulunan ve gözle
+  // onaylanmış altı görselin yerel kopyası (bkz. docs/GAMES/SLIDING_PUZZLE.md:
+  // görsel eklemenin şartı erişilebilirlik değil, gözle onay). Uzak
+  // listeden ÇIKARILDILAR, yani havuz büyümedi, aynı görsel iki kez
+  // görünmüyor. Altı farklı kategori bilerek seçildi: ağsız oyuncu da
+  // çeşitlilik görsün.
+  //
+  // 1000×1000 (uzak havuz 1200): en büyük tahta ~460 CSS px, cihaz DPR'si
+  // ~2.1 → ~970 fiziksel piksel. 1000px zaten fazlasıyla yeterli, 1200
+  // boşuna 1.4× dosya olurdu. Toplam ~1.1 MB.
+  //
+  // LİSANS: Unsplash lisansı (teyit 2026-08-02, unsplash.com/license):
+  // ticari kullanım serbest, izin/atıf ZORUNLU DEĞİL. İki yasak var, ikisi
+  // de bizi kapsamıyor: "değiştirilmeden satmak" (görseli satmıyoruz, bir
+  // bulmacanın içeriği) ve "Unsplash'e rakip bir servis derlemek" (altı
+  // görsel, oyun içeriği).
+  const LOCAL = id => 'assets/jigsaw/' + id + '.jpg';
+  const LOCAL_POOL = [
+    { id:'mou-1', category:'mountains',   difficulty:2, w:1000, src:'local', lic:'Unsplash', url:LOCAL('mou-1') },
+    { id:'for-1', category:'forest',      difficulty:2, w:1000, src:'local', lic:'Unsplash', url:LOCAL('for-1') },
+    { id:'cit-1', category:'city',        difficulty:2, w:1000, src:'local', lic:'Unsplash', url:LOCAL('cit-1') },
+    { id:'jap-1', category:'japan',       difficulty:2, w:1000, src:'local', lic:'Unsplash', url:LOCAL('jap-1') },
+    { id:'oce-1', category:'ocean',       difficulty:2, w:1000, src:'local', lic:'Unsplash', url:LOCAL('oce-1') },
+    { id:'flo-1', category:'flowers',     difficulty:2, w:1000, src:'local', lic:'Unsplash', url:LOCAL('flo-1') },
+  ];
+
   // Kayit alanlari: id, category, difficulty, w (teslim cozunurlugu),
   // src (kaynak), lic (lisans), url. 1000+ seviye = bu diziye satir eklemek.
-  const IMAGE_POOL = [
-    { id:'mou-1', category:'mountains', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1454496522488-7a8e488e8606') },
+  // Uzak havuz: ag varsa cesitlilik buradan geliyor (genisletme).
+  const REMOTE_POOL = [
     { id:'mou-2', category:'mountains', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1464822759023-fed622ff2c3b') },
     { id:'mou-3', category:'mountains', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1519681393784-d120267933ba') },
-    { id:'for-1', category:'forest', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1511497584788-876760111969') },
     { id:'for-2', category:'forest', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1448375240586-882707db888b') },
     { id:'for-3', category:'forest', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1476231682828-37e571bc172f') },
     { id:'nat-1', category:'nature', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1439066615861-d1af74d74000') },
@@ -9531,22 +9563,18 @@ PuzzleGames.jigsawCard = (() => {
     { id:'nat-3', category:'nature', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1432405972618-c60b0225b8f9') },
     { id:'nat-4', category:'nature', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1470252649378-9c29740c9fa8') },
     { id:'nat-5', category:'nature', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1495616811223-4d98c6e9c869') },
-    { id:'cit-1', category:'city', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1480714378408-67cf0d13bc1b') },
     { id:'cit-2', category:'city', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1514565131-fce0801e5785') },
     { id:'cit-3', category:'city', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1477959858617-67f85cf4f1df') },
-    { id:'jap-1', category:'japan', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1493976040374-85c8e12f0c0e') },
     { id:'jap-2', category:'japan', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1503899036084-c55cdd92da26') },
     { id:'jap-3', category:'japan', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1528360983277-13d401cdc186') },
     { id:'arc-1', category:'architecture', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1533929736458-ca588d08c8be') },
     { id:'spa-1', category:'space', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1462331940025-496dfbfc7564') },
     { id:'spa-2', category:'space', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1543722530-d2c3201371e7') },
     { id:'art-1', category:'art', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1502691876148-a84978e59af8') },
-    { id:'flo-1', category:'flowers', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1462275646964-a0e3386b89fa') },
     { id:'ani-1', category:'animals', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1425082661705-1834bfd09dca') },
     { id:'ani-2', category:'animals', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1518791841217-8f162f1e1131') },
     { id:'ani-3', category:'animals', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1444212477490-ca407925329e') },
     { id:'ani-4', category:'animals', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1553284965-83fd3e82fa5a') },
-    { id:'oce-1', category:'ocean', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1505118380757-91f5f5632de0') },
     { id:'oce-2', category:'ocean', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1519046904884-53103b34b206') },
     { id:'arc-2', category:'architecture', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1487958449943-2429e8be8625') },
     { id:'arc-3', category:'architecture', difficulty:2, w:1200, src:'unsplash', lic:'Unsplash', url:IMG('1449157291145-7efd050a4d0e') },
@@ -9571,6 +9599,13 @@ PuzzleGames.jigsawCard = (() => {
   // Üçü de URL olarak SAĞLAMDI (200, kare, yüksek çözünürlük); kusur
   // görselin İÇERİĞİNDEYDİ. Bu yüzden havuza resim eklemenin şartı
   // erişilebilirlik değil, GÖZLE ONAY — bkz. docs/GAMES/SLIDING_PUZZLE.md.
+
+  // Yerel görseller BAŞTA: seviye sistemi havuzu bilmiyor, yalnızca
+  // uzunluğunu kullanıyor (orderFor zaten her turda karıyor), dolayısıyla
+  // sıra oynanışı etkilemiyor — ama havuzun ilk elemanlarının garanti
+  // yerel olması, hata ayıklarken "ilk seviye her zaman resimli mi"
+  // sorusunu tek bakışta cevaplanabilir kılıyor.
+  const IMAGE_POOL = LOCAL_POOL.concat(REMOTE_POOL);
 
   // ═══════════ SEVİYE SİSTEMİ ═══════════
   // Boyut eğrisi. Tek zorluk kolu tahta boyu — 11-30 arası 3x3'ten
@@ -9864,25 +9899,47 @@ PuzzleGames.jigsawCard = (() => {
   //  2) Bekleyen deneme zamanlayıcısı cleanup'ta iptal edilir. Aksi hâlde
   //     oyundan çıktıktan sonra ateşlenip kopmuş DOM'a çiziyordu
   //     (01_ARCHITECTURE: cleanup timers'ı bırakmaz).
+  // Yerel yedek, seviyeden TÜRETİLİYOR: aynı seviye hep aynı yedeği alır
+  // (yeniden başlatınca resim değişip kafa karıştırmasın) ama ardışık
+  // seviyeler farklı yedek görür — ağsız oyuncu da çeşitlilik görsün.
+  function localFallbackFor(lv) {
+    return LOCAL_POOL[((lv - 1) % LOCAL_POOL.length + LOCAL_POOL.length) % LOCAL_POOL.length];
+  }
+
   const IMG_TRIES = 3, IMG_BACKOFF = 400;
+  // `done(usedImage)` — KULLANILAN görseli geri veriyor, çünkü yedeğe
+  // düşülmüş olabilir ve başlıktaki kategori adı ile HEDEF önizlemesi
+  // gerçekte gösterilen resmi anlatmak zorunda.
   function loadImage(img, done) {
     imageOk = false;
     if (imgRetryT) { clearTimeout(imgRetryT); imgRetryT = 0; }
-    let finished = false, tries = 0;
+    let finished = false, tries = 0, current = img, fellBack = false;
     const finish = (ok) => {
       if (finished) return;
-      finished = true; imageOk = ok; done();
+      finished = true; imageOk = ok; done(current);
     };
     const attempt = () => {
       tries++;
       const pre = new Image();
       pre.onload = () => finish(true);
       pre.onerror = () => {
-        if (tries >= IMG_TRIES) { finish(false); return; }
-        imgRetryT = setTimeout(() => { imgRetryT = 0; attempt(); },
-          IMG_BACKOFF * Math.pow(2, tries - 1));
+        if (tries < IMG_TRIES) {
+          imgRetryT = setTimeout(() => { imgRetryT = 0; attempt(); },
+            IMG_BACKOFF * Math.pow(2, tries - 1));
+          return;
+        }
+        // Üç deneme de gitti: ağ geçici değil, YOK. Uzak görselden YEREL
+        // garanti havuza düşüyoruz — büyük-numara moduna düşmenin tek
+        // meşru sebebi artık yerel dosyanın da açılamaması (yani bozuk
+        // bir kurulum), ağ değil.
+        if (!fellBack && current.src !== 'local') {
+          fellBack = true; tries = 0; current = localFallbackFor(level);
+          attempt();
+          return;
+        }
+        finish(false);
       };
-      pre.src = img.url;
+      pre.src = current.url;
       if (pre.complete && pre.naturalWidth) finish(true);
     };
     attempt();
@@ -10027,11 +10084,15 @@ PuzzleGames.jigsawCard = (() => {
     board = shuffle(N, rndFor(seed));
     // Önce numaralarla kur (anında oynanabilir), resim gelince boya.
     buildBoard();
-    loadImage(image, () => {
+    loadImage(image, (used) => {
       if (!boardEl) return;                       // arada cleanup olduysa
+      // Yedeğe düşülmüş olabilir: paint(), HEDEF önizlemesi ve başlıktaki
+      // kategori adı hep GERÇEKTEN gösterilen görseli anlatmalı.
+      image = used;
       boardEl.querySelectorAll('.' + P + '-tile')
         .forEach(t => paint(t, Number(t.dataset.home)));
       if (goalEl) goalEl.style.backgroundImage = imageOk ? 'url("' + image.url + '")' : '';
+      updateHud();
     });
     updateHud();
     startTimer();

@@ -179,11 +179,43 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   bumped, a user who installs a *new APK* keeps running the old cached code. On the web
   that's stale code; in an APK it's an unreproducible bug report. Caching there is the
   native layer's job. Don't "fix" the missing registration.
-- **Network-dependent content is a real gap in the packaged app.** Google Fonts and the
-  sliding puzzle's Unsplash images are still fetched over the network, so a first launch
-  with no connection shows fallback fonts and no puzzle image. This is the same behavior as
-  today's PWA, so it isn't a regression — but "installed app" raises the expectation.
-  Self-hosting the fonts and bundling a starter image set is deferred, not overlooked.
+- **Network-dependent content is a PARTIALLY closed gap.** Google Fonts are still fetched
+  over the network, so a first launch with no connection falls back to system fonts —
+  self-hosting them is still deferred. **The sliding puzzle's images are no longer part of
+  this gap (2026-08-02)** — see the local guarantee pool below.
+- **Jigsaw ships 6 images inside the APK, and that is what stops the "numbers" board.**
+  With no network, every tile used to fall to the big-number fallback and the HEDEF preview
+  went blank — the reported "rakam çıkması". Three retries with exponential backoff (already
+  in `loadImage`) fix a *flaky* connection and do nothing for an absent one, so the fix had
+  to be local bytes.
+  Four things are load-bearing:
+  1. **The six are not new images.** They are local copies of six pool entries that were
+     already eye-approved (`docs/GAMES/SLIDING_PUZZLE.md`: the bar for a new image is eye
+     approval, not reachability). Their remote twins were **removed** from the pool, so the
+     pool is still 42 and no photo appears twice. Six distinct categories on purpose —
+     an offline player should still see variety.
+  2. **The fallback is a CHAIN, not a first-N-levels rule.** `planFor` picks from the whole
+     pool as before; if a *remote* pick fails all three tries, `loadImage` switches to
+     `localFallbackFor(level)` and tries again. So *every* level survives offline, not just
+     the first six. Number mode is still there but its only remaining cause is a broken
+     install (the local file itself failing), never the network.
+  3. **`loadImage` returns the image it actually used** (`done(current)`), and `startLevel`
+     assigns it back to `image`. Without that the header category and the HEDEF preview
+     would describe a photo the player is not looking at.
+  4. **Local entries are in `SHIP` but deliberately NOT in `SHELL_ASSETS`.** The build's
+     cross-check is one-directional (every SW asset must be in SHIP, not the reverse), so
+     omitting them does **not** break the build. Precaching ~1.1 MB would re-download it on
+     every `APP_VERSION` bump — the same trap already documented for the icons — and delay
+     install. `sw.js` already routes same-origin `.jpg` to the version-independent
+     `MEDIA_CACHE`, which is exactly what the third bucket exists for. Inside the APK no SW
+     is registered at all and the files are plain local assets.
+  Cost: 6 × 1000×1000 JPEG ≈ **1.1 MB**, APK 14.16 → 15.28 MB. 1000 px (not the remote
+  pool's 1200) because the largest board is ~460 CSS px at DPR ~2.1 ≈ 970 physical px.
+  **The small corner number badge is unrelated and stays** — it is a deliberate aid shown
+  when the image *does* load; only the big-number fallback was in scope.
+  `tools/jigsaw-images-test.js` pins all of it: files exist on disk, are square JPEGs, no
+  duplicate ids, local urls are not network urls, SHIP contains them, `SHELL_ASSETS` does
+  not, and the fallback chain is still wired.
 - **`blockPuzzle` renders on CANVAS, and three of its rules are load-bearing.**
   The board is one `<canvas>` (crystals drawn into an offscreen cache, rebuilt
   only when the board changes) plus a second full-scene `<canvas>` (`.bp-fx`) for

@@ -42,6 +42,13 @@ const SHIP = [
   'games/games.js',
   'reels/reels.js',
   'assets/icons',
+  // Jigsaw'in yerel garanti gorsel havuzu (~1.1 MB, 6 dosya). APK'ya
+  // GIRMEK zorunda, ama sw.js SHELL_ASSETS'e BILEREK eklenmedi: precache
+  // her APP_VERSION bump'inda yeniden indirilir ve acilisi geciktirir.
+  // Ayni-origin .jpg istekleri sw.js'te zaten MEDIA_CACHE'e dusuyor
+  // (surumden bagimsiz, ilk kullanimda dolan kova) — ses politikasiyla
+  // ayni mantik. APK'da SW zaten kayitli degil, dosyalar yerel.
+  'assets/jigsaw',
 ];
 
 function fail(msg) {

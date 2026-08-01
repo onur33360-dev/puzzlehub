@@ -55,6 +55,14 @@ const SHELL_ASSETS = [
   './assets/icons/icon-maskable-512.png',
   // Acilis sahnesi — index.html'in satir ici stilinden okunuyor.
   './assets/icons/splash-hero.jpg',
+  // NOT: assets/jigsaw/ (yerel garanti gorsel havuzu, ~1.1 MB) bu listede
+  // BILEREK YOK. Kabuk listesi "acilis icin GEREKEN her sey" demek ve bu
+  // gorseller acilis icin gerekli degil; buraya konsalardi her surum
+  // bump'inda 1.1 MB yeniden inerdi (ikonlarda not edilen tuzagin aynisi)
+  // ve install o kadar gecikirdi. Asagidaki fetch kurali onlari zaten
+  // MEDIA_CACHE'e aliyor: surumden bagimsiz, ilk kullanimda dolan kova —
+  // 3. kovanin varlik sebebi tam olarak bu. APK'da ise SW hic kayitli
+  // degil, dosyalar dogrudan yerel. build-www.js SHIP listesinde VAR.
 ];
 
 // media kovasının üst sınırı. Ses varlıkları geldiğinde bu kova
