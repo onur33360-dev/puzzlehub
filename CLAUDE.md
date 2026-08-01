@@ -226,6 +226,45 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; PuzzleHub is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked.
+- **Water Sort's move limit is `5 × colorCount`, and the number came from MEASUREMENT
+  (2026-08-01).** This is the game's first lose state. Difficulty has exactly one variable —
+  `paramsForLevel` gives `colorCount = min(3 + ⌊lv/3⌋, 8)`, tubes = colors + 2 — so the limit
+  scales with colours, never a flat number (flat would be generous early and unfair late).
+  30 boards per level were solved for their **true optimal** with IDA* (admissible heuristic:
+  a move reduces the total colour-run count by at most 1, and the solved state has exactly
+  `colorCount` runs). Measured optimum: 3 colours avg 7.9 / p90 10 / max 11 · 4 → 11.5 / 13.5
+  / 14 · 5 → 14.9 / 17 / 17 · 6 → 18.2 / 20.5 / 22 · 7 → 21.9 / 24 / 26. The fit is almost
+  perfectly linear (p90 ≈ 3.5 × colours), which is why `5 × colours` lands at a **constant
+  1.47 × p90** on every tier — about 40% above the hardest board seen, roughly 1.7× the
+  average one. That slack is deliberate: this project optimises for flow, so losing should be
+  rare and earned, not a constant threat.
+  **Per-board optimal at runtime was tried and rejected** — IDA* takes seconds at 7 colours
+  and minutes at 8, and level generation blocks the main thread (the Arrow `staleMax`
+  lesson). The formula is the only affordable honest option.
+  Three rules hold it together:
+  1. **Undo does NOT refund a move, and that is the whole feature.** Undo is unlimited and
+     free (it only costs stars: 0 undos → 3★, 1–2 → 2★, 3+ → 1★). If undo gave the move back,
+     the limit could never be reached and the lose screen, the `'lost'` event and the
+     continue economy would all be decorative. The counter counts *pours performed*;
+     undo's own logic was not touched. The free escape hatch is "Yeniden Başla".
+  2. **Restarting is a NEW round.** `restartLevel()` resets the counter and emits
+     `game_started` (invariant 2 closes the abandoned attempt as `'quit'`), because that is
+     genuinely a second attempt. Continuing after an ad/diamonds is the opposite — the round
+     is *reopened*, no new `game_started` (see `_runGameOverContinuation`).
+  3. **The counter warns at 5 moves left.** A limit that arrives unannounced feels like a
+     bug; a designed loss has to be visible coming.
+  Continue grants `ceil(limit × 0.25)` moves for an ad or **20💎**
+  (`EconomyConfig.EXTRA_MOVES_DIAMONDS`), priced *between* undo (15) and a full continue
+  (30): the level can always be restarted for free, so the player is buying back effort, not
+  the run. That cost travels through the shared game-over box via the new optional
+  `showGameOver(..., { continueCost })` — same contract as `onContinue`/`onRestart`.
+- **`tools/watersort-moves-test.js` validates the move limit.** Four layers like its
+  siblings. Its most important assertions are the two that encode the reasoning rather than
+  the code: the limit must stay **≥ 1.25 × the measured hardest board** (or the level becomes
+  unfinishable) and **≤ 2.2 × the measured average** (or the lose state never fires). The
+  measured optima are pinned in the tool as reference data, so changing `MOVE_LIMIT_PER_COLOR`
+  fails loudly instead of quietly drifting. It also asserts the limit did not leak into any
+  other game, and that undo never decrements the counter.
 - **`waterSort`'s DOM renderer is still in `games.js` ON PURPOSE — do NOT delete it as dead code.**
   The unused DOM functions (`buildTubeEl`, `pourTransform`, `pourStream`, `drainSource`,
   `syncLiquidShade`, …) and the `.wsrt-tube` / `.wsrt-body` / `.wsrt-layer` CSS are the
@@ -491,10 +530,15 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   never take a game down.
   **Why two events are enough.** There is no `game_won`/`game_lost` pair — one `game_ended`
   carries `result: 'won'|'lost'|'quit'`. The reason is games with **no lose state**: Water
-  Sort's tubes never jam, so it emits `'won'` only, and Block Puzzle is the mirror image
+  Sort's tubes never jammed, so it emitted `'won'` only, and Block Puzzle is the mirror image
   (endless, so `'lost'` only). With separate events those games would look half-integrated,
   and every game plus every subscriber would have to reason about both. `'quit'` is the same
   field's third value rather than a third event — leaving is also a way to end.
+  **Water Sort is no longer in that list (2026-08-01):** the move limit added a deliberate
+  lose state, so it now emits both `'won'` and `'lost'`. The one-event design is what made
+  that a two-line change instead of a migration — nothing else had to learn a new event.
+  `game-events-test.js` pinned the old "only `'won'`" claim and broke on this change, which
+  is exactly why that assertion exists; it was updated with the reason, not deleted.
   **A round is a LEVEL, not a session.** In the level-based games (Water Sort, Screw, Arrow,
   Jigsaw) the injection point is `loadLevel`/`startLevel`, not `init` — because level
   completion emits `game_ended('won')`, and if the level *start* didn't emit too, Water Sort

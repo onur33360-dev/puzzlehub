@@ -1055,13 +1055,30 @@ a { color:inherit; text-decoration:none; }
   transition: all 0.2s;
 }
 .diamond-display:active { transform: scale(0.95); }
-.diamond-display.diamond-pop { animation: diamondPop 0.4s ease; }
+.diamond-display.diamond-pop { animation: diamondPop 0.52s cubic-bezier(.2,.8,.2,1); }
 .diamond-icon { font-size: 16px; }
 .diamond-count { font-size: 14px; font-weight: 800; color: var(--accent-light); }
 
+/* Küçük/rutin kazanımların (seviye tamamlama +3💎) geri bildirimi.
+   2026-08-01'de HAFİFÇE güçlendirildi: 1.2 → 1.34 ölçek, kısa bir sıcak
+   glow ve dönüşte ufak bir alt-salınım (1.0 yerine .98'e inip oturuyor).
+   Bilerek küçük kalıyor — rozet kutlaması (.bdg-pop) tek seferlik ve
+   kalıcı bir an; bu ise her seviyede tekrarlanıyor, onunla yarışırsa
+   ikisi de anlamsızlaşır. Yeni sistem değil, mevcut animasyonun ayarı. */
 @keyframes diamondPop {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.2); }
+  0%   { transform: scale(1);    filter: none; }
+  45%  { transform: scale(1.34); filter: drop-shadow(0 0 7px rgba(251,191,36,.85)); }
+  72%  { transform: scale(.98);  filter: drop-shadow(0 0 3px rgba(251,191,36,.35)); }
+  100% { transform: scale(1);    filter: none; }
+}
+
+/* Hareket hassasiyeti: kazanım yine belli olur, sadece zıplamaz. */
+@media (prefers-reduced-motion: reduce) {
+  .diamond-display.diamond-pop { animation-duration: .3s; }
+  @keyframes diamondPop {
+    0%, 100% { transform: none; filter: none; }
+    50% { transform: none; filter: drop-shadow(0 0 6px rgba(251,191,36,.8)); }
+  }
 }
 
 /* ========== ECONOMY CARD ========== */

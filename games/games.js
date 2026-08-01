@@ -5716,6 +5716,40 @@ PuzzleGames.waterSort = (() => {
 
   let container, level, score, tubes, selected, history, animating, wrapEl, tubesEl, atmosphereEl;
   let comboCount, undosUsedThisLevel;
+  let movesUsed, moveLimit, levelStartedAt;
+
+  // ═══════════ HAMLE LİMİTİ ═══════════
+  // Bu oyunun İLK kaybetme durumu (2026-08-01). Öncesinde tüpler tıkanmazdı
+  // ve her tahta geri alınabilirdi, yani kaybetmek mümkün değildi.
+  //
+  // ───── FORMÜL NEREDEN GELİYOR ─────
+  // Zorluğun tek değişkeni renk sayısı (paramsForLevel). Her seviye için
+  // 30 tahtanın GERÇEK optimal hamle sayısı ölçüldü (IDA*, kabul edilebilir
+  // sezgisel: bir hamle toplam renk-koşusu sayısını en fazla 1 azaltır,
+  // bitişte koşu sayısı = renk sayısı):
+  //
+  //   renk 3 → ort 7.9  p90 10    maks 11
+  //   renk 4 → ort 11.5 p90 13.5  maks 14
+  //   renk 5 → ort 14.9 p90 17    maks 17
+  //   renk 6 → ort 18.2 p90 20.5  maks 22
+  //   renk 7 → ort 21.9 p90 24    maks 26
+  //
+  // Uyum neredeyse mükemmel doğrusal (p90 ≈ 3.5×renk). 5×renk, p90'ın her
+  // kademede SABİT 1.47 katı ve en zor gözlenen tahtanın ~%40 üstü. Sabit
+  // bir sayı olsaydı kolay seviyede cömert, zor seviyede haksız olurdu.
+  //
+  // ───── NEDEN TAHTA BAŞINA OPTİMAL DEĞİL ─────
+  // "limit = bu tahtanın ideali × 1.4" daha adil olurdu ama uygulanabilir
+  // değil: IDA* 7 renkte saniyeler, 8 renkte dakikalar sürüyor ve seviye
+  // üretimi ana iş parçacığını bloke ediyor (Arrow'un staleMax dersi).
+  const MOVE_LIMIT_PER_COLOR = 5;
+  const EXTRA_MOVES_FRACTION = 0.25;   // devam paketi: limitin dörtte biri
+  function moveLimitFor(lv) {
+    return MOVE_LIMIT_PER_COLOR * paramsForLevel(lv).colorCount;
+  }
+  function extraMovesFor(lv) {
+    return Math.ceil(moveLimitFor(lv) * EXTRA_MOVES_FRACTION);
+  }
 
   // ═══════════ SAF DURUM FONKSİYONLARI ═══════════
   // Hem canlı oyun hem de seviye üretici/çözülebilirlik kontrolü bu
@@ -5944,6 +5978,15 @@ PuzzleGames.waterSort = (() => {
         box-shadow:0 4px 12px -3px rgba(4,6,20,.6),inset 0 1px 0 rgba(220,215,255,.28);
         text-shadow:0 0 18px rgba(150,120,235,.55);
       }
+      /* Hamle sayacı SOLDA mutlak konumlu — seviye kapsülü ortada kalsın
+         (kapsül akışta ortalanıyor, sayaç akışa girseydi onu kaydırırdı). */
+      .wsrt-bar .wb-moves{
+        position:absolute;left:6px;top:50%;transform:translateY(-50%);
+        font:600 13px/1 'Fraunces',serif;color:var(--wsrt-ink);opacity:.72;
+        letter-spacing:.03em;transition:color .25s ease,opacity .25s ease;
+      }
+      /* Son 5 hamle: sayaç uyarıya döner. Renk mevcut hata tonundan. */
+      .wsrt-bar .wb-moves.warn{color:var(--ph-danger,#ef4444);opacity:1;font-weight:800}
       .wsrt-bar .wb-right{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;gap:var(--ph-space-2)}
       .wsrt-icon-btn{
         width:36px;height:36px;border-radius:var(--ph-radius-full);
@@ -6384,6 +6427,15 @@ PuzzleGames.waterSort = (() => {
     const restartBtn = wrapEl.querySelector('#wsrt-restart');
     if (undoBtn) undoBtn.classList.toggle('off', history.length === 0);
     if (restartBtn) restartBtn.classList.toggle('off', history.length === 0);
+    // Hamle sayacı. Son 5 hamlede uyarı rengine geçiyor — limit oyuncuyu
+    // hazırlıksız yakalamamalı; sürpriz bir kaybetme, tasarlanmış bir
+    // kaybetmeden çok daha kötü hissettirir.
+    const mv = wrapEl.querySelector('#wsrt-moves');
+    if (mv) {
+      const left = Math.max(0, moveLimit - movesUsed);
+      mv.textContent = movesUsed + ' / ' + moveLimit;
+      mv.classList.toggle('warn', left <= 5);
+    }
   }
   // Tam yeniden çizim — sadece seviye başlangıcında/yeniden başlatmada.
   // ═══════════ CANVAS RENDERER (Sprint 4) ═══════════
@@ -7059,6 +7111,7 @@ PuzzleGames.waterSort = (() => {
     wrapEl.innerHTML = `
       <div class="wsrt-bar">
         <span class="wb-lbl">Seviye ${level+1}</span>
+        <span class="wb-moves" id="wsrt-moves"></span>
         <div class="wb-right">
           <button class="wsrt-icon-btn" id="wsrt-undo" title="Geri Al">↩</button>
           <button class="wsrt-icon-btn" id="wsrt-restart" title="Yeniden Başlat">🔄</button>
@@ -7298,7 +7351,11 @@ PuzzleGames.waterSort = (() => {
     animating = true;
     score += scoreDelta;
     history.push({from, to, count, colorIdx, scoreDelta});
+    // Sayaç YAPILAN DÖKÜŞÜ sayar; geri alınan hamle sayaçtan DÜŞMEZ
+    // (bkz. undoOne'daki not) — limitin işe yaraması buna bağlı.
+    movesUsed++;
     updateGameScore(score);
+    updateControlsBar();
 
     const p0 = wGeom.pos[from], p1 = wGeom.pos[to], tw = wGeom.tw, th = wGeom.th;
     const dir = p1.x >= p0.x ? 1 : -1;
@@ -7434,11 +7491,21 @@ PuzzleGames.waterSort = (() => {
       phFloatText(wrapEl, `+${scoreDelta}`, cx, cy, 'var(--ph-success)');
       if (isTubeSolved(tubes[to], CAP)) tubeSolvedFeedback(to, cx, cy + th / 2);
       if (won) setTimeout(onLevelComplete, 300 + POUR_RETURN_MS);
+      // Kaybetme, kazanmanın AYNI gecikmesini kullanıyor: son döküş animasyonu
+      // tamamlanmadan kutu açılırsa oyuncu neyin olduğunu göremez.
+      else if (movesUsed >= moveLimit) setTimeout(onOutOfMoves, 300 + POUR_RETURN_MS);
     }
 
     if (wRaf) cancelAnimationFrame(wRaf);
     wRaf = requestAnimationFrame(step);
   }
+  // movesUsed BURADA AZALTILMIYOR ve bu bilinçli. Geri alma sınırsız ve
+  // elmas bakımından ücretsiz (yalnızca yıldız düşürüyor); hamle iade
+  // edilseydi oyuncu sonsuza kadar geri alıp asla kaybedemezdi, yani hamle
+  // limiti de kaybetme ekranı da dekoratif kalırdı. Sayaç "yapılan döküş"ü
+  // sayıyor: denemenin bedeli hamle bütçesi. Undo'nun kendi mantığına
+  // (ücretsiz, sınırsız, yıldız düşürür) DOKUNULMADI — kaçış kapısı
+  // ücretsiz "Yeniden Başla".
   function undoOne(bulk) {
     if (!history.length) return;
     const move = history.pop();
@@ -7465,9 +7532,50 @@ PuzzleGames.waterSort = (() => {
     selected = null;
     comboCount = 0;
     undosUsedThisLevel = 0;
+    // Yeniden başlatmak GERÇEKTEN yeni bir tur: hamle bütçesi sıfırlanıyor
+    // ve GameEvents'e yeni bir başlangıç bildiriliyor. Değişmez 2 gereği
+    // açık tur önce 'quit' ile kapanır — oyuncu o denemeyi terk etti.
+    // Ücretsiz: kaybetme ekranının bedelsiz çıkışı bu.
+    movesUsed = 0;
+    moveLimit = moveLimitFor(level);
+    levelStartedAt = Date.now();
+    gameEvent('game_started', { gameId: 'waterSort' });
     updateGameScore(score);
     render();
     GameAudio.play('button'); GameAudio.haptic('soft');
+  }
+
+  // ═══════════ HAMLE BİTTİ ═══════════
+  function onOutOfMoves() {
+    if (isWin(tubes, CAP)) return;          // son döküş kazandırdıysa kaybetme yok
+    GameAudio.play('lose'); GameAudio.haptic('error');
+    gameEvent('game_ended', {
+      gameId: 'waterSort', result: 'lost', score,
+      durationMs: Date.now() - levelStartedAt,
+    });
+    const extra = extraMovesFor(level);
+    const solved = tubes.filter(t => t.colors.length && isTubeSolved(t, CAP)).length;
+    showGameOver(false, 'Hamleler Bitti', `+${extra} hamle ile devam edebilirsin.`, {
+      accent: 'var(--ph-jewel-1-shadow)',
+      accentLight: 'var(--ph-jewel-1-highlight)',
+      accentGlow: 'var(--ph-jewel-1-glow)',
+      mark: '✧',
+      continueCost: econ('EXTRA_MOVES_DIAMONDS', 20),
+      stats: [
+        { label: 'Hamle', value: movesUsed + ' / ' + moveLimit },
+        { label: 'Biten Tüp', value: solved },
+      ],
+      // Devam: AYNI tur sürüyor. Yeni game_started YAYINLANMIYOR —
+      // app.js'teki _runGameOverContinuation turu reopen ile geri açıyor.
+      onContinue: () => {
+        moveLimit += extra;
+        animating = false;                  // döküş döngüsü bitmemişse kilidi bırak
+        updateControlsBar();
+        showToast('🧪 +' + extra + ' hamle!');
+      },
+      // Tekrar Oyna: gerçekten yeni bir tur (restartLevel game_started yayınlar).
+      onRestart: () => { animating = false; restartLevel(); },
+    });
   }
 
   // ═══════════ SEVİYE İLERLEMESİ ═══════════
@@ -7527,9 +7635,9 @@ PuzzleGames.waterSort = (() => {
   }
   function loadLevel(lv) {
     // Tur = SEVİYE (init ve seviye ilerlemesi ikisi de buradan geçiyor).
-    // Bu oyun 'lost' YAYINLAMAZ ve bu bir eksiklik değil: tüpler tıkanmaz,
-    // her tahta geri alınabilir, yani kaybetme durumu yoktur. Tek olay +
-    // result alanı tasarımının varlık sebebi tam olarak budur.
+    // 2026-08-01: bu oyun ARTIK 'lost' da yayınlıyor — hamle limiti bilinçli
+    // bir kaybetme durumu getirdi. Önceki "kaybetme durumu yok" notu bu
+    // tarihte geçersizleşti (bkz. HAMLE LİMİTİ başlığı).
     gameEvent('game_started', { gameId: 'waterSort' });
     level = lv;
     tubes = generateLevel(lv);
@@ -7538,6 +7646,9 @@ PuzzleGames.waterSort = (() => {
     animating = false;
     comboCount = 0;
     undosUsedThisLevel = 0;
+    movesUsed = 0;
+    moveLimit = moveLimitFor(lv);
+    levelStartedAt = Date.now();
     render();
   }
 

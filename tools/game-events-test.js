@@ -334,8 +334,13 @@ function testSource(calls) {
   // sabitler. Biri değişirse test kırılır ve karar yeniden konuşulur.
   const resultsOf = g => calls.filter(c => c.owner === g && c.event === 'game_ended')
                               .reduce((a, c) => a.concat(c.results), []);
-  eq('waterSort yalnızca \'won\' yayınlıyor (kaybetme durumu yok)',
-     [...new Set(resultsOf('waterSort'))], ['won']);
+  // waterSort 2026-08-01'e kadar YALNIZCA 'won' yayınlıyordu ve bu bir
+  // eksiklik değil, oyunun doğru ifadesiydi: tüpler tıkanmazdı. Hamle limiti
+  // (Faz 4) bilinçli bir kaybetme durumu getirdi, dolayısıyla artık ikisini
+  // de yayınlıyor. Bu satırın kırılması kararın yeniden konuşulmasını
+  // sağladı — testin varlık sebebi tam olarak buydu.
+  eq('waterSort hem \'won\' hem \'lost\' yayınlıyor (hamle limiti)',
+     [...new Set(resultsOf('waterSort'))].sort(), ['lost', 'won']);
   eq('mazeGame yalnızca \'won\' yayınlıyor', [...new Set(resultsOf('mazeGame'))], ['won']);
   eq('blockPuzzle yalnızca \'lost\' yayınlıyor (kazanma durumu yok)',
      [...new Set(resultsOf('blockPuzzle'))], ['lost']);

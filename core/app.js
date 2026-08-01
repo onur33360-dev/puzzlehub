@@ -27,6 +27,12 @@ const EconomyConfig = {
   CONTINUE_DIAMONDS: 30,      // game over sonrası devam
   UNDO_DIAMONDS: 15,          // +1 geri alma
   HINT_DIAMONDS: 10,          // ipucu — undo'dan ucuz, daha az kritik yardım
+  // Hamle limiti dolunca +%25 hamle (şu an yalnızca Su Sıralama).
+  // CONTINUE_DIAMONDS'tan UCUZ olması bilinçli: o oyunlarda devam etmemek
+  // turu tamamen kaybettirir, burada seviye her zaman ÜCRETSİZ yeniden
+  // başlatılabiliyor — oyuncu turu değil, harcadığı emeği satın alıyor.
+  // Tek bir geri almadan (15) değerli, tam bir devamdan (30) ucuz.
+  EXTRA_MOVES_DIAMONDS: 20,
 
   // --- Günlük görev ödülleri (DailyQuests) ---
   // Toplam 45💎 (10+15+10 + 10 bonus). Mağazadaki "Günlük Görevler"
@@ -2053,6 +2059,13 @@ function showGameOver(win, title, message, opts) {
   // Karar refreshGameOverOffers'a taşınıyor: Premium'da elmas satırı da
   // gizleniyor ve iki koşulun tek yerde olması gerekiyor.
   _gameOverNoDiamond = !!opts.noDiamond;
+  // Elmas bedeli oyun bazında değiştirilebilir. Verilmezse eski davranış
+  // (CONTINUE_DIAMONDS) aynen sürer — onContinue/onRestart ile aynı sözleşme.
+  // Sabit tek bir bedel, "devam"ın her oyunda aynı şeyi kurtardığını varsayardı;
+  // oysa seviyeli bir oyunda kurtarılan şey bir seviyenin emeği, skorlu bir
+  // oyunda tüm turdur (bkz. EconomyConfig.EXTRA_MOVES_DIAMONDS).
+  _gameOverContinueCost = (typeof opts.continueCost === 'number')
+    ? opts.continueCost : EconomyConfig.CONTINUE_DIAMONDS;
 
   // Level complete reward — Plus çarpanı BİLEREK yok (add, addReward değil):
   // abonelik oyun içi ilerlemeyi hızlandırmıyor (bkz. DiamondSystem.addReward).
@@ -2067,6 +2080,7 @@ function showGameOver(win, title, message, opts) {
 // kutu AÇIKKEN son hakkını harcadığında (reklamla devam → tekrar kaybetme
 // döngüsü) düğmenin kendiliğinden pasifleşmesi için.
 let _gameOverNoDiamond = false;
+let _gameOverContinueCost = EconomyConfig.CONTINUE_DIAMONDS;
 
 function refreshGameOverOffers() {
   const plus = (typeof PlusSystem !== 'undefined') && PlusSystem.isActive();
@@ -2099,7 +2113,7 @@ function refreshGameOverOffers() {
     const hide = _gameOverNoDiamond || plus;
     diamondBtn.style.display = hide ? 'none' : '';
     if (!hide) {
-      const cost = EconomyConfig.CONTINUE_DIAMONDS;
+      const cost = _gameOverContinueCost;
       setBtn(diamondBtn, '💎', cost + ' Elmas → Devam Et', DiamondSystem.canAfford(cost));
     }
   }
@@ -2148,7 +2162,7 @@ function continueWithDiamonds() {
     if (!_runGameOverContinuation('plus')) showToast('👑 Plus: devam ücretsiz!');
     return;
   }
-  const cost = EconomyConfig.CONTINUE_DIAMONDS;
+  const cost = _gameOverContinueCost;
   if (DiamondSystem.spend(cost)) {
     if (!_runGameOverContinuation('diamond')) showToast('💎 ' + cost + ' elmas harcandı — devam!');
   }
