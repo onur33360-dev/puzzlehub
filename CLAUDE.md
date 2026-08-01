@@ -402,8 +402,9 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   These three screens were rebuilt to match the owner's design mockup one-for-one, and the
   mockup shows values for systems that do not exist yet: badge counts, a collection
   percentage, per-game achievement chips, recently-earned badges, the weekly-reward claim,
-  the mission progress bars, the "⭐ 50 XP" label and the profile title. They render as
-  written in the mockup. This is an **explicit owner decision for a pre-launch dev build**
+  the "⭐ 50 XP" label and the profile title. They render as
+  written in the mockup. (**The daily-mission bars left this list on 2026-08-01** — they are
+  real now; see the `DailyQuests` bullet. The *weekly* chest is still decorative.) This is an **explicit owner decision for a pre-launch dev build**
   with no live users — the earlier "never show a number you can't back" rule was suspended
   for these screens, not forgotten. **Every placeholder carries a `TODO:` comment naming
   the system that will replace it** — grep `TODO:` in `core/app.js`, `core/daily.js` and
@@ -515,7 +516,60 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   deliberately absent where the game has no score concept (Arrow, Jigsaw) — an invented
   number would be worse than a missing field.
   Counters live in `ph_game_stats` (`totalGamesStarted`, `totalGamesWon`, `perGame`).
-  **No UI reads them yet — that is phase 2, not an oversight.**
+  `DailyQuests` (2026-08-01) is the first real subscriber; the progress screens still read
+  nothing — that is phase 2b (badges), not an oversight.
+- **`DailyQuests` (`core/app.js`, 2026-08-01) is the THIRD daily-reset system and it copies
+  the other two on purpose.** `ph_daily_quests`, `toDateString()` comparison, lazy reset —
+  identical to `StreakSystem.checkIn()` and `AdBudget`. Three systems disagreeing about what
+  "a day" is would desync at midnight and surface hours later as a bug nobody can reproduce.
+  Four rules; break one and the quests either lie or leak diamonds:
+  1. **No game-specific code, and the third quest is DERIVED, not counted.** "3 oyun oyna"
+     and "1 oyun kazan" come from `GameEvents`; "günlük meydan okumayı tamamla" reads
+     `DailyChallenge.state(id).doneToday`, which already exists. A second "was the daily
+     solved" record would be the same truth stored twice, with nothing to say which copy
+     wins when they drift. Consequence: this system names no game, so adding a game needs
+     no edit here. The Node harness enforces it by scanning the block for game ids.
+  2. **A quest round is a LEVEL** — the `GameEvents` definition, unchanged. Three Water Sort
+     *levels* complete "3 oyun oyna". That follows from the counted unit; keeping a second
+     definition just for quests is exactly what this avoids.
+  3. **`settle()` is the only place that pays, and it is idempotent** (paid ids live in
+     `paid[]`). It runs on every mission render, so a non-idempotent version would pay on
+     every home visit. `renderMissions()` calls it *before* drawing — reversed, a newly
+     finished quest would read "done" on screen while its reward waited for the next render.
+  4. **The daily-challenge quest is paid on the HOME RENDER, not in the `game_ended`
+     listener.** `DailyChallenge.complete()` runs *after* the event is emitted (games.js,
+     sudoku), so at listener time `doneToday` is still false. `switchTab('home')` therefore
+     calls `DailyQuests.refresh()` — which is also where the toast is actually visible,
+     instead of under the game-over panel.
+  Rewards are `EconomyConfig.QUEST_*` (10 + 15 + 10, +10 when all three land = **45💎**,
+  the figure the shop already promised). They are paid with **`addReward()`**, so Plus's
+  +50% applies — a quest reward is the same category as the daily reward. `add()` still
+  means "no multiplier" and level-complete `+3` is untouched: a subscription must not
+  accelerate in-game progression. The shop's "Günlük Görevler" row left `soon: true` in the
+  same change and now reads its label and its `+45💎` **from the code** via
+  `data-ph-quests` — same contract as `data-ph-avatar` / `data-ph-ad-budget`. **`DAILY_MISSIONS`
+  is now a definition list, not display data**: it carries `id`/`total`/`reward`, and no
+  `progress` field, because progress is computed. Its third entry was changed from "Kişisel
+  rekorunu geliştir" to **"1 oyun kazan"** — the old one was not universal (Arrow and Jigsaw
+  have no score at all, so those players could never advance it).
+- **`tools/game-events-test.js` is the official validation tool for the event system.**
+  Plain Node, zero dependencies, same vm+stub pattern as `level-metrics.js` but it also
+  loads `app.js` (what is under test is the contract *between* the two files). Four layers:
+  the GameEvents contract; a **source scan** of every `gameEvent(...)` call in games.js that
+  proves each call's `gameId` matches the game it sits inside (the realistic failure is
+  copy-paste, e.g. Block Puzzle emitting `'waterSort'`); a **live** pass that actually calls
+  all 10 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
+  simulation. `--table` prints the file:line injection table. Run it after touching any
+  game's start/end path.
+- **`tools/daily-quests-test.js` validates the quest system; `tools/dom-sandbox.js` is the
+  shared vm+stub harness it runs on.** Same four-layer shape as the event tool. Two notes:
+  the sandbox's `getElementById` is **cached** (same id → same element) so rendered
+  `innerHTML` can be asserted, which `game-events-test.js`'s own copy does not do — that
+  copy was left alone deliberately, so migrating it is a separate, optional change. And the
+  midnight fixture must age **both** `ph_daily_quests` *and* `ph_daily_v1`: there is one
+  clock, so aging only the quest record tests a state that cannot occur (quests on a new
+  day, daily puzzle still solved) and produces a false "reward paid twice" failure. That
+  exact wrong fixture is what the tool's first run reported.
 - **`tools/game-events-test.js` is the official validation tool for the event system.**
   Plain Node, zero dependencies, same vm+stub pattern as `level-metrics.js` but it also
   loads `app.js` (what is under test is the contract *between* the two files). Four layers:

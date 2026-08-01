@@ -28,9 +28,18 @@ const EconomyConfig = {
   UNDO_DIAMONDS: 15,          // +1 geri alma
   HINT_DIAMONDS: 10,          // ipucu — undo'dan ucuz, daha az kritik yardım
 
+  // --- Günlük görev ödülleri (DailyQuests) ---
+  // Toplam 45💎 (10+15+10 + 10 bonus). Mağazadaki "Günlük Görevler"
+  // satırı bu toplamı KODDAN okuyor, ayrı yazılmıyor — metin ile kodun
+  // ayrışması bu projede zaten bir kez oldu (bkz. AdBudget yorumu).
+  QUEST_PLAY_REWARD: 10,      // "3 oyun oyna"
+  QUEST_DAILY_REWARD: 15,     // "Günlük meydan okumayı tamamla" (en spesifik görev)
+  QUEST_WIN_REWARD: 10,       // "1 oyun kazan"
+  QUEST_ALL_BONUS: 10,        // üçü birden tamamlanınca
+
   // --- Premium (PlusSystem) ---
   PLUS_DAILY_DIAMONDS: 20,    // günlük ödülün ÜSTÜNE, ayrı satır
-  PLUS_DIAMOND_MULTIPLIER: 1.5, // reklam + günlük ödül kazanımlarına
+  PLUS_DIAMOND_MULTIPLIER: 1.5, // reklam + günlük ödül + görev kazanımlarına
 };
 
 // ==================== VERİ ====================
@@ -47,15 +56,21 @@ const PUZZLE_GAMES = [
 ];
 
 // Mockup panel 1 "Bugünün Görevleri" ile birebir üç görev.
-// TODO: görev takibi kurulunca gerçek veriye bağlanacak. Bugün hiçbir
-// sayaç yazılmıyor — playGame()/showGameOver() ilerleme kaydetmiyor,
-// o yüzden progress değerleri statik. İkincisi ("Günlük meydan okumayı
-// tamamla") takip gelmeden de türetilebilir: DailyChallenge.state()
-// .doneToday zaten bu bilgiyi tutuyor.
+// Bunlar artık TANIM: ilerleme değerleri burada YAZMAZ, DailyQuests
+// hesaplar (bkz. GÜNLÜK GÖREVLER bölümü). Sabit `progress` alanları
+// 2026-08-01'de kaldırıldı — üçü de gerçek veriye bağlandı.
+//
+// "Kişisel rekorunu geliştir" görevi "1 oyun kazan" ile DEĞİŞTİRİLDİ:
+// eskisi evrensel değildi, çünkü Ok Bulmaca ve Resim Kaydır'da skor
+// kavramı yok (bkz. GameEvents yorumu) — o iki oyunu oynayan oyuncu
+// görevi hiç ilerletemezdi. "Kazanmak" ise 10 oyunun hepsinde tanımlı.
 const DAILY_MISSIONS = [
-  { icon:'🎮', tone:'blue',  name:'3 oyun oyna',                     progress:1, total:3 },
-  { icon:'🎯', tone:'red',   name:'Günlük meydan okumayı tamamla',   progress:0, total:1 },
-  { icon:'⭐', tone:'amber', name:'Kişisel rekorunu geliştir',       progress:0, total:1 },
+  { id:'play3', icon:'🎮', tone:'blue',  name:'3 oyun oyna',
+    total:3, reward:EconomyConfig.QUEST_PLAY_REWARD },
+  { id:'daily', icon:'🎯', tone:'red',   name:'Günlük meydan okumayı tamamla',
+    total:1, reward:EconomyConfig.QUEST_DAILY_REWARD },
+  { id:'win1',  icon:'⭐', tone:'amber', name:'1 oyun kazan',
+    total:1, reward:EconomyConfig.QUEST_WIN_REWARD },
 ];
 
 // ŞU AN RENDER EDİLMİYOR. Mockup'ın ana sayfasında haftalık görev listesi
@@ -511,6 +526,194 @@ const GameEvents = {
   },
 };
 
+// ==================== GÜNLÜK GÖREVLER ====================
+//
+// GameEvents'in İLK gerçek abonesi. Faz 1'de mekanizma kuruldu ve
+// bilerek boş bırakıldı; bu bölüm onu tüketiyor.
+//
+// ───── NEDEN OYUN-ÖZEL KOD YOK ─────
+// Üç görevin üçü de mevcut veriden besleniyor:
+//   • "3 oyun oyna"  → GameEvents game_started sayacı
+//   • "1 oyun kazan" → GameEvents game_ended(result:'won') sayacı
+//   • "Günlük meydan okuma" → DailyChallenge.state(id).doneToday
+// Üçüncüsü için AYRI bir takip YAZILMADI: o bilgi zaten ph_daily_v1'de
+// tutuluyor ve ikinci bir kayıt, aynı gerçeğin iki kaynağı demek olurdu
+// (ikisi ayrışırsa hangisinin doğru olduğunu söyleyecek bir şey yok).
+// Sonuç: bu dosya hiçbir oyunun adını bilmiyor, yeni oyun eklemek
+// buraya dokunmayı gerektirmiyor.
+//
+// ───── TUR = SEVİYE ─────
+// Sayılan birim GameEvents'in tanımladığı TUR. Seviyeli oyunlarda
+// (Su Sıralama, Vida, Ok, Resim Kaydır) üç SEVİYE bitirmek "3 oyun
+// oyna"yı tamamlar. Bu ayrı bir kural değil, tur tanımının doğrudan
+// sonucu — ve iki tanım tutmak (biri görev için, biri istatistik için)
+// tam olarak kaçınılmak istenen şey.
+//
+// ───── GÜNLÜK SIFIRLAMA ─────
+// StreakSystem.checkIn() ve AdBudget'ın deseninin AYNISI: toDateString()
+// karşılaştırması + TEMBEL sıfırlama (gece yarısını bekleyen zamanlayıcı
+// yok, uygulama kapalıyken çalışmazdı zaten). Yeni bir tarih deseni
+// icat edilmedi — üç sistem "gün"ü farklı tanımlarsa biri sıfırlanırken
+// diğeri sıfırlanmaz ve hata ancak gece yarısı görünür.
+//
+// ───── ÖDÜL ANI ─────
+// Görev tamamlandığı an ödenir; toplanacak bir düğme yok (mockup'ta da
+// yok — bkz. §4, tasarıma dokunulmuyor). Ödeme TEK yerde: settle().
+// İki tetikleyicisi var ve ikincisi zorunlu: DailyChallenge.complete()
+// oyun bittikten SONRA çağrılıyor (games.js, sudoku), yani game_ended
+// dinleyicisi çalışırken doneToday hâlâ false. O görev bu yüzden ana
+// ekran render'ında ödeniyor — oyuncunun oyundan çıktığı an, toast'ın
+// game-over kutusunun altında kaybolmadığı yer.
+const DailyQuests = {
+  _key: 'ph_daily_quests',
+
+  _today() { return new Date().toDateString(); },
+
+  // Kayıtlı tarih bugün değilse taze kayıt döner (diske YAZMADAN —
+  // ilk gerçek değişiklik zaten kaydedecek; AdBudget.used() ile aynı).
+  getData() {
+    let d;
+    try { d = JSON.parse(localStorage.getItem(this._key) || '{}'); }
+    catch (e) { d = {}; }
+    if (d.date !== this._today()) {
+      return { date: this._today(), played: 0, won: 0, paid: [], bonusPaid: false };
+    }
+    return {
+      date: d.date,
+      played: d.played || 0,
+      won: d.won || 0,
+      paid: Array.isArray(d.paid) ? d.paid : [],
+      bonusPaid: !!d.bonusPaid,
+    };
+  },
+
+  _save(d) {
+    try { localStorage.setItem(this._key, JSON.stringify(d)); } catch (e) {}
+  },
+
+  // Günlük meydan okuma TÜRETİLİYOR, sayılmıyor. try/catch şart:
+  // DailyChallenge PuzzleGames kaydını geziyor, oradaki bir hata
+  // görev satırını değil ANA EKRANI düşürürdü.
+  _dailyChallengeDone() {
+    if (typeof DailyChallenge === 'undefined') return false;
+    try {
+      return DailyChallenge.games().some(id => DailyChallenge.state(id).doneToday);
+    } catch (e) { return false; }
+  },
+
+  // Tanım (DAILY_MISSIONS) + bugünün verisi → ekranın ve ödemenin
+  // ortak kaynağı. İkisi ayrı hesaplansaydı UI'ın "tamam" dediği bir
+  // görev ödenmemiş olabilirdi.
+  rows(data) {
+    const d = data || this.getData();
+    const dailyDone = this._dailyChallengeDone();
+    return DAILY_MISSIONS.map(m => {
+      let raw = 0;
+      if (m.id === 'play3') raw = d.played;
+      else if (m.id === 'win1') raw = d.won;
+      else if (m.id === 'daily') raw = dailyDone ? 1 : 0;
+      const progress = Math.min(raw, m.total);
+      return {
+        id: m.id, icon: m.icon, tone: m.tone, name: m.name,
+        total: m.total, reward: m.reward,
+        progress, done: progress >= m.total,
+      };
+    });
+  },
+
+  doneCount() { return this.rows().filter(r => r.done).length; },
+  allDone() { const r = this.rows(); return r.every(x => x.done); },
+
+  // Mağaza satırının vaadi. Sayılar EconomyConfig'ten toplanıyor,
+  // metne elle yazılmıyor.
+  totalReward() {
+    return DAILY_MISSIONS.reduce((a, m) => a + m.reward, 0) + EconomyConfig.QUEST_ALL_BONUS;
+  },
+
+  // Tamamlanmış ama ÖDENMEMİŞ her görevi öder. İdempotent: ödenen
+  // görevin id'si `paid` listesine yazılıyor, ikinci çağrı hiçbir şey
+  // yapmıyor — bu fonksiyon her render'da çalıştığı için şart.
+  settle() {
+    const d = this.getData();
+    const rows = this.rows(d);
+    let changed = false;
+
+    rows.forEach(r => {
+      if (!r.done || d.paid.indexOf(r.id) >= 0) return;
+      d.paid.push(r.id);
+      changed = true;
+      // addReward: görev ödülü günlük ödülle AYNI kategoride bir
+      // kazanım, dolayısıyla Plus'ın +%50 çarpanına tabi. add() ile
+      // ayrımı korunuyor — seviye tamamlama (+3) hâlâ çarpansız,
+      // abonelik oyun içi ilerlemeyi hızlandırmıyor.
+      DiamondSystem.addReward(r.reward, 'Görev: ' + r.name);
+    });
+
+    if (rows.every(r => r.done) && !d.bonusPaid) {
+      d.bonusPaid = true;
+      changed = true;
+      DiamondSystem.addReward(EconomyConfig.QUEST_ALL_BONUS, 'Tüm günlük görevler! 🎉');
+    }
+
+    if (changed) this._save(d);
+    return changed;
+  },
+
+  _bump(field) {
+    const d = this.getData();
+    d[field] = (d[field] || 0) + 1;
+    this._save(d);
+  },
+
+  // ───── GameEvents abonelikleri (aşağıda bağlanıyor) ─────
+  onRoundStarted() { this._bump('played'); this.refresh(); },
+
+  onRoundEnded(ev) {
+    // stray (açık tur yokken gelen bitiş) sayaçlara İŞLEMEZ —
+    // GameEvents'in 3. değişmeziyle aynı kural, yoksa görev ilerlemesi
+    // oynanan turdan fazla olabilirdi.
+    if (!ev || ev.result !== 'won' || ev.stray) return;
+    this._bump('won');
+    this.refresh();
+  },
+
+  // AvatarSystem / AdBudget ile aynı sözleşme: niteliği taşıyan her
+  // öğe doldurulur, yeni bir gösterim noktası yeni kod gerektirmez.
+  updateUI() {
+    const txt = this.shopLabel();
+    const done = this.allDone();
+    document.querySelectorAll('[data-ph-quests]').forEach(el => { el.textContent = txt; });
+    document.querySelectorAll('.shop-free-item [data-ph-quests]').forEach(el => {
+      const row = el.closest('.shop-free-item');
+      // Bitince GİZLENMİYOR, pasifleşiyor: gizlemek "böyle bir seçenek
+      // yok" der, soluk satır "yarın tekrar gel" der (AdBudget ile aynı
+      // gerekçe).
+      if (row) row.classList.toggle('sfi-off', done);
+    });
+  },
+
+  shopLabel() {
+    const rows = this.rows();
+    const done = rows.filter(r => r.done).length;
+    if (done === rows.length) return '✅ Bugün tamamlandı';
+    return '🎯 ' + done + '/' + rows.length + ' görev tamamlandı';
+  },
+
+  // Öde + çiz. renderMissions() zaten settle() çağırıyor; buradaki
+  // tek ek iş mağaza satırının tazelenmesi.
+  refresh() {
+    renderMissions();
+    this.updateUI();
+  },
+};
+
+// Abonelik MODÜL yüklenirken kuruluyor: GameEvents yukarıda tanımlı ve
+// hiçbir oyun app.js'ten önce tur açamaz (yükleme sırası games.js → …
+// → app.js). Dönen off() fonksiyonları saklanmıyor — bu abonelik
+// uygulamanın ömrü boyunca yaşıyor.
+GameEvents.on('game_started', function () { DailyQuests.onRoundStarted(); });
+GameEvents.on('game_ended', function (ev) { DailyQuests.onRoundEnded(ev); });
+
 // ==================== GÜNLÜK REKLAM BÜTÇESİ ====================
 //
 // TEK havuz. Reklamla elmas, reklamla devam, reklamla ipucu, reklamla +1
@@ -875,16 +1078,18 @@ const DIAMOND_PACKAGES = [
 ];
 
 // `soon: true` → sistem henüz YOK. Satır duruyor (mağazanın ne vaat edeceği
-// belli) ama ödül miktarı yerine "Yakında" yazıyor: envanter çıkarıldı,
-// günlük görev takibi (DAILY_MISSIONS statik, hiçbir sayaç yazılmıyor) ve
-// başarım sistemi (showAchievements yalnızca toast atıyor) gerçekten yok.
-// Var olmayan bir ödülü sayı olarak yazmak yanlış vaattir.
+// belli) ama ödül miktarı yerine "Yakında" yazıyor: başarım sistemi
+// (showAchievements yalnızca toast atıyor) gerçekten yok. Var olmayan bir
+// ödülü sayı olarak yazmak yanlış vaattir.
 // `dynamic:'ad'` → açıklaması AdBudget'tan geliyor, sabit metin değil:
 // Reklam hakkı metnini ayrı yazıp kodu sınırsız bırakan eski hâlin sebebi tam olarak
 // metnin koddan bağımsız olmasıydı.
+// `dynamic:'quests'` → aynı gerekçe: hem açıklama (kaç görev bitti) hem
+// ödül miktarı DailyQuests'ten okunuyor. Görev satırı 2026-08-01'de
+// "Yakında"dan çıktı — sistem artık gerçekten var.
 const FREE_DIAMOND_SOURCES = [
   { icon: '📺', title: 'Reklam İzle', desc: '', reward: '+10💎', action: 'watchAdForDiamonds', dynamic: 'ad' },
-  { icon: '🎯', title: 'Günlük Görevler', desc: 'Görev sistemi hazırlanıyor', reward: 'Yakında', action: 'goToHome', soon: true },
+  { icon: '🎯', title: 'Günlük Görevler', desc: '', reward: '', action: 'goToHome', dynamic: 'quests' },
   { icon: '📅', title: 'Günlük Ödül', desc: 'Her gün giriş yap', reward: '+5-100💎', action: 'goToHome' },
   { icon: '🏆', title: 'Başarımlar', desc: 'Başarım sistemi hazırlanıyor', reward: 'Yakında', action: 'showAchievements', soon: true },
 ];
@@ -922,19 +1127,26 @@ function renderShop() {
     // Reklam satırı bütçeyi GÖSTERİR ve bütçe bittiğinde pasifleşir —
     // tıklanıp "hakkın bitti" toast'ı yemek yerine durum baştan görünür.
     const adRow = src.dynamic === 'ad';
-    const spent = adRow && !AdBudget.canWatch();
-    const desc = adRow ? AdBudget.label() : src.desc;
+    // Görev satırı TIKLANABİLİR kalıyor (ana ekrana götürüyor) ama üçü de
+    // bitmişse soluklaşıyor — reklam satırıyla aynı dil.
+    const questRow = src.dynamic === 'quests';
+    const spent = (adRow && !AdBudget.canWatch()) || (questRow && DailyQuests.allDone());
+    const desc = adRow ? AdBudget.label() : questRow ? DailyQuests.shopLabel() : src.desc;
+    const reward = questRow ? '+' + DailyQuests.totalReward() + '💎' : src.reward;
     const disabled = spent || src.soon;
     const cls = 'shop-free-item' + (disabled ? ' sfi-off' : '');
-    const action = disabled ? 'aria-disabled="true"' : 'onclick="' + src.action + '()"';
+    // Görev satırı bitmiş olsa da tıklanabilir: ana ekranda ne yaptığını
+    // GÖRMEK hâlâ anlamlı. Reklam satırında tıklamanın karşılığı yok.
+    const inert = (adRow && spent) || src.soon;
+    const action = inert ? 'aria-disabled="true"' : 'onclick="' + src.action + '()"';
     return `
     <div class="${cls}" ${action}>
       <span class="sfi-icon">${src.icon}</span>
       <div class="sfi-info">
         <span class="sfi-title">${src.title}</span>
-        <span class="sfi-desc"${adRow ? ' data-ph-ad-budget' : ''}>${desc}</span>
+        <span class="sfi-desc"${adRow ? ' data-ph-ad-budget' : ''}${questRow ? ' data-ph-quests' : ''}>${desc}</span>
       </div>
-      <span class="sfi-reward">${src.reward}</span>
+      <span class="sfi-reward">${reward}</span>
     </div>
   `;
   }).join('');
@@ -1003,6 +1215,11 @@ function switchTab(tabName) {
   }
   // 'lider' sekmesi artık İLERLEME ekranını gösteriyor. renderLeaderboard()
   // silinmedi, yalnızca çağrılmıyor — bkz. index.html #lider-legacy.
+  // Ana sekmeye dönüş görev satırlarını tazeler. Oyundan çıkan oyuncu
+  // buraya düşüyor ve "günlük meydan okuma" görevinin ödemesi tam olarak
+  // burada gerçekleşiyor (bkz. DailyQuests: ÖDÜL ANI). renderHome()
+  // TAMAMI çağrılmıyor — günlük bulmaca kartı ve favoriler değişmedi.
+  if (tabName === 'home') DailyQuests.refresh();
   if (tabName === 'lider') renderProgress();
   if (tabName === 'profil') { renderSettings(); renderFavorites(); }
 }
@@ -1186,8 +1403,13 @@ function renderFavorites() {
 // ==================== RENDER: GÖREVLER ====================
 
 function renderMissions() {
+  // ÖNCE öde, sonra çiz. Tersi olsaydı yeni tamamlanan bir görev ekranda
+  // "tamam" görünür ama ödülü bir sonraki render'a kalırdı.
+  // Bu aynı zamanda "günlük meydan okuma" görevinin ödeme noktası
+  // (bkz. DailyQuests başlığı: ÖDÜL ANI).
+  DailyQuests.settle();
   // Haftalık liste artık ana sayfada yok (mockup'ta yerine ödül sandığı var).
-  renderMissionList('daily-missions', DAILY_MISSIONS);
+  renderMissionList('daily-missions', DailyQuests.rows());
 }
 
 function renderMissionList(containerId, missions) {
