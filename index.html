@@ -252,12 +252,9 @@
 
         <div class="section">
           <h3 class="section-title">Vitrindeki Rozetler</h3>
-          <!-- TODO: rozet sistemi kurulunca gerçek veriye bağlanacak -->
-          <div class="pf-showcase">
-            <span class="pf-badge pf-badge-gold">👑</span>
-            <span class="pf-badge pf-badge-blue">⚡</span>
-            <span class="pf-badge pf-badge-purple">⭐</span>
-          </div>
+          <!-- renderShowcase() dolduruyor: en değerli 3 rozet, otomatik.
+               Seçim arayüzü bilerek yok (bkz. Badges.showcase). -->
+          <div class="pf-showcase" id="pf-showcase"></div>
         </div>
 
         <div class="settings-section" id="settings-list"></div>
@@ -464,7 +461,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.36.0';
+    const APP_VERSION = '1.37.0';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile

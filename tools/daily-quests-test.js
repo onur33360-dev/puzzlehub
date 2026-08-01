@@ -45,8 +45,22 @@ function eq(name, actual, expected) {
   a === e ? ok(name) : bad(name, 'beklenen ' + e + ', gelen ' + a);
 }
 
+// Bu araç YALNIZCA görev ödüllerini ölçüyor. Rozetler (Faz 2b) de aynı
+// olaylardan besleniyor ve elmas ödüyor — izole edilmezse buradaki her
+// bakiye farkı rozet ödülleriyle kirlenir (eklendiği gün 11 test bu
+// yüzden kırıldı). Tüm rozetleri KAZANILMIŞ kabul ediyoruz: Badges.check()
+// hiçbir şey ödemez, bakiyedeki her değişim görevlere aittir.
+const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30'];
+function badgesPreEarned() {
+  return JSON.stringify({
+    earned: ALL_BADGE_IDS.map(id => ({ id, earnedAt: 1 })),
+  });
+}
+
 // Kum havuzu + sık kullanılan globaller tek yerden.
 function boot(store) {
+  store = store || {};
+  if (!store['ph_badges']) store['ph_badges'] = badgesPreEarned();
   const s = makeSandbox(store);
   return {
     s,
@@ -59,6 +73,7 @@ function boot(store) {
     ECON: s.get('EconomyConfig'),
     MISSIONS: s.get('DAILY_MISSIONS'),
     render: () => s.get('renderMissions()'),
+    Badges: (boot.__lastBadges = s.get('Badges')),
     renderShop: () => s.get('renderShop()'),
     switchHome: () => s.get("switchTab('home')"),
     el: (id) => s.byId[id],
@@ -105,6 +120,14 @@ function ageOneDay(store) {
 function testContract() {
   console.log('\n1. SÖZLEŞME — DailyQuests mantığı');
   const { DQ, GE, DS, DC, store } = boot();
+
+  // İzolasyon gerçekten tuttu mu: yeni bir rozet eklenirse bu SESSİZCE
+  // bozulmasın, burada yüksek sesle kırılsın.
+  const BG = boot.__lastBadges || null;
+  check('rozetler izole edildi (hiçbiri ödeme yapmayacak)',
+        BG === null || BG.count() === BG.total(),
+        'kazanılmış ' + (BG && BG.count()) + '/' + (BG && BG.total()) +
+        ' — ALL_BADGE_IDS güncellenmeli');
 
   eq('taze gün: üç görev de sıfırda', progressOf(DQ), ['0/3', '0/1', '0/1']);
   check('taze gün: hiçbiri tamamlanmamış', doneOf(DQ).every(x => !x));
@@ -285,8 +308,10 @@ function testEndToEnd() {
   check('mağaza satırı "+45💎" gösteriyor', shopHtml.indexOf('+45💎') >= 0,
         shopHtml.slice(0, 300));
   check('mağaza satırı durumu gösteriyor', shopHtml.indexOf('Bugün tamamlandı') >= 0);
-  check('mağazada "Yakında" kalmadı (görev satırı)',
-        (shopHtml.match(/Yakında/g) || []).length === 1, 'yalnızca Başarımlar kalmalı');
+  // 2026-08-01: Başarımlar satırı da gerçek oldu (Faz 2b), artık mağazada
+  // hiç "Yakında" yok — dört kaynağın dördü de çalışan bir sistem.
+  check('mağazada hiç "Yakında" kalmadı',
+        (shopHtml.match(/Yakında/g) || []).length === 0, shopHtml.slice(0, 400));
 
   // Ana ekran satırları gerçek ilerlemeyi çiziyor mu.
   a.render();

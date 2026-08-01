@@ -400,11 +400,12 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   function. Deleting either half breaks that.
 - **Home / İlerleme / Profil carry STATIC PLACEHOLDER numbers on purpose (2026-07-29).**
   These three screens were rebuilt to match the owner's design mockup one-for-one, and the
-  mockup shows values for systems that do not exist yet: badge counts, a collection
-  percentage, per-game achievement chips, recently-earned badges, the weekly-reward claim,
-  the "⭐ 50 XP" label and the profile title. They render as
-  written in the mockup. (**The daily-mission bars left this list on 2026-08-01** — they are
-  real now; see the `DailyQuests` bullet. The *weekly* chest is still decorative.) This is an **explicit owner decision for a pre-launch dev build**
+  mockup shows values for systems that do not exist yet: a collection percentage, per-game
+  achievement chips, the "Oyun Denedi" tile, the weekly-reward claim, the "⭐ 50 XP" label
+  and the profile title. They render as written in the mockup. (**Two groups left this list
+  on 2026-08-01**: the daily-mission bars — see `DailyQuests` — and everything
+  badge-related, i.e. the "Rozet" tile, "Son Kazanılan Rozetler" and the Profil showcase —
+  see `Badges`. The *weekly* chest is still decorative.) This is an **explicit owner decision for a pre-launch dev build**
   with no live users — the earlier "never show a number you can't back" rule was suspended
   for these screens, not forgotten. **Every placeholder carries a `TODO:` comment naming
   the system that will replace it** — grep `TODO:` in `core/app.js`, `core/daily.js` and
@@ -516,8 +517,9 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   deliberately absent where the game has no score concept (Arrow, Jigsaw) — an invented
   number would be worse than a missing field.
   Counters live in `ph_game_stats` (`totalGamesStarted`, `totalGamesWon`, `perGame`).
-  `DailyQuests` (2026-08-01) is the first real subscriber; the progress screens still read
-  nothing — that is phase 2b (badges), not an oversight.
+  `DailyQuests` and `Badges` (both 2026-08-01) are the real subscribers, and the İlerleme
+  screen now reads the badge counters. `totalGamesStarted`/`totalGamesWon` themselves are
+  still not displayed anywhere — that is a later decision, not an oversight.
 - **`DailyQuests` (`core/app.js`, 2026-08-01) is the THIRD daily-reset system and it copies
   the other two on purpose.** `ph_daily_quests`, `toDateString()` comparison, lazy reset —
   identical to `StreakSystem.checkIn()` and `AdBudget`. Three systems disagreeing about what
@@ -561,6 +563,55 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   all 10 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
   simulation. `--table` prints the file:line injection table. Run it after touching any
   game's start/end path.
+- **`Badges` (`core/app.js`, 2026-08-01) is GameEvents' second subscriber and the same
+  pattern again.** Five universal badges, all **derived from counters that already exist** —
+  `ph_game_stats` (İlk Oyun, 10 Oyun), `ph_streak` (7/30 Gün Seri), `ph_diamonds_earned`
+  (500 Elmas). No new tracking was written, and the block names no game, so adding a game
+  needs no edit here. Rewards are `EconomyConfig.BADGE_*` (5+15+20+50+25 = **115💎**), paid
+  through **`addReward()`** so Plus's +50% applies. Storage is `ph_badges`
+  (`{earned:[{id, earnedAt}]}`), one-shot per id exactly like `DailyQuests`' `paid[]`.
+  Four things are load-bearing:
+  1. **Conditions are pure functions.** `test()` reads the live counter and has no side
+     effects, so "is it earned?" is always recomputable. Triggers
+     (`GameEvents.on`, `DiamondSystem.add`, `StreakSystem.checkIn`, plus one `check()` at
+     boot) therefore exist for *speed*, not correctness — a missed trigger delays a badge,
+     it never loses one.
+  2. **`_checking` guards re-entrancy, and removing it hangs the app.** `check()` pays with
+     `addReward()` → `add()` → which calls `Badges.check()` again, because earning diamonds
+     is itself a badge condition. The flag swallows the nested call; the outer `while` loop
+     re-evaluates anyway, so a reward that unlocks another badge still lands.
+  3. **`recent()` breaks ties on ARRAY INDEX, not just `earnedAt`.** Two badges can be
+     earned in the same millisecond (one reward unlocking the next), and `earnedAt`
+     comparison then returns 0 and leaves the order undefined — "most recently earned"
+     showed the *oldest* badge. The `earned` array's order is already the earn order.
+  4. **The celebration is a DOM layer with `pointer-events:none`**, queued so simultaneous
+     unlocks don't stack. Deliberately stronger than the quest toast (a badge is one-shot
+     and permanent), and the reward is passed to `addReward()` with **no `reason`** so the
+     toast is suppressed — the overlay is the feedback, both at once is noise.
+  UI is bound in four places: the İlerleme "Rozet" tile (`n/5`), "Son Kazanılan Rozetler"
+  (real, with locked slots for the rest), the Profil showcase (top 3 **by reward**, no
+  picker — auto is enough this phase), and the shop's "Başarımlar" row (`data-ph-badges`,
+  same contract as `data-ph-quests`). `showAchievements()` no longer toasts; it navigates
+  to İlerleme. **Badge tone classes are one family (`bdg-*`) used by both `.rb-badge` and
+  `.pf-badge`** — the old `rb-*` / `pf-badge-*` tone pairs were deleted because two
+  families let the same badge render in different colours on two screens.
+  **Game-specific badges are deliberately NOT built** — separate, later work.
+- **`DiamondSystem.earned()` / `ph_diamonds_earned` is lifetime-earned, and it is NOT the
+  balance.** Incremented inside **`add()`**, never in `set()` — `set()` is also what
+  `spend()` calls, so putting it there would count spending as earning. Guarded by
+  `amount > 0` so the one invariant (never decreases) holds. A "500💎 earned" badge written
+  against the balance would be revoked the moment the player spent it. The starting 100💎 is
+  **not** counted retroactively: it wasn't earned, and older records genuinely have no
+  history to reconstruct.
+- **`tools/badges-test.js` validates the badge system, and the two reward harnesses must
+  ISOLATE EACH OTHER.** Same four layers as the quest tool. The trap worth knowing: badges
+  and quests are fed by the *same* game events and both pay diamonds, so a test that
+  measures a balance delta sees the other system's payouts too. Adding badges broke 11
+  quest-harness assertions on the first run for exactly this reason. Each tool now seeds the
+  other system as already-settled (`ph_badges` fully earned in the quest tool,
+  `ph_daily_quests` fully paid in the badge tool) so every diamond delta belongs to the
+  system under test. Keep those seeds in sync when adding a quest or a badge — the quest
+  tool asserts the isolation held, so it fails loudly rather than silently drifting.
 - **`tools/daily-quests-test.js` validates the quest system; `tools/dom-sandbox.js` is the
   shared vm+stub harness it runs on.** Same four-layer shape as the event tool. Two notes:
   the sandbox's `getElementById` is **cached** (same id → same element) so rendered

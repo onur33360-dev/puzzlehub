@@ -37,9 +37,18 @@ const EconomyConfig = {
   QUEST_WIN_REWARD: 10,       // "1 oyun kazan"
   QUEST_ALL_BONUS: 10,        // üçü birden tamamlanınca
 
+  // --- Rozet ödülleri (Badges) ---
+  // TEK SEFERLİK kazanımlar, günlük değil. Toplam 115💎; mağazadaki
+  // "Başarımlar" satırı bu toplamı KODDAN okuyor.
+  BADGE_FIRST_GAME: 5,
+  BADGE_10_GAMES: 15,
+  BADGE_STREAK_7: 20,
+  BADGE_STREAK_30: 50,        // en zoru, en yüksek
+  BADGE_DIAMONDS_500: 25,
+
   // --- Premium (PlusSystem) ---
   PLUS_DAILY_DIAMONDS: 20,    // günlük ödülün ÜSTÜNE, ayrı satır
-  PLUS_DIAMOND_MULTIPLIER: 1.5, // reklam + günlük ödül + görev kazanımlarına
+  PLUS_DIAMOND_MULTIPLIER: 1.5, // reklam + günlük ödül + görev + rozet kazanımlarına
 };
 
 // ==================== VERİ ====================
@@ -124,23 +133,48 @@ const DAY_ICONS = ['✅','✅','✅','🎁','🏃','💎','🏆'];
 
 const DiamondSystem = {
   _key: 'ph_diamonds',
-  
+  // YAŞAM BOYU KAZANILAN toplam — bakiyeden AYRI ve hiç azalmayan sayaç.
+  // Bakiye "şu an neyin var"ı, bu "toplamda ne kazandın"ı söyler; harcama
+  // ikincisini etkilemez. Rozet/başarım koşulları ("500💎 kazan") ancak
+  // bununla ifade edilebilir: bakiyeyle yazılan bir koşul, oyuncu elmasını
+  // harcadığı an geri alınırdı.
+  _earnedKey: 'ph_diamonds_earned',
+
   get() {
     return parseInt(localStorage.getItem(this._key) || '100', 10); // Start with 100
   },
-  
+
   set(val) {
     localStorage.setItem(this._key, Math.max(0, val).toString());
     this.updateUI();
   },
-  
+
+  // Başlangıçtaki 100💎 GERİYE DÖNÜK SAYILMAZ: kazanılmadı, verildi.
+  // Eski kayıtlar da 0'dan başlar — geçmiş kazanımlar hiç tutulmamıştı,
+  // bakiyeden türetmek onu "kazanılmış" gibi göstermek olurdu.
+  earned() {
+    return parseInt(localStorage.getItem(this._earnedKey) || '0', 10);
+  },
+
+  // Sayaç set() içinde DEĞİL burada artıyor: set()'i spend() de çağırıyor,
+  // oraya konsaydı harcama da "kazanım" sayılırdı.
   add(amount, reason) {
     const current = this.get();
     this.set(current + amount);
+    // amount > 0 koruması, sayacın tek değişmezini garanti eder: asla azalmaz.
+    if (amount > 0) {
+      try {
+        localStorage.setItem(this._earnedKey, (this.earned() + amount).toString());
+      } catch (e) {}
+    }
     if (reason) showToast(`+${amount}💎 ${reason}`);
     this._animateAdd();
+    // Elmas kazanımı bir rozet koşulu (500💎). Badges.check() kendi
+    // ödülünü yine add() ile ödüyor, yani buradan geri çağrılıyor —
+    // özyinelemeyi Badges._checking bayrağı kesiyor.
+    if (typeof Badges !== 'undefined') Badges.check();
   },
-  
+
   // KAZANIM kapısı — Premium çarpanı yalnızca buradan geçenlere işler.
   // add() ile bilerek ayrı: çarpan reklam ve günlük ödül kazanımlarına
   // uygulanıyor, seviye tamamlama ödülüne (+3) UYGULANMIYOR. Oyun içi
@@ -293,6 +327,8 @@ const StreakSystem = {
     data.days = days.slice(-21);
 
     this.saveData(data);
+    // Seri uzadı — 7/30 gün rozetlerinin koşulu tam olarak bu.
+    if (typeof Badges !== 'undefined') Badges.check();
     return true;
   },
 
@@ -714,6 +750,223 @@ const DailyQuests = {
 GameEvents.on('game_started', function () { DailyQuests.onRoundStarted(); });
 GameEvents.on('game_ended', function (ev) { DailyQuests.onRoundEnded(ev); });
 
+// ==================== ROZETLER ====================
+//
+// GameEvents'in ikinci abonesi, DailyQuests'in kardeşi. Aynı disiplin:
+// oyun-özel kod YOK, beş rozetin beşi de MEVCUT sayaçlardan türetiliyor
+// (ph_game_stats, ph_streak, ph_diamonds_earned). Yeni bir takip
+// yazılmadı — yazılsaydı aynı gerçeğin ikinci kaydı olurdu.
+//
+// ───── GÖREVDEN FARKI ─────
+// Görev günlük ve tekrarlanır; rozet TEK SEFERLİK ve kalıcıdır. Bu fark
+// üç yerde görünür: (1) sıfırlanma yok, dolayısıyla tarih deseni de yok;
+// (2) ödül `earned` listesindeki kimlikle bir kez ödenir; (3) kazanma anı
+// toast değil, ayrı bir kutlama katmanı — daha büyük bir an, daha güçlü
+// geri bildirim.
+//
+// ───── KOŞUL = SAF FONKSİYON ─────
+// Her rozetin `test()`i yan etkisiz ve o anki sayaçtan okur. Böylece
+// "kazanıldı mı" sorusu her zaman yeniden hesaplanabilir; kaçırılan bir
+// tetikleyici rozeti kalıcı olarak kaybettirmez, bir sonraki check()
+// yakalar. Tetikleyiciler bu yüzden hız için, doğruluk için değil.
+//
+// ───── YENİDEN GİRİŞ (re-entrancy) TUZAĞI ─────
+// check() ödülü DiamondSystem.addReward() ile ödüyor, o da add()'e
+// düşüyor, ve add() bittiğinde check()'i ÇAĞIRIYOR (elmas kazanımı bir
+// rozet koşulu). Korumasız bu sonsuz özyineleme demek. `_checking`
+// bayrağı iç içe çağrıyı yutuyor; dıştaki döngü zaten yeni durumu
+// yeniden değerlendiriyor, dolayısıyla hiçbir rozet kaçmıyor.
+const BADGES = [
+  // Sıra ZORLUĞA GÖRE ARTAN. Vitrin "en değerli 3"ü seçerken ödülü
+  // ölçüt alıyor, yani ödül miktarları aynı zamanda zorluk sıralaması.
+  { id:'first_game',    icon:'🎮', tone:'blue',   name:'İlk Oyun',
+    desc:'İlk oyununu başlat',        reward:EconomyConfig.BADGE_FIRST_GAME,
+    test: () => GameEvents.stats().totalGamesStarted >= 1 },
+
+  { id:'games_10',      icon:'🔟', tone:'purple', name:'10 Oyun',
+    desc:'10 oyun oyna',              reward:EconomyConfig.BADGE_10_GAMES,
+    test: () => GameEvents.stats().totalGamesStarted >= 10 },
+
+  // ph_streak: uygulamayı AÇMA serisi. DailyChallenge'ın "günlüğü çözme"
+  // serisi DEĞİL — ikisi farklı davranışı ödüllendiriyor (katılım vs
+  // başarı) ve karıştırılmamalı (bkz. core/daily.js başlığı).
+  { id:'streak_7',      icon:'🔥', tone:'red',    name:'7 Gün Seri',
+    desc:'7 gün üst üste giriş yap',  reward:EconomyConfig.BADGE_STREAK_7,
+    test: () => StreakSystem.getCount() >= 7 },
+
+  { id:'diamonds_500',  icon:'💎', tone:'cyan',   name:'500 Elmas',
+    desc:'Toplam 500💎 kazan',        reward:EconomyConfig.BADGE_DIAMONDS_500,
+    // BAKİYE değil, YAŞAM BOYU kazanım. Bakiyeyle yazılsaydı oyuncu
+    // elmasını harcadığı an rozet geri alınırdı.
+    test: () => DiamondSystem.earned() >= 500 },
+
+  { id:'streak_30',     icon:'👑', tone:'gold',   name:'30 Gün Seri',
+    desc:'30 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_30,
+    test: () => StreakSystem.getCount() >= 30 },
+];
+
+const Badges = {
+  _key: 'ph_badges',
+  _checking: false,
+  _queue: [],
+  _showing: false,
+
+  getData() {
+    let d;
+    try { d = JSON.parse(localStorage.getItem(this._key) || '{}'); }
+    catch (e) { d = {}; }
+    return { earned: Array.isArray(d.earned) ? d.earned : [] };
+  },
+
+  _save(d) {
+    try { localStorage.setItem(this._key, JSON.stringify(d)); } catch (e) {}
+  },
+
+  has(id) { return this.getData().earned.some(e => e.id === id); },
+  count() { return this.getData().earned.length; },
+  total() { return BADGES.length; },
+
+  def(id) { return BADGES.find(b => b.id === id) || null; },
+
+  // Mağaza satırının vaadi — sayılar EconomyConfig'ten toplanıyor.
+  totalReward() { return BADGES.reduce((a, b) => a + b.reward, 0); },
+
+  // Kazanılanlar + tanımları, EN SON kazanılan başta.
+  // Eşitlik bozucu DİZİ SIRASI: iki rozet aynı milisaniyede açılabiliyor
+  // (bir ödülün ödenmesi bir sonrakini tetikleyebiliyor) ve o durumda
+  // earnedAt karşılaştırması sıfır dönüp sırayı tanımsız bırakıyordu —
+  // "en son kazanılan" ilk kazanılanı gösteriyordu. `earned` dizisine
+  // eklenme sırası zaten kazanma sırasıdır, tek gereken oydu.
+  recent(n) {
+    return this.getData().earned
+      .map((e, i) => ({ e, i }))
+      .sort((a, b) => ((b.e.earnedAt || 0) - (a.e.earnedAt || 0)) || (b.i - a.i))
+      .map(({ e }) => { const d = this.def(e.id); return d ? Object.assign({ earnedAt: e.earnedAt }, d) : null; })
+      .filter(Boolean)
+      .slice(0, n || 4);
+  },
+
+  // Vitrin: EN DEĞERLİ rozetler (eşitlikte en yeni). Seçim arayüzü
+  // bilerek yok — oyuncuya bir karar daha yüklemek yerine "en iyisini
+  // göster" varsayılanı bu fazda yeterli.
+  showcase(n) {
+    return this.getData().earned
+      .slice()
+      .map(e => { const d = this.def(e.id); return d ? Object.assign({ earnedAt: e.earnedAt }, d) : null; })
+      .filter(Boolean)
+      .sort((a, b) => (b.reward - a.reward) || ((b.earnedAt || 0) - (a.earnedAt || 0)))
+      .slice(0, n || 3);
+  },
+
+  // Koşulu sağlanan ve HENÜZ ÖDENMEMİŞ her rozeti verir.
+  // İdempotent: kimlik `earned` listesine yazılıyor, ikinci çağrı
+  // hiçbir şey yapmıyor — bu fonksiyon her sayaç değişiminde çalıştığı
+  // için şart (DailyQuests.settle() ile aynı gerekçe).
+  check() {
+    if (this._checking) return [];       // yeniden giriş koruması (yukarıdaki nota bak)
+    this._checking = true;
+    const won = [];
+    try {
+      const d = this.getData();
+      const ids = new Set(d.earned.map(e => e.id));
+      // Döngü: bir rozetin ödülü başka bir rozeti açabilir (500💎 ödülü
+      // 500 elmas rozetini tetikleyebilir). Sabit noktaya kadar dön;
+      // rozet sayısı üst sınır, sonsuz döngü mümkün değil.
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const b of BADGES) {
+          if (ids.has(b.id)) continue;
+          let met = false;
+          // Bir rozetin koşulu patlarsa DİĞERLERİ etkilenmesin; bu sistem
+          // oynanışın yanında duruyor, önünde değil.
+          try { met = !!b.test(); } catch (e) { met = false; }
+          if (!met) continue;
+          ids.add(b.id);
+          d.earned.push({ id: b.id, earnedAt: Date.now() });
+          this._save(d);                 // önce yaz: ödeme yarıda kalsa da rozet kalıcı
+          // reason VERİLMİYOR → toast çıkmıyor. Geri bildirimi kutlama
+          // katmanı veriyor; ikisi birden gürültü olurdu.
+          const granted = DiamondSystem.addReward(b.reward);
+          won.push({ def: b, granted });
+          changed = true;
+        }
+      }
+    } finally {
+      this._checking = false;
+    }
+    if (won.length) {
+      won.forEach(w => this._queue.push(w));
+      this._drain();
+      this.updateUI();
+    }
+    return won;
+  },
+
+  // ───── Kutlama katmanı ─────
+  // Görev toast'ından bilerek daha güçlü: rozet tek seferlik ve kalıcı.
+  // Aynı anda birden fazla rozet açılabildiği için KUYRUK var — üst üste
+  // binen iki kutlama, ikincisini görünmez yapardı.
+  _drain() {
+    if (this._showing || !this._queue.length) return;
+    const item = this._queue.shift();
+    this._showing = true;
+    const el = document.createElement('div');
+    el.className = 'bdg-pop';
+    el.innerHTML =
+      '<div class="bdg-pop-card">' +
+        '<span class="bdg-pop-badge bdg-' + item.def.tone + '">' + item.def.icon + '</span>' +
+        '<span class="bdg-pop-kicker">Rozet Kazanıldı</span>' +
+        '<span class="bdg-pop-name"></span>' +
+        '<span class="bdg-pop-reward">+' + item.granted + '💎</span>' +
+      '</div>';
+    // Ad textContent ile: rozet adı HTML olarak yorumlanmasın.
+    el.querySelector('.bdg-pop-name').textContent = item.def.name;
+    document.body.appendChild(el);
+    if (typeof GameAudio !== 'undefined') { GameAudio.play('win'); GameAudio.haptic('win'); }
+    // ~2 sn görünür, sonra kendi kapanır. Kapanış animasyonu bitmeden
+    // sıradakini açmıyoruz, yoksa iki kart üst üste gelir.
+    setTimeout(() => {
+      el.classList.add('bdg-out');
+      setTimeout(() => {
+        el.remove();
+        this._showing = false;
+        this._drain();
+      }, 260);
+    }, 2000);
+  },
+
+  // AdBudget / DailyQuests ile aynı sözleşme: niteliği taşıyan her öğe
+  // doldurulur. Ayrıca İlerleme ve Profil ekranları yeniden çiziliyor —
+  // ikisi de innerHTML ile kuruluyor, kısmi güncelleme mümkün değil.
+  updateUI() {
+    const txt = this.shopLabel();
+    document.querySelectorAll('[data-ph-badges]').forEach(el => { el.textContent = txt; });
+    document.querySelectorAll('.shop-free-item [data-ph-badges]').forEach(el => {
+      const row = el.closest('.shop-free-item');
+      if (row) row.classList.toggle('sfi-off', this.count() >= this.total());
+    });
+    if (typeof renderShowcase === 'function') renderShowcase();
+    // İlerleme ekranı yalnızca görünürken yeniden çizilsin — gizli bir
+    // ekranı her rozet için baştan kurmak boşa iş.
+    if (currentScreen === 'screen-lider' && typeof renderProgress === 'function') renderProgress();
+  },
+
+  shopLabel() {
+    const n = this.count(), t = this.total();
+    if (n >= t) return '🏆 Tüm rozetler kazanıldı';
+    return '🏆 ' + n + '/' + t + ' rozet kazanıldı';
+  },
+};
+
+// Sayaç değiştiren her nokta rozet kontrolünü tetikler. Koşullar saf
+// olduğu için bunlar HIZ içindir, doğruluk için değil: biri unutulursa
+// rozet kaybolmaz, bir sonraki tetikleyicide verilir.
+// (DiamondSystem.add() ve StreakSystem.checkIn() kendi içlerinden
+// çağırıyor — oradaki yeniden-giriş notuna bak.)
+GameEvents.on('game_started', function () { Badges.check(); });
+GameEvents.on('game_ended', function () { Badges.check(); });
+
 // ==================== GÜNLÜK REKLAM BÜTÇESİ ====================
 //
 // TEK havuz. Reklamla elmas, reklamla devam, reklamla ipucu, reklamla +1
@@ -1077,10 +1330,10 @@ const DIAMOND_PACKAGES = [
   { id: 'mega', amount: 5000, price: '₺499.99', bonus: 1500, badge: 'En İyi! ⭐' },
 ];
 
-// `soon: true` → sistem henüz YOK. Satır duruyor (mağazanın ne vaat edeceği
-// belli) ama ödül miktarı yerine "Yakında" yazıyor: başarım sistemi
-// (showAchievements yalnızca toast atıyor) gerçekten yok. Var olmayan bir
-// ödülü sayı olarak yazmak yanlış vaattir.
+// `soon: true` ARTIK KULLANILMIYOR (2026-08-01) — dört kaynağın dördü de
+// gerçek. Alan silinmedi: bir sonraki yarım sistem için doğru desen bu
+// (satır durur, ödül yerine "Yakında" yazar), var olmayan bir ödülü sayı
+// olarak yazmak yanlış vaat olurdu.
 // `dynamic:'ad'` → açıklaması AdBudget'tan geliyor, sabit metin değil:
 // Reklam hakkı metnini ayrı yazıp kodu sınırsız bırakan eski hâlin sebebi tam olarak
 // metnin koddan bağımsız olmasıydı.
@@ -1091,7 +1344,7 @@ const FREE_DIAMOND_SOURCES = [
   { icon: '📺', title: 'Reklam İzle', desc: '', reward: '+10💎', action: 'watchAdForDiamonds', dynamic: 'ad' },
   { icon: '🎯', title: 'Günlük Görevler', desc: '', reward: '', action: 'goToHome', dynamic: 'quests' },
   { icon: '📅', title: 'Günlük Ödül', desc: 'Her gün giriş yap', reward: '+5-100💎', action: 'goToHome' },
-  { icon: '🏆', title: 'Başarımlar', desc: 'Başarım sistemi hazırlanıyor', reward: 'Yakında', action: 'showAchievements', soon: true },
+  { icon: '🏆', title: 'Başarımlar', desc: '', reward: '', action: 'showAchievements', dynamic: 'badges' },
 ];
 
 function openShop() {
@@ -1130,12 +1383,18 @@ function renderShop() {
     // Görev satırı TIKLANABİLİR kalıyor (ana ekrana götürüyor) ama üçü de
     // bitmişse soluklaşıyor — reklam satırıyla aynı dil.
     const questRow = src.dynamic === 'quests';
-    const spent = (adRow && !AdBudget.canWatch()) || (questRow && DailyQuests.allDone());
-    const desc = adRow ? AdBudget.label() : questRow ? DailyQuests.shopLabel() : src.desc;
-    const reward = questRow ? '+' + DailyQuests.totalReward() + '💎' : src.reward;
+    const badgeRow = src.dynamic === 'badges';
+    const spent = (adRow && !AdBudget.canWatch())
+               || (questRow && DailyQuests.allDone())
+               || (badgeRow && Badges.count() >= Badges.total());
+    const desc = adRow ? AdBudget.label()
+               : questRow ? DailyQuests.shopLabel()
+               : badgeRow ? Badges.shopLabel() : src.desc;
+    const reward = questRow ? '+' + DailyQuests.totalReward() + '💎'
+                 : badgeRow ? '+' + Badges.totalReward() + '💎' : src.reward;
     const disabled = spent || src.soon;
     const cls = 'shop-free-item' + (disabled ? ' sfi-off' : '');
-    // Görev satırı bitmiş olsa da tıklanabilir: ana ekranda ne yaptığını
+    // Görev/rozet satırları bitmiş olsa da tıklanabilir: ne kazandığını
     // GÖRMEK hâlâ anlamlı. Reklam satırında tıklamanın karşılığı yok.
     const inert = (adRow && spent) || src.soon;
     const action = inert ? 'aria-disabled="true"' : 'onclick="' + src.action + '()"';
@@ -1144,7 +1403,7 @@ function renderShop() {
       <span class="sfi-icon">${src.icon}</span>
       <div class="sfi-info">
         <span class="sfi-title">${src.title}</span>
-        <span class="sfi-desc"${adRow ? ' data-ph-ad-budget' : ''}${questRow ? ' data-ph-quests' : ''}>${desc}</span>
+        <span class="sfi-desc"${adRow ? ' data-ph-ad-budget' : ''}${questRow ? ' data-ph-quests' : ''}${badgeRow ? ' data-ph-badges' : ''}>${desc}</span>
       </div>
       <span class="sfi-reward">${reward}</span>
     </div>
@@ -1175,8 +1434,13 @@ function goToHome() {
   switchTab('home');
 }
 
+// Rozetlerin yaşadığı yer İLERLEME ekranı ("Son Kazanılan Rozetler" +
+// "Rozet" karosu). Ayrı bir rozet ekranı AÇILMADI: mockup'ta yok ve beş
+// rozet kendi ekranını hak etmiyor — mevcut bölüme götürmek yeterli.
+// Sekme anahtarı hâlâ 'lider', gösterdiği İLERLEME (bkz. CLAUDE.md §5).
 function showAchievements() {
-  showToast('🏆 Başarımlar yakında!');
+  closeShop();
+  switchTab('lider');
 }
 
 // ==================== DURUM ====================
@@ -1221,7 +1485,7 @@ function switchTab(tabName) {
   // TAMAMI çağrılmıyor — günlük bulmaca kartı ve favoriler değişmedi.
   if (tabName === 'home') DailyQuests.refresh();
   if (tabName === 'lider') renderProgress();
-  if (tabName === 'profil') { renderSettings(); renderFavorites(); }
+  if (tabName === 'profil') { renderSettings(); renderFavorites(); renderShowcase(); }
 }
 
 function showScreen(screenId) {
@@ -1400,6 +1664,23 @@ function renderFavorites() {
   }
 }
 
+// ==================== RENDER: VİTRİN (Profil) ====================
+//
+// Üç yuva SABİT: kazanılmayanlar kilitli siluet olarak duruyor. Sayısı
+// değişken bir vitrin, rozet kazanıldıkça profilin düzenini kaydırırdı.
+function renderShowcase() {
+  const el = document.getElementById('pf-showcase');
+  if (!el) return;
+  const top = Badges.showcase(3);
+  let html = top.map(b =>
+    '<span class="pf-badge bdg-' + b.tone + '" title="' + b.name + '">' + b.icon + '</span>'
+  ).join('');
+  for (let i = top.length; i < 3; i++) {
+    html += '<span class="pf-badge bdg-locked">🔒</span>';
+  }
+  el.innerHTML = html;
+}
+
 // ==================== RENDER: GÖREVLER ====================
 
 function renderMissions() {
@@ -1466,13 +1747,8 @@ const ACHIEVEMENT_CARDS = [
     chips:[{ icon:'🧩', label:'Kelime Dedektifi', val:'10/10' }, { icon:'🎖️', label:'Harf Şampiyonu', val:'12/20' }] },
 ];
 
-// TODO: rozet sistemi kurulunca gerçek veriye bağlanacak.
-const RECENT_BADGES = [
-  { icon:'🔟', tone:'blue' },
-  { icon:'🧩', tone:'purple' },
-  { icon:'👑', tone:'gold' },
-  { icon:'🔥', tone:'red' },
-];
+// RECENT_BADGES statik dizisi KALDIRILDI (2026-08-01) — "Son Kazanılan
+// Rozetler" artık Badges.recent()'ten geliyor, gerçek veriye bağlı.
 
 function renderProgress() {
   const container = document.getElementById('progress-content');
@@ -1483,8 +1759,9 @@ function renderProgress() {
   const tiles = [
     // TODO: oynanan oyun takibi kurulunca gerçek veriye bağlanacak
     { icon:'🎮', value:'10/10',        label:'Oyun Denedi' },
-    // TODO: rozet sistemi kurulunca gerçek veriye bağlanacak
-    { icon:'🛡️', value:'18',           label:'Rozet' },
+    // Gerçek veri: kazanılan/toplam rozet. Paydası da gösteriliyor —
+    // çıplak bir sayı kaç rozet olduğunu söylemiyordu.
+    { icon:'🛡️', value:Badges.count() + '/' + Badges.total(), label:'Rozet' },
     { icon:'🔥', value:streak + ' Gün', label:'Seri' },
     // TODO: koleksiyon tanımı + sistemi kurulunca gerçek veriye bağlanacak
     { icon:'🧩', value:'%72',          label:'Koleksiyon' },
@@ -1518,9 +1795,19 @@ function renderProgress() {
     </div>
   `).join('');
 
-  const badgesHTML = RECENT_BADGES.map((b, i) => `
-    <span class="rb-badge rb-${b.tone} anim-in" style="animation-delay:${i*60}ms">${b.icon}</span>
-  `).join('');
+  // Kazanılan rozetler (en yeni başta) + kalanlar KİLİTLİ olarak. Kilitli
+  // olanları göstermek bir tercih: boş bir satır "burada bir şey yok" der,
+  // soluk siluetler "kazanılacak dört şey daha var" der.
+  const recent = Badges.recent(4);
+  const lockedCount = Math.max(0, Math.min(4 - recent.length, Badges.total() - Badges.count()));
+  const badgesHTML =
+    recent.map((b, i) => `
+      <span class="rb-badge bdg-${b.tone} anim-in" style="animation-delay:${i*60}ms"
+            title="${b.name}">${b.icon}</span>
+    `).join('') +
+    Array.from({ length: lockedCount }, (_, i) => `
+      <span class="rb-badge bdg-locked anim-in" style="animation-delay:${(recent.length+i)*60}ms">🔒</span>
+    `).join('');
 
   container.innerHTML = `
     <div class="prg-hero">
@@ -1982,7 +2269,11 @@ function showToast(msg) {
   renderProgress();
   renderSettings();
   renderFavorites();
+  renderShowcase();
   updateStreakUI();
+  // Açılışta bir kez: koşullar saf olduğu için, tetikleyicisi kaçmış bir
+  // rozet (ör. sistem kurulmadan önce oynanmış oyunlar) burada verilir.
+  Badges.check();
 
   // Uygulama açılış sesi — soft bloom (müzik geçici olarak kapalı, bkz. playGame())
   document.addEventListener('click', function _firstTouch() {

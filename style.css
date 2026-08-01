@@ -629,10 +629,8 @@ a { color:inherit; text-decoration:none; }
   display:flex; align-items:center; justify-content:center; font-size:25px;
   border:1px solid rgba(255,255,255,0.12);
 }
-.rb-blue   { background:linear-gradient(135deg,#60a5fa,#1d4ed8); }
-.rb-purple { background:linear-gradient(135deg,var(--accent-light),var(--accent-dark)); }
-.rb-gold   { background:linear-gradient(135deg,#fcd34d,#d97706); }
-.rb-red    { background:linear-gradient(135deg,#f87171,#b91c1c); }
+/* rb-blue/purple/gold/red KALDIRILDI (2026-08-01) — tonlar tek ailede
+   (bdg-, aşağıda). .rb-badge yalnızca kutu geometrisini veriyor. */
 
 /* ============ PROFİL ============ */
 
@@ -689,9 +687,68 @@ a { color:inherit; text-decoration:none; }
   clip-path:polygon(50% 0%, 100% 14%, 100% 62%, 50% 100%, 0% 62%, 0% 14%);
   border:none;
 }
-.pf-badge-gold   { background:linear-gradient(160deg,#fde68a,#d97706); }
-.pf-badge-blue   { background:linear-gradient(160deg,#93c5fd,#1d4ed8); }
-.pf-badge-purple { background:linear-gradient(160deg,var(--accent-light),var(--accent-dark)); }
+/* pf-badge-gold/blue/purple KALDIRILDI (2026-08-01): rozet tonları artık
+   TEK ailede (bdg-) ve hem .rb-badge hem .pf-badge üstünde çalışıyor.
+   İki ayrı ton ailesi tutmak, aynı rozetin iki ekranda farklı renkte
+   görünmesine açık kapı bırakıyordu. */
+
+/* ── Rozet tonları (bdg-) — iki rozet ailesinde de geçerli ──
+   Yeni görsel varlık YOK: renkler mevcut tokenlardan, kademe farkı
+   yalnızca gradyan ve halka ile veriliyor. */
+.bdg-blue   { background:linear-gradient(160deg,#93c5fd,#1d4ed8); }
+.bdg-purple { background:linear-gradient(160deg,var(--accent-light),var(--accent-dark)); }
+.bdg-red    { background:linear-gradient(160deg,#fca5a5,var(--red)); }
+.bdg-cyan   { background:linear-gradient(160deg,#a5f3fc,#0e7490); }
+/* En zor rozet: altın + sıcak bir halka. Kademe farkı burada okunuyor. */
+.bdg-gold {
+  background:linear-gradient(160deg,#fde68a,#d97706);
+  box-shadow:0 0 0 2px rgba(251,191,36,.35), 0 4px 14px rgba(217,119,6,.3);
+}
+/* Kazanılmamış: silinmiyor, SÖNDÜRÜLÜYOR — kaç rozet kaldığı görünsün. */
+.bdg-locked {
+  background:rgba(255,255,255,.05);
+  border:1px dashed rgba(255,255,255,.16);
+  opacity:.5; font-size:20px;
+}
+
+/* ── Rozet kazanma kutlaması (bdg-pop) ──
+   Görev toast'ından bilerek daha güçlü: rozet tek seferlik ve kalıcı.
+   pointer-events YOK — 2 saniye boyunca oyuncunun dokunuşlarını
+   yutmamalı, kutlama bir engel değil bir bildirim. */
+.bdg-pop {
+  position:fixed; inset:0; z-index:9999; pointer-events:none;
+  display:flex; align-items:center; justify-content:center;
+  animation:bdgIn 260ms var(--ph-ease-standard, cubic-bezier(.2,.8,.2,1)) both;
+}
+.bdg-pop.bdg-out { animation:bdgOut 260ms ease both; }
+.bdg-pop-card {
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  padding:22px 30px; border-radius:var(--radius-xl, 20px);
+  background:rgba(20,14,38,.94);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
+}
+.bdg-pop-badge {
+  width:74px; height:80px; margin-bottom:4px;
+  display:flex; align-items:center; justify-content:center; font-size:38px;
+  clip-path:polygon(50% 0%, 100% 14%, 100% 62%, 50% 100%, 0% 62%, 0% 14%);
+}
+.bdg-pop-kicker {
+  font-size:11px; font-weight:800; letter-spacing:1.4px; text-transform:uppercase;
+  color:var(--text-secondary);
+}
+.bdg-pop-name {
+  font-size:19px; font-weight:800; font-family:var(--font-display); color:#fff;
+}
+.bdg-pop-reward { font-size:15px; font-weight:800; color:var(--yellow); }
+
+@keyframes bdgIn  { from { opacity:0; transform:scale(.86); } to { opacity:1; transform:scale(1); } }
+@keyframes bdgOut { from { opacity:1; transform:scale(1); }   to { opacity:0; transform:scale(.94); } }
+
+/* Hareket hassasiyeti: kutlama yine görünür, sadece ölçeklenmez. */
+@media (prefers-reduced-motion: reduce) {
+  .bdg-pop, .bdg-pop.bdg-out { animation:none; }
+}
 
 /* ── Avatar seçici ── */
 .av-scrim {
