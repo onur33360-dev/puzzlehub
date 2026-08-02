@@ -493,10 +493,21 @@ yerinde, ve mağaza biçiminde bir hak `_setFromStore`'a verildiğinde Premium
 faydalarının hepsi tetikleniyor (bütçe bypass, interstitial susuyor, tema
 açılıyor, `addReward` 10→15 iken `add` 10 kalıyor).
 
-Kalan tek eksik **RevenueCat API anahtarı** (`TODO(revenuecat)`) ve Play
-Console'da şu kimliklerle ürünlerin açılması: `plus_weekly` / `plus_monthly` /
-`plus_yearly` (entitlement `plus`), `diamonds_100` / `diamonds_550` /
-`diamonds_1800` / `diamonds_6500`, offering `default`.
+**Play Console erişimi mevcut (2026-08-03).** Uygulama sahibi, Play Console'a
+yetkili kullanıcı olarak ekli; ürünleri açmak, lisans test kullanıcısı
+tanımlamak, RevenueCat ↔ Play bağlantısını (Google Play Developer API servis
+hesabı) kurmak ve internal testing track'e yükleme yapmak için **üçüncü bir
+kişiden onay/erişim beklemek gerekmiyor.** Kayda geçiriliyor çünkü bir süre
+belirsizdi ve "önce erişim isteyelim" diye yanlış bir sıra kurulabilirdi:
+sandbox testinin önündeki tek engel Play kurulumunun kendisi, izin değil.
+
+Kalan eksikler:
+1. **RevenueCat API anahtarı** (`TODO(revenuecat)`, `core/app.js`) — tek satır.
+2. **Play Console ürünleri**: `plus_weekly` / `plus_monthly` / `plus_yearly`
+   (entitlement `plus`), `diamonds_100` / `diamonds_550` / `diamonds_1800` /
+   `diamonds_6500`, offering `default`.
+3. **İmzalı AAB + internal testing track** — bugün yalnızca debug imzası var,
+   yani release keystore yapılandırması da bu adımın parçası.
 
 ---
 
