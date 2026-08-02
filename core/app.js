@@ -1066,9 +1066,114 @@ const AdBudget = {
 
 // ==================== ÖDÜLLÜ REKLAM ====================
 
+// ==================== ÖDÜLLÜ REKLAM ====================
+//
+// TEST KİMLİKLERİ — GERÇEK KİMLİK BURAYA YAZILMAZ.
+// Geliştirme boyunca yalnızca Google'ın resmî demo birimleri kullanılıyor.
+// Sebebi kozmetik değil: kendi gerçek birimlerini geliştirirken kullanmak
+// "geçersiz trafik" sayılıyor ve AdMob hesabının askıya alınmasına yol
+// açabiliyor. Demo birimleri hiçbir hesaba bağlı değil, o yüzden risk yok.
+// (developers.google.com/admob/android/test-ads, teyit 2026-08-02)
+//
+// Gerçek birim kimliği YAYINA ÇIKARKEN, ayrı ve son bir adımda girilir —
+// burada ve AndroidManifest'teki APPLICATION_ID meta-data'sında.
+const AD_IDS = {
+  // TODO(yayın): gerçek ödüllü birim kimliğiyle değiştir.
+  rewardedAndroid: 'ca-app-pub-3940256099942544/5224354917',
+};
+
+// Olay adları HAM DİZGİ olarak yazılı. `RewardAdPluginEvents` enum'u
+// paketin ES modülünde yaşıyor ve bu projede paketleyici YOK (CLAUDE.md §1),
+// yani çalışma zamanında erişilemez. Dizgiler eklentinin
+// reward-ad-plugin-events.enum'undan birebir alındı.
+const AD_EV = {
+  rewarded:     'onRewardedVideoAdReward',
+  dismissed:    'onRewardedVideoAdDismissed',
+  failedToShow: 'onRewardedVideoAdFailedToShow',
+  failedToLoad: 'onRewardedVideoAdFailedToLoad',
+};
+
+// Gerçek SDK yalnızca native kabukta var. Web/PWA yolunda simülasyon
+// KALIYOR: CLAUDE.md §1'e göre web birincil geliştirme yüzeyi ve orada
+// reklam SDK'sı yok — simülasyonu silmek o yüzeyi test edilemez yapardı.
+//
+// Erişim `Capacitor.Plugins.AdMob` üzerinden: `import` kullanılamaz, aynı
+// gerekçe (splash-screen eklentisinde kurulan desen, index.html'e bak).
+function adMobPlugin() {
+  const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;
+  if (!C || !C.isNativePlatform || !C.isNativePlatform()) return null;
+  return (C.Plugins && C.Plugins.AdMob) || null;
+}
+
 const RewardedAd = {
-  // Simulated rewarded ad — will be replaced with real SDK later
+  _initPromise: null,
+
+  // initialize() BİR KEZ. Promise saklanıyor ki üst üste gelen iki istek
+  // SDK'yı iki kez başlatmasın.
+  _ensureInit(ad) {
+    if (!this._initPromise) {
+      this._initPromise = ad.initialize({ initializeForTesting: true })
+        .catch((e) => { this._initPromise = null; throw e; });
+    }
+    return this._initPromise;
+  },
+
+  // ───────── GERÇEK SDK (native) ─────────
+  //
+  // Sözleşme runRewardedAction'ınkiyle AYNI kalmak zorunda: onComplete
+  // YALNIZCA ödül gerçekten hak edilince çağrılır. Bütçeyi tüketen şey
+  // onComplete olduğu için, reklamı yarıda kapatan oyuncudan hak gitmez —
+  // ekonomi kuralı 2 tam olarak burada korunuyor.
+  //
+  // Ödülün tek doğruluk kaynağı `Rewarded` OLAYI. `Dismissed` iki durumda
+  // da geliyor (ödül alınmadan kapatma VE ödül alındıktan sonra kapanma),
+  // yani tek başına "ödül verildi mi" sorusunu cevaplayamaz.
+  _showNative(ad, reward, onComplete) {
+    let earned = false, settled = false, subs = [];
+    const cleanup = () => {
+      subs.forEach((h) => { try { h && h.remove && h.remove(); } catch (e) {} });
+      subs = [];
+    };
+    // Reklam gösterilemezse oyuncu ASILI KALMAZ; ödül de verilmez, bütçe de
+    // düşmez. Simülasyona geri düşmek cazip ama yanlış olurdu: reklamsız
+    // ödül dağıtmak, yayında bedava ödül açığı demek.
+    const fail = (why) => {
+      if (settled) return;
+      settled = true; cleanup();
+      showToast('📺 Reklam şu an yüklenemedi, sonra tekrar dene');
+      if (typeof console !== 'undefined') console.warn('[AdMob] ' + why);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true; cleanup();
+      if (earned && onComplete) onComplete();
+      else if (!earned) showToast('📺 Ödül için reklamı sonuna kadar izlemelisin');
+    };
+
+    this._ensureInit(ad).then(() => Promise.all([
+      ad.addListener(AD_EV.rewarded, () => { earned = true; }),
+      ad.addListener(AD_EV.dismissed, () => finish()),
+      ad.addListener(AD_EV.failedToShow, () => fail('gosterilemedi')),
+      ad.addListener(AD_EV.failedToLoad, () => fail('yuklenemedi')),
+    ])).then((handles) => {
+      subs = handles;
+      return ad.prepareRewardVideoAd({
+        adId: AD_IDS.rewardedAndroid,
+        isTesting: true,            // demo birimiyle birlikte ikinci emniyet
+      });
+    }).then(() => ad.showRewardVideoAd())
+      .catch((e) => fail(e && e.message ? e.message : String(e)));
+  },
+
   show(reward, onComplete) {
+    const ad = adMobPlugin();
+    if (ad) { this._showNative(ad, reward, onComplete); return; }
+    this._showSimulated(reward, onComplete);
+  },
+
+  // ───────── SİMÜLASYON (web/PWA) ─────────
+  // Silinmedi: web birincil geliştirme yüzeyi ve orada SDK yok.
+  _showSimulated(reward, onComplete) {
     // Create ad modal
     const overlay = document.createElement('div');
     overlay.className = 'ad-overlay';

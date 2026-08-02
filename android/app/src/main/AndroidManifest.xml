@@ -28,6 +28,19 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!--
+            AdMob uygulama kimligi. SU AN GOOGLE'IN RESMI TEST KIMLIGI.
+            Gercek kimlik YAYINA CIKARKEN, ayri ve son bir adimda girilir;
+            gelistirme boyunca hicbir committe gercek kimlik gecmez.
+            Gercek birimlerle gelistirmek gecersiz trafik sayilir ve hesabi
+            askiya aldirabilir; test kimliklerinin varlik sebebi budur.
+            Kaynak: developers.google.com/admob/android/quick-start
+            Not: XML yorumu icinde cift tire KULLANILAMAZ (colors.xml dersi).
+        -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
     </application>
 
     <!-- Permissions -->

@@ -777,6 +777,37 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   `@capacitor/splash-screen@^7` — do **not** reach for `--force`/`--legacy-peer-deps`, which
   would install a plugin mismatched with the runtime. Per §6 a plugin is a fresh decision
   each time; this one is approved, others are not covered by it.
+- **Rewarded ads are REAL on native since 2026-08-02 — but only through test ad units.**
+  `@capacitor-community/admob@^7` (7.2.0) is the third approved Capacitor plugin. **Pin the
+  v7 line**: npm resolves the package to 8.x, which demands `@capacitor/core >= 8` against
+  this project's Capacitor 7 — the exact trap already documented for `@capacitor/splash-screen`.
+  Six things are load-bearing:
+  1. **`runRewardedAction` was NOT touched.** The only thing that changed is the inside of
+     `RewardedAd.show()`. Budget, Plus bypass and consume-on-completion still live in one
+     place; that is why swapping the mock for a real SDK was a contained change.
+  2. **The reward's single source of truth is the `Rewarded` event**, not `Dismissed`.
+     `Dismissed` fires both when the player closes early *and* after a completed reward, so
+     on its own it cannot answer "was this earned?". `onComplete` — and therefore
+     `AdBudget.consume()` — runs only when `Rewarded` was seen first.
+  3. **A failed ad grants nothing and consumes nothing, and must never fall back to the
+     simulation.** Falling back would hand out rewards with no ad — a free-reward hole in
+     production. The player gets a toast instead.
+  4. **The web/PWA path keeps the simulation.** There is no ad SDK there and web is the
+     primary development surface (§1); deleting the mock would make that surface untestable.
+  5. **Access is `Capacitor.Plugins.AdMob`, and event names are raw strings.** No bundler
+     (§1), so neither `import` nor the package's `RewardAdPluginEvents` enum is reachable at
+     runtime — the strings are copied from the plugin's own enum file. Same pattern as the
+     splash-screen plugin in `index.html`.
+  6. **Only Google's official TEST ids are in the repo** (`AD_IDS` in `core/app.js` and the
+     `APPLICATION_ID` meta-data in `AndroidManifest.xml`). Developing against your own real
+     units counts as invalid traffic and can get the AdMob account suspended, so this is a
+     safety rule, not tidiness. Real ids go in at release, in those **two** places, as a
+     separate final step.
+  Cost: APK 15.28 → **22.27 MB** — the Google Mobile Ads SDK is ~7 MB, by far the largest
+  single addition in the project. Device-verified: test ad shows (labelled "Test Reklamı"),
+  reward lands only after completion (budget 3→2→1→0, +10💎 each), and at budget 0 no ad
+  opens at all. **CDP gotcha:** the SDK spawns its own `googleads…sdk-core` DevTools
+  targets, so `/json/list` returns several — pick the `localhost` one or tooling breaks.
 - **Background music is globally disabled** behind `MUSIC_DISABLED` in `games.js`'s `GameAudio`, and `#btn-music` in `index.html` is hidden. The synthesized pad/beat engine underneath is intact and deliberately untouched — the existing composition read as tense rather than calm, so silence is the stage-appropriate choice until a new music system is designed. Don't "fix" `startMusic()` returning early.
 
 ---
