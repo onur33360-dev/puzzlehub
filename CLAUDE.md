@@ -511,7 +511,8 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   and are no longer rendered, so `playRandomGame()` has no home-screen caller (the ad flow is
   still reachable from the shop and the game-over screen).
 - **The economy has ONE daily ad budget and it is the load-bearing rule (2026-07-30).**
-  `AdBudget` (`ph_ad_budget`, 3/day from `EconomyConfig.AD_DAILY_LIMIT`) is a **single shared
+  `AdBudget` (`ph_ad_budget`, 8/day from `EconomyConfig.AD_DAILY_LIMIT` — was 3 from the
+  system's first commit until 2026-08-02, never 5) is a **single shared
   pool** for all five rewarded actions — diamonds, continue, hint, undo, 2x score. There are
   deliberately **no per-action counters**: spending the budget on diamonds is what makes
   saving diamonds matter, because continue then costs diamonds or nothing. Its daily reset
@@ -842,6 +843,59 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   shown only when required, ads blocked without consent, `initialize` never reached in that
   case, app still fully usable after a refusal, and a source scan proving the gate was not
   touched and consent is never assumed.
+- **Interstitials exist since 2026-08-02 and their whole design is a frequency cap —
+  `InterstitialAds` in `core/app.js`.** Unrelated to `AdBudget`: that one limits *how many
+  rewards the player may ask for* (their choice), this one limits *how often we may
+  interrupt* (not their choice). Wiring them to the same pool would let an unwanted ad eat a
+  wanted reward — the player would lose a continue they never spent.
+  **The two thresholds are 3 minutes AND 3 round-endings, and BOTH must be satisfied.**
+  Unlike the Water Sort move limit, these numbers are **not measured in this repo** — they
+  come from the owner's industry research, recorded here so nobody later mistakes them for
+  in-project measurements or "tunes" them without the same basis. The stated reasoning: an
+  interstitial cadence tighter than this is the classic D7-retention killer, and one axis
+  alone fails in both directions — time-only means a fast player eats an ad every 3 minutes,
+  rounds-only means three rounds of a short game (Memory, Maze) fit inside one minute. The
+  AND is the whole mechanism.
+  Seven things are load-bearing:
+  1. **`maybeShow()` has exactly ONE call site and it is `exitGame()`.** The two hard
+     prohibitions — never at boot/splash, never during play — are enforced *structurally* by
+     that fact, not by a flag. A level ending mid-session emits `game_ended` and is only
+     **counted**; Water Sort does not get an ad between levels.
+  2. **Discover-launched sessions are exempt outright**, before the limits are even
+     consulted. `exitGame` reads `_beforeGameScreen === 'screen-discover'` (already there for
+     tab restoration) and passes `fromDiscover`. Discover is the fast-trial surface — cards
+     opened and closed in seconds — and an ad there kills the flow the feed exists for.
+     The exemption **does not reset the counters**: those rounds were really played and still
+     count toward the next ordinary exit.
+  3. **A completed rewarded ad resets the interstitial timer.** `noteRewardedShown()` sits
+     inside `runRewardedAction`, next to `AdBudget.consume()` — the single bridge between the
+     two systems. Without it, "take the reward → leave → get an ad immediately" would turn an
+     ad the player *chose* into the justification for one they didn't.
+  4. **Only the `Showed` event resets the counters.** `Dismissed` alone cannot mean "the
+     player was interrupted" — the ad can close without ever appearing. Exactly the
+     `Rewarded`-vs-`Dismissed` distinction already documented for the rewarded path.
+  5. **A failed ad consumes nothing and says nothing.** Counters stand, the next exit retries.
+     No toast either — that is the deliberate difference from the rewarded path, where the
+     player was waiting for something and had to be told.
+  6. **No daily reset, on purpose.** The `toDateString()` pattern shared by `StreakSystem` /
+     `AdBudget` / `DailyQuests` would be wrong here: those hand out daily *allowances*, this
+     is a rolling cap. `ph_interstitial` (`{rounds, lastShownAt}`) carries across days and
+     sessions — a player who quit at 2 rounds must not have those rounds forgotten.
+  7. **Plus never sees one**, the natural extension of the ad-free benefit.
+  Implementation notes: `RewardedAd._ensureInit` is **reused** — `initialize()` is once per
+  SDK, not per format, and a second init promise would start it twice. Consent is awaited
+  through the same `AdConsent.ensure()` gate (UMP does not vary by ad format). Test ids only
+  (`AD_IDS.interstitialAndroid`, `TODO(yayın)`), same account-suspension rule as the rewarded
+  unit. Web/PWA keeps a simulated overlay for the same reason the rewarded one does.
+  `tools/interstitial-test.js` pins all of it, including the assertions that encode the
+  reasoning rather than the code: each axis must block *on its own*, the Discover exemption
+  must not consume the counter, and `maybeShow` must still have exactly one call site.
+- **`EconomyConfig.AD_DAILY_LIMIT` went 3 → 8 on 2026-08-02.** Recorded because the value was
+  misremembered as 5: `git log -S` shows the constant was added once (`0e68322`, the commit
+  that created `EconomyConfig`) and never edited, so **it was 3 from birth and never 5**.
+  Reason for the raise: five actions share one pool, so 3 left the player with no non-diamond
+  option after two continues — at that size the pool stops being a choice and becomes a
+  shortage. No text needed updating; every surface already reads `AdBudget.label()`.
 - **Background music is globally disabled** behind `MUSIC_DISABLED` in `games.js`'s `GameAudio`, and `#btn-music` in `index.html` is hidden. The synthesized pad/beat engine underneath is intact and deliberately untouched — the existing composition read as tense rather than calm, so silence is the stage-appropriate choice until a new music system is designed. Don't "fix" `startMusic()` returning early.
 
 ---

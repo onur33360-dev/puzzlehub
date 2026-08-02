@@ -404,6 +404,46 @@ askıya alınmasına kadar gidebiliyor.
 
 ---
 
+## Sprint 9 — reklam hacmi: bütçe 8'e, geçiş reklamı devrede (2026-08-02)
+
+Araştırmaya dayalı iki karar. İkisi de reklam **hacmini** artırıyor, ama
+farklı eksenlerde ve bilerek birbirine bağlanmadan.
+
+**1. `AD_DAILY_LIMIT` 3 → 8.** Sabit `EconomyConfig` ile birlikte doğmuş
+(`0e68322`) ve o günden beri hiç değişmemişti; **hiçbir zaman 5 olmadı**
+(`git log -S` ile doğrulandı — hafızadaki 5 yanlıştı, kayıt bu yüzden
+tutuluyor). Beş aksiyon tek havuzu paylaştığı için 3 hak, iki devam-et'ten
+sonra oyuncuya elmas dışında seçenek bırakmıyordu: o boyutta havuz "seçim"
+değil "kıtlık" oluyor. Güncellenecek metin çıkmadı, çünkü her yüzey zaten
+`AdBudget.label()` okuyor.
+
+**2. `InterstitialAds` — ödülsüz tam ekran reklam.** Tasarımın tamamı bir
+sıklık kapağı: **3 dakika VE 3 tur bitişi**, ikisi birden. Eşikler bu depoda
+ÖLÇÜLMEDİ — sahibin sektör araştırmasından geliyor (daha sık bir kadans
+klasik D7-retention katili), ve bu ayrım kayda geçiriliyor ki ileride Su
+Sıralama hamle limiti gibi ölçülmüş bir sayı sanılmasın.
+
+Faz 6'nın (AdMob) doğru kurulmuş olması burada da işe yaradı: rıza kapısı,
+SDK init'i ve test-kimliği disiplini aynen yeniden kullanıldı, yalnızca
+format değişti. Yeni olan tek şey "ne zaman" sorusu.
+
+Sınırın dışındaki dört kural — gerekçeleri CLAUDE.md §5'te:
+`maybeShow`'un **tek çağrı yeri `exitGame()`** (açılış ve oyun-içi yasakları
+bayrakla değil yapıyla korunuyor), **Keşfet muafiyeti** (sınırlara bakılmadan,
+sayaç sıfırlanmadan), **ödüllü reklam sonrası zamanlayıcı sıfırlama**, ve
+**Premium'da hiç**.
+
+`tools/interstitial-test.js` (68 doğrulama) kardeş araçların dört katmanını
+izliyor. En değerli iki iddiası koda değil gerekçeye ait: her eksenin **tek
+başına** engellediği, ve Keşfet muafiyetinin sayacı **tüketmediği**.
+
+**Cihaz doğrulaması bu sprintte BORÇ.** A51 oturum boyunca adb'de görünmedi
+(bilinen aralıklı USB arızası), bu yüzden dört senaryo — 3 turdan az, 3 tur +
+3 dakika, ödüllü-hemen-ardından, Premium — henüz cihazda koşulmadı. Y6 borcu
+da duruyor.
+
+---
+
 ## Hedef
 
 Sadece yüksek FPS değil:

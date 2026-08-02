@@ -16,8 +16,27 @@
 const EconomyConfig = {
   // --- Reklam bütçesi ---
   // Tek günlük reklam havuzu. Tüm reklamlı ödül/continue/hint/undo/2x
-  // akışları bu 3 haktan düşer.
-  AD_DAILY_LIMIT: 3,
+  // akışları bu 8 haktan düşer.
+  //
+  // 2026-08-02: 3 → 8. Sistem kurulurken (0e68322) 3 seçilmişti ve o
+  // günden beri hiç değişmemişti; beş ayrı aksiyonun TEK havuzu olduğu
+  // için 3 hak, oyuncunun ilk iki devam-et'inden sonra elmas dışında
+  // seçenek bırakmıyordu — havuzun "bilinçli seçim" amacı (hangisine
+  // harcayayım?) 3'te seçim değil kıtlık oluyor.
+  AD_DAILY_LIMIT: 8,
+
+  // --- Geçiş reklamı sıklık kapağı (InterstitialAds) ---
+  // AD_DAILY_LIMIT'ten TAMAMEN AYRI bir eksen: o "oyuncu kaç ödül
+  // isteyebilir"i sınırlar (oyuncunun kendi seçimi), bu ise "biz kaç kez
+  // araya girebiliriz"i (oyuncunun seçimi değil). Aynı havuza bağlamak,
+  // istenmeyen bir reklamın istenen bir ödülü yemesi demekti.
+  //
+  // İki eşik de İKİSİ BİRDEN sağlanmadan reklam çıkmaz. Tek eksen yeterli
+  // olsaydı ikisi de kendi başına bozulurdu: yalnız süre → hızlı oynayan
+  // oyuncu her 3 dakikada bir reklam yer; yalnız tur sayısı → kısa
+  // oyunlarda (Hafıza, Labirent) üç tur arka arkaya bir dakikaya sığar.
+  INTERSTITIAL_MIN_INTERVAL_MS: 3 * 60 * 1000,
+  INTERSTITIAL_MIN_ROUNDS: 3,
 
   // --- Elmas kazanımları ---
   AD_DIAMOND_REWARD: 10,      // reklamla elmas kazan
@@ -1080,6 +1099,8 @@ const AdBudget = {
 const AD_IDS = {
   // TODO(yayın): gerçek ödüllü birim kimliğiyle değiştir.
   rewardedAndroid: 'ca-app-pub-3940256099942544/5224354917',
+  // TODO(yayın): gerçek geçiş (interstitial) birim kimliğiyle değiştir.
+  interstitialAndroid: 'ca-app-pub-3940256099942544/1033173712',
 };
 
 // Olay adları HAM DİZGİ olarak yazılı. `RewardAdPluginEvents` enum'u
@@ -1091,6 +1112,16 @@ const AD_EV = {
   dismissed:    'onRewardedVideoAdDismissed',
   failedToShow: 'onRewardedVideoAdFailedToShow',
   failedToLoad: 'onRewardedVideoAdFailedToLoad',
+};
+
+// Geçiş reklamının olayları AYRI bir enum'da (interstitial-ad-plugin-events),
+// adları da ödüllüninkinden farklı — aynı gerekçeyle ham dizgi.
+const INT_EV = {
+  loaded:       'interstitialAdLoaded',
+  showed:       'interstitialAdShowed',
+  dismissed:    'interstitialAdDismissed',
+  failedToShow: 'interstitialAdFailedToShow',
+  failedToLoad: 'interstitialAdFailedToLoad',
 };
 
 // Gerçek SDK yalnızca native kabukta var. Web/PWA yolunda simülasyon
@@ -1371,10 +1402,242 @@ function runRewardedAction(reward, onReward) {
   }
   RewardedAd.show(reward, () => {
     AdBudget.consume();
+    // Oyuncu AZ ÖNCE bir reklam izledi. Geçiş reklamının zamanlayıcısı tam
+    // burada sıfırlanıyor, yoksa "ödülü al → oyundan çık → hemen bir reklam
+    // daha" dizisi mümkün olurdu: oyuncunun kendi isteğiyle izlediği reklam,
+    // istemediği bir reklamın gerekçesine dönüşürdü. Bütçe (AdBudget) ile
+    // sıklık kapağı (InterstitialAds) ayrı eksenler olduğu için bu köprü
+    // açıkça kurulmak zorunda — kendiliğinden oluşmuyor.
+    if (typeof InterstitialAds !== 'undefined') InterstitialAds.noteRewardedShown();
     onReward();
   });
   return true;
 }
+
+// ==================== GEÇİŞ REKLAMI (INTERSTITIAL) ====================
+//
+// Ödülsüz, tam ekran reklam. Ödüllüden farkı ekonomik değil DAVRANIŞSAL:
+// ödüllü reklamı oyuncu ister (bir şey karşılığında), bunu biz araya
+// sokarız. Dolayısıyla buranın tasarım sorusu "ne kadar kazandırır" değil,
+// "ne zaman rahatsız etmez" — ve bütün kod o sorunun cevabı.
+//
+// ───── NEDEN AdBudget'A BAĞLANMADI ─────
+// AdBudget "oyuncu bugün kaç ödül isteyebilir"i sınırlar; burası "biz kaç
+// kez araya girebiliriz"i. Aynı havuza bağlamak, istenmeyen bir reklamın
+// istenen bir ödülü yemesi demekti (oyuncu continue hakkını kaybederdi,
+// hiç talep etmediği bir reklam yüzünden). İki ayrı eksen, tek bir köprü:
+// bkz. noteRewardedShown().
+//
+// ───── İKİ EKSENLİ SIKLIK SINIRI ─────
+// Son gösterimden bu yana EN AZ 3 dakika VE EN AZ 3 tur bitişi. İkisi de
+// sağlanmadan reklam çıkmaz; tek eksen yeterli olsaydı ikisi de kendi
+// başına bozulurdu:
+//   • yalnız süre    → hızlı oynayan oyuncu her 3 dakikada bir reklam yer
+//   • yalnız tur     → kısa oyunlarda (Hafıza, Labirent) üç tur bir
+//                      dakikaya sığar, aynı sonuç
+// Eşikler EconomyConfig'te; buradaki kural onların AND'lenmesi.
+//
+// ───── NEREDE GÖSTERİLMEZ ─────
+//   1. Açılışta/splash'ta — maybeShow'un TEK çağrı yeri exitGame(), yani
+//      bu yapısal olarak imkânsız, ayrıca bir bayrakla korunmuyor.
+//   2. Oyun oynanırken — aynı sebep. Seviye tamamlama game_ended yayınlar
+//      ama yalnızca SAYAR; Su Sıralama'da seviye aralarına reklam girmez.
+//   3. Keşfet'ten başlatılan oturumun çıkışında — muafiyet, sınırlara
+//      bakılmadan (aşağıda).
+//   4. Premium'da hiç.
+const InterstitialAds = {
+  _key: 'ph_interstitial',
+  // Aynı anda iki gösterim denemesi olmasın. Kalıcı değil (oturumluk):
+  // uygulama kapanırsa asılı kalmış bir bayrak sonsuza kadar reklamı
+  // engellerdi.
+  _showing: false,
+
+  // Sayılar EconomyConfig'ten ÇAĞRI ANINDA okunuyor — denge ayarı tek
+  // dosyada yapılsın (CLAUDE.md ekonomi kuralı).
+  minIntervalMs() { return EconomyConfig.INTERSTITIAL_MIN_INTERVAL_MS; },
+  minRounds()     { return EconomyConfig.INTERSTITIAL_MIN_ROUNDS; },
+
+  // GÜNLÜK SIFIRLAMA YOK ve bu bilinçli: StreakSystem/AdBudget/DailyQuests'in
+  // toDateString() deseni burada YANLIŞ olurdu. Onlar günlük HAK dağıtıyor,
+  // burası kayan bir sıklık kapağı. Sayaç günler ve oturumlar boyunca
+  // taşınır — 2 turda çıkan oyuncunun o iki turu unutulmamalı.
+  _data() {
+    try { return JSON.parse(localStorage.getItem(this._key) || '{}'); }
+    catch (e) { return {}; }
+  },
+
+  _save(d) {
+    try { localStorage.setItem(this._key, JSON.stringify(d)); } catch (e) {}
+  },
+
+  rounds()      { return this._data().rounds || 0; },
+  lastShownAt() { return this._data().lastShownAt || 0; },
+
+  // GameEvents'in üçüncü abonesi. Hangi oyun, hangi sonuç (won/lost/quit)
+  // ÖNEMSİZ — sayılan şey "bir tur bitti"; oyuncunun molası burada oluşur.
+  // stray (açık tur yokken gelen bitiş) işlemez: DailyQuests ile aynı
+  // kural, yoksa reklam sıklığı oynanan turdan fazla olurdu.
+  onRoundEnded(ev) {
+    if (ev && ev.stray) return;
+    const d = this._data();
+    d.rounds = (d.rounds || 0) + 1;
+    this._save(d);
+  },
+
+  // Ödüllü reklam izlendi → zamanlayıcı ŞİMDİ başlar. runRewardedAction'ın
+  // içinden, AdBudget.consume()'un yanından çağrılıyor: iki sistemin tek
+  // teması burası.
+  noteRewardedShown() {
+    const d = this._data();
+    d.lastShownAt = Date.now();
+    this._save(d);
+  },
+
+  // İki eksen. Saf fonksiyon: yan etkisi yok, her an yeniden hesaplanabilir.
+  canShow(now) {
+    now = now || Date.now();
+    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return false;
+    if (this._showing) return false;
+    const d = this._data();
+    if ((d.rounds || 0) < this.minRounds()) return false;
+    const last = d.lastShownAt || 0;
+    // last === 0: henüz hiç reklam gösterilmemiş → zaman ekseni sağlanmış
+    // sayılır, yalnızca tur eksenini bekler. (Saat geriye alınırsa fark
+    // negatif olur ve reklam ENGELLENİR — yanlış yön değil, güvenli yön.)
+    if (last && (now - last) < this.minIntervalMs()) return false;
+    return true;
+  },
+
+  // Tek gösterim kapısı. Dönüş: "gösterim denemesi başladı mı".
+  //
+  // opts.fromDiscover → Keşfet akışından başlatılmış bir oturumun çıkışı.
+  // Orası hızlı-deneme yüzeyi: oyuncu kart kart geziniyor, bir oyunu
+  // saniyeler içinde açıp kapatıyor. Araya reklam sokmak akışın kendisini
+  // öldürürdü, o yüzden SINIRLARA BAKILMADAN muaf. Sayaç sıfırlanmıyor:
+  // o turlar gerçekten oynandı, bir sonraki normal çıkışta hâlâ geçerli.
+  maybeShow(opts) {
+    opts = opts || {};
+    if (opts.fromDiscover) return false;
+    if (!this.canShow()) return false;
+
+    this._showing = true;
+    this._present(
+      () => {
+        // GÖSTERİLDİ. İki eksen de ancak burada sıfırlanır.
+        const d = this._data();
+        d.rounds = 0;
+        d.lastShownAt = Date.now();
+        this._save(d);
+        this._showing = false;
+      },
+      () => {
+        // GÖSTERİLEMEDİ: hiçbir şey tüketilmez, sayaç durur, bir sonraki
+        // çıkışta yeniden denenir. Ödüllüdeki disiplinin aynısı — orada
+        // "reklamsız ödül" açığı vardı, burada "gösterilmeyen reklamın
+        // sıklık hakkını yemesi" olurdu.
+        this._showing = false;
+      }
+    );
+    return true;
+  },
+
+  _present(onShown, onFail) {
+    const ad = adMobPlugin();
+    if (ad) { this._presentNative(ad, onShown, onFail); return; }
+    this._presentSimulated(onShown, onFail);
+  },
+
+  // ───────── GERÇEK SDK (native) ─────────
+  _presentNative(ad, onShown, onFail) {
+    let shown = false, settled = false, subs = [];
+    const cleanup = () => {
+      subs.forEach((h) => { try { h && h.remove && h.remove(); } catch (e) {} });
+      subs = [];
+    };
+    // Başarısızlık SESSİZ — ödüllüden ayrıldığı yer burası. Orada oyuncu
+    // bir ödül bekliyordu ve bilgilendirilmesi şarttı; burada istemediği
+    // bir şey gelmedi, "reklam yüklenemedi" demek saf gürültü olurdu.
+    const fail = (why) => {
+      if (settled) return;
+      settled = true; cleanup();
+      if (typeof console !== 'undefined') console.warn('[AdMob/interstitial] ' + why);
+      onFail();
+    };
+    // Sayacı sıfırlayan tek şey `Showed` OLAYI. `Dismissed` tek başına
+    // yetmez: reklam hiç görünmeden de kapanabilir, o zaman oyuncu
+    // rahatsız edilmemiş olur ve sıklık hakkını harcamamalı. Ödüllüdeki
+    // `Rewarded`-vs-`Dismissed` ayrımının birebir aynısı.
+    const done = () => {
+      if (settled) return;
+      settled = true; cleanup();
+      if (shown) onShown(); else onFail();
+    };
+
+    // Rıza ÖNCE — ödüllüyle aynı kapı, aynı promise. UMP kuralı formatlara
+    // göre değişmez: rıza yoksa hiçbir reklam istenmez.
+    AdConsent.ensure(ad).then(() => {
+      if (!AdConsent.canRequestAds()) { fail('riza yok (canRequestAds=false)'); return null; }
+      // RewardedAd._ensureInit BİLEREK yeniden kullanılıyor: initialize()
+      // SDK'nın tamamı için bir kez çağrılır, format başına değil. Buraya
+      // ikinci bir _initPromise yazmak SDK'yı iki kez başlatırdı.
+      return RewardedAd._ensureInit(ad)
+        .then(() => Promise.all([
+          ad.addListener(INT_EV.showed, () => { shown = true; }),
+          ad.addListener(INT_EV.dismissed, () => done()),
+          ad.addListener(INT_EV.failedToShow, () => fail('gosterilemedi')),
+          ad.addListener(INT_EV.failedToLoad, () => fail('yuklenemedi')),
+        ]))
+        .then((handles) => {
+          subs = handles;
+          return ad.prepareInterstitial({
+            adId: AD_IDS.interstitialAndroid,
+            isTesting: true,        // demo birimiyle birlikte ikinci emniyet
+          });
+        })
+        .then(() => ad.showInterstitial());
+    }).catch((e) => fail(e && e.message ? e.message : String(e)));
+  },
+
+  // ───────── SİMÜLASYON (web/PWA) ─────────
+  // Ödüllüdeki gerekçenin aynısı: web birincil geliştirme yüzeyi ve orada
+  // SDK yok — silinirse sıklık mantığı o yüzeyde hiç görülemez.
+  _presentSimulated(onShown, onFail) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ad-overlay';
+    overlay.innerHTML = `
+      <div class="ad-modal">
+        <div class="ad-header">📺 Reklam</div>
+        <div class="ad-body">
+          <div class="ad-reward-preview">Geçiş reklamı simülasyonu</div>
+          <div class="ad-timer">
+            <div class="ad-timer-bar"><div class="ad-timer-fill"></div></div>
+            <span class="ad-timer-text">2 saniye sonra kapatılabilir</span>
+          </div>
+        </div>
+        <button class="ad-skip" style="display:none">Kapat ✕</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const fill = overlay.querySelector('.ad-timer-fill');
+    fill.style.transition = 'width 2s linear';
+    requestAnimationFrame(() => { fill.style.width = '100%'; });
+
+    setTimeout(() => {
+      const skipBtn = overlay.querySelector('.ad-skip');
+      skipBtn.style.display = 'block';
+      skipBtn.addEventListener('click', () => {
+        overlay.remove();
+        onShown();
+      });
+    }, 2000);
+  },
+};
+
+// GameEvents'in ÜÇÜNCÜ abonesi (DailyQuests, Badges, InterstitialAds).
+// exitGame()'in 'quit' bitişi de buradan geliyor — GameEvents.abandon()
+// zaten game_ended yayınlıyor, ayrı bir enjeksiyon gerekmiyor.
+GameEvents.on('game_ended', function (ev) { InterstitialAds.onRoundEnded(ev); });
 
 // Reklam VEYA elmas seçeneği sunan paylaşımlı teklif penceresi.
 // games.js'ten de çağrılır (ipucu), bu yüzden kabukta duruyor: her oyun
@@ -1663,7 +1926,7 @@ function watchAdForDiamonds() {
     { icon: '💎', text: amount + ' Elmas Kazan!' },
     () => DiamondSystem.addReward(amount, 'Reklam ödülü!')
   );
-  // Mağaza satırının açıklaması ("Bugün 2/3 hakkın kaldı") anında
+  // Mağaza satırının açıklaması ("7/8 reklam hakkın kaldı") anında
   // güncellenmeli; reklam bittiğinde AdBudget.consume() zaten tetikliyor
   // ama bütçe doluysa satırın pasifleşmesi de görünmeli.
   if (!ok) renderShop();
@@ -2449,10 +2712,19 @@ function restartCurrentGame() {
 }
 
 function exitGame() {
+  // Oturumun KAYNAĞI, _beforeGameScreen sıfırlanmadan önce okunuyor.
+  // Keşfet'ten açılan oyunlar hızlı-deneme oturumu (kart kart gezinip
+  // saniyeler içinde açıp kapatma); oraya geçiş reklamı sokmak akışın
+  // kendisini öldürür, o yüzden muaf.
+  const fromDiscover = _beforeGameScreen === 'screen-discover';
+
   // Terk edilen tur BURADA kapanıyor, cleanup()'ta değil: cleanup oyunun
   // kendi işi (dinleyici/rAF sökmek) ve "tur"dan haberi yok. Oyun zaten
   // bitmişse (game-over kutusundan çıkılıyor) açık tur yoktur, abandon()
   // hiçbir şey yapmaz — çift sayım riski yok.
+  //
+  // Sıra ÖNEMLİ: abandon() önce çalışır, yani bu çıkışın 'quit' turu da
+  // aşağıdaki maybeShow'un gördüğü sayaca dahildir.
   if (typeof GameEvents !== 'undefined') GameEvents.abandon();
   if (_currentGameId && PuzzleGames[_currentGameId]) {
     PuzzleGames[_currentGameId].cleanup();
@@ -2475,6 +2747,14 @@ function exitGame() {
     switchTab('discover');
   } else {
     switchTab(currentTab || 'home');
+  }
+
+  // Geçiş reklamının TEK çağrı yeri. Buradan sonra çağrılması bilinçli:
+  // reklam kapanınca oyuncu oyun ekranını değil, gideceği yeri (ana ekran
+  // veya Keşfet) görür. Açılışta ve oyun içinde çağrı YOK — o iki yasak
+  // bir bayrakla değil, bu tek çağrı noktasıyla korunuyor.
+  if (typeof InterstitialAds !== 'undefined') {
+    InterstitialAds.maybeShow({ fromDiscover: fromDiscover });
   }
 }
 
