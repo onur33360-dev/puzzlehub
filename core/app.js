@@ -140,6 +140,9 @@ const SETTINGS = [
   { icon:'🎨', label:'Tema Seçimi', fn:'showPlusPage()' },
   { icon:'👑', label:"Plus'a Geç", fn:'showPlusPage()' },
   { icon:'💎', label:'Elmas Mağazası', fn:'openShop()' },
+  // Cihaz değiştiren / uygulamayı silip kuran kullanıcı için ZORUNLU:
+  // abonelik satan her uygulamanın sunması gereken standart yol.
+  { icon:'🔄', label:'Satın Almaları Geri Yükle', fn:'restorePurchases()' },
   { icon:'🔔', label:'Bildirimler', action:'Bildirimler yakında!' },
   { icon:'🔊', label:'Ses Ayarları', action:'Ses ayarları yakında!' },
   { icon:'🌐', label:'Dil', action:'Dil: Türkçe' },
@@ -1694,8 +1697,266 @@ function offerRewardChoice(opts) {
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
 }
 
-// ==================== PLUS SİSTEMİ ====================
+// ==================== SATIN ALMA (RevenueCat) ====================
+//
+// Abonelik ve elmas paketleri BURADAN geçer. Reklamlarda olduğu gibi tek
+// bir alt katman var ve üstündeki ürün mantığı (hangi plan, kaç elmas)
+// ona dokunmuyor.
+//
+// ───── ÜRÜN KİMLİKLERİ ─────
+// Play Console'daki kimliklerle BİREBİR aynı olmak zorunda; eşleşmezse
+// ürün "bulunamadı" döner ve hata mesajı bunu söylemez. Fiyat burada
+// YAZMAZ — mağazadan gelir (bkz. priceFor).
+//
+// Elmas miktarları ise mağazadan DEĞİL koddan okunuyor: mağaza fiyatın
+// doğruluk kaynağı, ekonominin değil. Play Console'da bir ürünün adını
+// değiştirmek oyunun elmas dengesini kaydırmamalı.
+const IAP = {
+  ENTITLEMENT: 'plus',      // RevenueCat entitlement adı
+  OFFERING: 'default',      // RevenueCat offering adı
+  PLUS: { weekly: 'plus_weekly', monthly: 'plus_monthly', yearly: 'plus_yearly' },
+  DIAMONDS: {
+    small:  'diamonds_100',
+    medium: 'diamonds_550',
+    large:  'diamonds_1800',
+    mega:   'diamonds_6500',
+  },
+};
 
+// RevenueCat'in ANDROID PUBLIC SDK anahtarı ('goog_...').
+//
+// Reklam birimi kimliklerinden farklı olarak bu anahtar TASARIM GEREĞİ
+// geneldir: istemciye gömülmek üzere üretiliyor, tek başına hiçbir yetki
+// vermiyor (satın alma doğrulaması Google'ın sunucusunda yapılıyor). Yani
+// AD_IDS'teki "gerçek kimlik depoda durmaz" kuralı buraya UYGULANMAZ —
+// burada gerçek anahtarın durması doğru olan.
+//
+// TODO(revenuecat): hesap açılınca gerçek anahtarla değiştir. Boş kaldığı
+// sürece Billing.init() sessizce atlanır ve uygulama normal çalışır.
+const RC_API_KEY_ANDROID = '';
+
+function purchasesPlugin() {
+  const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;
+  if (!C || !C.isNativePlatform || !C.isNativePlatform()) return null;
+  return (C.Plugins && C.Plugins.Purchases) || null;
+}
+
+const Billing = {
+  _ready: null,        // configure() promise'i — bir kez
+  _offerings: null,    // önbellek: productId → { priceString, price, pkg }
+  _lastError: null,
+
+  // Anahtar ÇAĞRI ANINDA okunuyor, modül değerlendirilirken değil.
+  // Sebebi games.js'teki econ() ile aynı sınıftan: tek bir üst düzey
+  // sabite bağlanmak onu test edilemez yapıyor (Node harness'ı sahte bir
+  // anahtar enjekte edebilmeli, yoksa satın alma yolunun tamamı
+  // ölçülemez kalır).
+  _apiKey() { return RC_API_KEY_ANDROID; },
+
+  available() { return !!purchasesPlugin() && !!this._apiKey(); },
+
+  // Açılışta çağrılır, BEKLENMEZ. Rıza akışıyla (AdConsent) aynı desen:
+  // uygulama bunun bitmesini beklemez, ihtiyaç duyan yol aynı promise'i
+  // bekler. Anahtar yoksa veya web'deysek sessizce geçer — o yüzeylerde
+  // satın almanın konusu yok, ama uygulamanın geri kalanı çalışmalı.
+  init() {
+    if (this._ready) return this._ready;
+    const p = purchasesPlugin();
+    const key = this._apiKey();
+    if (!p || !key) {
+      this._ready = Promise.resolve(false);
+      return this._ready;
+    }
+    this._ready = p.configure({ apiKey: key })
+      .then(() => {
+        // Dinleyici İYİLEŞTİRME, doğruluk şartı DEĞİL: abonelik durumu
+        // ayrıca açılışta, satın almada ve geri yüklemede senkronlanıyor.
+        // Kaçan bir olay güncellemeyi geciktirir, kaybetmez.
+        try {
+          p.addCustomerInfoUpdateListener((info) => {
+            PlusSystem._setFromStore(info && info.customerInfo ? info.customerInfo : info);
+          });
+        } catch (e) {}
+        return this.refresh();
+      })
+      .then(() => true)
+      .catch((e) => {
+        this._lastError = e;
+        if (typeof console !== 'undefined') console.warn('[RC] configure: ' + (e && e.message || e));
+        // Bir kez daha denenebilsin: başarısız configure'ü önbelleğe almak
+        // uygulamayı kalıcı olarak satın alınamaz hâle getirirdi.
+        this._ready = null;
+        return false;
+      });
+    return this._ready;
+  },
+
+  // Abonelik durumunu mağazadan tazeler. isActive()'in okuduğu anlık
+  // görüntüyü YAZAN tek yol budur (satın alma/geri yükleme de buraya iner).
+  refresh() {
+    const p = purchasesPlugin();
+    if (!p) return Promise.resolve(null);
+    return p.getCustomerInfo()
+      .then((r) => {
+        const info = r && r.customerInfo ? r.customerInfo : r;
+        PlusSystem._setFromStore(info);
+        return info;
+      })
+      .catch((e) => {
+        // ÇEVRİMDIŞI: son bilinen durum korunuyor, silinmiyor. Uçaktaki
+        // bir aboneden Plus'ı geri almak yanlış olurdu.
+        if (typeof console !== 'undefined') console.warn('[RC] getCustomerInfo: ' + (e && e.message || e));
+        return null;
+      });
+  },
+
+  // Offerings → productId bazlı fiyat tablosu. Önbellekli: fiyatlar tek
+  // bir oturumda değişmiyor ve her render'da ağ isteği yapmak saçma olurdu.
+  loadOfferings() {
+    if (this._offerings) return Promise.resolve(this._offerings);
+    const p = purchasesPlugin();
+    if (!p) return Promise.resolve(null);
+    return this.init().then((okConfig) => {
+      if (!okConfig) return null;
+      return p.getOfferings().then((res) => {
+        const all = (res && res.offerings) || res || {};
+        const off = (all.all && all.all[IAP.OFFERING]) || all.current || null;
+        if (!off || !off.availablePackages) return null;
+        const table = {};
+        off.availablePackages.forEach((pkg) => {
+          const prod = pkg.product || {};
+          const id = prod.identifier;
+          if (!id) return;
+          table[id] = {
+            priceString: prod.priceString, price: prod.price,
+            currencyCode: prod.currencyCode, pkg: pkg,
+          };
+        });
+        this._offerings = table;
+        return table;
+      });
+    }).catch((e) => {
+      if (typeof console !== 'undefined') console.warn('[RC] getOfferings: ' + (e && e.message || e));
+      return null;
+    });
+  },
+
+  // Fiyat SORULUR, hesaplanmaz. Bilinmiyorsa null döner — çağıran taraf
+  // nötr bir yer tutucu gösterir. Uydurma bir sayı göstermek, mağazadaki
+  // gerçek fiyattan sapma riski demek.
+  priceFor(productId) {
+    const t = this._offerings;
+    return (t && t[productId]) ? t[productId].priceString : null;
+  },
+
+  priceNumberFor(productId) {
+    const t = this._offerings;
+    return (t && t[productId]) ? t[productId].price : null;
+  },
+
+  // Satın alma. Dönen promise { ok, cancelled, error } ile çözülür —
+  // "iptal" bir HATA DEĞİL, oyuncunun geçerli bir kararı, ve ona hata
+  // mesajı göstermek yanlış olur.
+  purchase(productId) {
+    const p = purchasesPlugin();
+    if (!p) return Promise.resolve({ ok: false, unavailable: true });
+    return this.loadOfferings().then((table) => {
+      const entry = table && table[productId];
+      if (!entry) return { ok: false, notFound: true };
+      return p.purchasePackage({ aPackage: entry.pkg })
+        .then((res) => {
+          const info = res && res.customerInfo;
+          if (info) PlusSystem._setFromStore(info);
+          return { ok: true, customerInfo: info, productId: productId };
+        })
+        .catch((e) => {
+          // RevenueCat iptali `userCancelled` ile işaretliyor.
+          if (e && (e.userCancelled || e.code === '1' || /cancel/i.test(e.message || ''))) {
+            return { ok: false, cancelled: true };
+          }
+          return { ok: false, error: e };
+        });
+    });
+  },
+
+  // Geri yükleme. Cihaz değiştiren / uygulamayı silip kuran kullanıcı
+  // için ZORUNLU (mağaza politikası), ayrıca satın alması görünmeyen
+  // kullanıcının ilk deneyeceği şey.
+  restore() {
+    const p = purchasesPlugin();
+    if (!p) return Promise.resolve({ ok: false, unavailable: true });
+    return this.init().then(() => p.restorePurchases())
+      .then((res) => {
+        const info = res && res.customerInfo ? res.customerInfo : res;
+        PlusSystem._setFromStore(info);
+        return { ok: true, active: PlusSystem.isActive() };
+      })
+      .catch((e) => ({ ok: false, error: e }));
+  },
+};
+
+// ==================== FİYAT GÖSTERİMİ ====================
+//
+// Depoda TEK BİR fiyat metni yok — hepsi mağazadan geliyor. Sebep ikili:
+// Play Console'da fiyat değişince kodun elle güncellenmesi gerekmesin, ve
+// kullanıcı kendi bölgesinin parasını görsün (Türkiye/uluslararası ayrımı
+// mağazanın işi, bizim if'imizin değil).
+//
+// Sözleşme data-ph-avatar / data-ph-ad-budget ile AYNI: niteliği taşıyan
+// her öğe doldurulur, yeni bir fiyat noktası için yeni kod gerekmez.
+//
+// Fiyat bilinmiyorken gösterilen şey nötr bir yer tutucu; ESKİ SABİT
+// FİYATLARA geri düşülmüyor. Yanlış bir fiyat göstermek, hiç fiyat
+// göstermemekten kötüdür — kullanıcı gördüğü sayıyı ödeyeceğini sanır.
+const PRICE_PLACEHOLDER = '—';
+
+// Yıllık planın "aylığa vurulmuş" karşılığı ve tasarruf oranı. İkisi de
+// TÜRETİLİYOR; hiçbiri yazılı değil. Aylık fiyat bilinmiyorsa oran
+// hesaplanamaz ve satır gizlenir — uydurulmaz.
+function _yearlyNote() {
+  const y = Billing.priceNumberFor(IAP.PLUS.yearly);
+  const m = Billing.priceNumberFor(IAP.PLUS.monthly);
+  const cur = (Billing._offerings && Billing._offerings[IAP.PLUS.yearly] || {}).currencyCode;
+  if (!y || !cur) return '';
+  let perMonth;
+  try {
+    perMonth = new Intl.NumberFormat(undefined, {
+      style: 'currency', currency: cur, maximumFractionDigits: 0,
+    }).format(y / 12);
+  } catch (e) { return ''; }
+  if (!m || m <= 0) return perMonth + '/ay';
+  const save = Math.round((1 - (y / 12) / m) * 100);
+  return save > 0 ? perMonth + '/ay • %' + save + ' tasarruf' : perMonth + '/ay';
+}
+
+function refreshPrices() {
+  return Billing.loadOfferings().then(() => {
+    document.querySelectorAll('[data-ph-price]').forEach((el) => {
+      const id = el.getAttribute('data-ph-price');
+      el.textContent = Billing.priceFor(id) || PRICE_PLACEHOLDER;
+    });
+    document.querySelectorAll('[data-ph-plan-note]').forEach((el) => {
+      const note = _yearlyNote();
+      el.textContent = note;
+      el.style.display = note ? '' : 'none';
+    });
+  });
+}
+
+// ==================== PLUS SİSTEMİ ====================
+//
+// isActive() SENKRON KALDI ve bu bilinçli bir mimari karar. 14 çağrı yeri
+// var ve bunların bir kısmı sıcak yollarda (AdBudget.canWatch,
+// InterstitialAds.canShow, DiamondSystem.addReward, runRewardedAction).
+// RevenueCat'in entitlement API'si asenkron; isActive()'i asenkrona
+// çevirmek o dört sistemin senkron sözleşmesini de bozardı.
+//
+// Çözüm AdConsent'te kurulan desenin aynısı: asenkron kaynak, senkron
+// okuyucu. RevenueCat GERÇEK doğruluk kaynağı; ph_plus onun yerel anlık
+// görüntüsü. Görüntü şu dört anda tazelenir: açılış, satın alma, geri
+// yükleme, customerInfoUpdate. Aradaki her okuma önbellekten — ki bu
+// aynı zamanda ÇEVRİMDIŞI doğru davranış: RevenueCat'in kendi SDK'sı da
+// tam olarak bunu yapıyor.
 const PlusSystem = {
   _key: 'ph_plus',
   
@@ -1707,6 +1968,8 @@ const PlusSystem = {
   isActive() {
     const data = this.getData();
     if (!data.active) return false;
+    // expiresAt null olabilir (süresiz hak); yalnızca YAZILI bir tarih
+    // geçmişteyse düşülür.
     if (data.expiresAt && new Date(data.expiresAt) < new Date()) {
       // Expired
       this.deactivate();
@@ -1714,9 +1977,57 @@ const PlusSystem = {
     }
     return true;
   },
-  
+
+  // RevenueCat'ten gelen müşteri bilgisini yerel anlık görüntüye yazar.
+  // isActive()'in okuduğu veriyi yazan TEK mağaza yolu burasıdır.
+  //
+  // İki kural:
+  //   1. `customerInfo` YOKSA hiçbir şey yapılmaz. Bilgi alınamaması
+  //      (ağ yok, çağrı patladı) "hak yok" DEMEK DEĞİL — çevrimdışı bir
+  //      aboneden Plus'ı almak, ödediği şeyi elinden almaktır.
+  //   2. Bilgi VARSA mağaza kazanır, kaynağı ne olursa olsun. Yerel
+  //      activate() ile açılmış bir Plus da silinir: mağaza yapılandırılmışsa
+  //      doğruluk kaynağı odur, geliştirme kısayolu değil.
+  _setFromStore(customerInfo) {
+    if (!customerInfo) return;
+    const act = (customerInfo.entitlements && customerInfo.entitlements.active) || {};
+    const ent = act[IAP.ENTITLEMENT];
+    if (ent) {
+      const data = {
+        active: true,
+        source: 'revenuecat',
+        plan: this._planFromProduct(ent.productIdentifier),
+        productId: ent.productIdentifier || null,
+        expiresAt: ent.expirationDate || null,
+        willRenew: ent.willRenew !== false,
+        syncedAt: new Date().toISOString(),
+      };
+      try { localStorage.setItem(this._key, JSON.stringify(data)); } catch (e) {}
+    } else {
+      try { localStorage.removeItem(this._key); } catch (e) {}
+    }
+    this.updateUI();
+    // Plus durumu reklam bütçesi rozetlerini, mağaza satırlarını ve
+    // game-over tekliflerini değiştiriyor; hepsi tek çağrıda tazeleniyor.
+    if (typeof AdBudget !== 'undefined') AdBudget.updateUI();
+  },
+
+  _planFromProduct(productId) {
+    if (!productId) return null;
+    const map = IAP.PLUS;
+    for (const k in map) {
+      // Play abonelik kimlikleri bazen "plus_yearly:base-plan" gibi bir
+      // base-plan ekiyle geliyor; startsWith bunu da yakalar.
+      if (productId === map[k] || productId.indexOf(map[k]) === 0) return k;
+    }
+    return null;
+  },
+
+  // YEREL yol — geliştirme/test içindir, gerçek satın alma DEĞİL.
+  // Dört Node harness'ı Premium senaryolarını bununla kuruyor. Mağaza
+  // yapılandırılmışsa ilk senkronda üzerine yazılır (bkz. _setFromStore).
   activate(plan) {
-    const data = { active: true, plan: plan, activatedAt: new Date().toISOString() };
+    const data = { active: true, source: 'local', plan: plan, activatedAt: new Date().toISOString() };
     const now = new Date();
     if (plan === 'weekly') now.setDate(now.getDate() + 7);
     else if (plan === 'monthly') now.setMonth(now.getMonth() + 1);
@@ -1805,18 +2116,70 @@ function selectPlan(plan) {
   });
 }
 
+// Satın alma sonuçlarının ORTAK yorumu. İki akış (abonelik + elmas) aynı
+// hata dilini konuşsun diye tek yerde: ayrı yazılsalardı biri güncellenir,
+// diğeri sessizce eski kalırdı — reklam tarafında birebir bu olmuştu.
+//
+// "İptal" bilinçli olarak SESSİZ: oyuncu vazgeçmek istedi ve bunu başardı,
+// ona hata göstermek yaptığı şeyi yanlışmış gibi sunar.
+function _handlePurchaseResult(res, onSuccess) {
+  if (res && res.ok) { onSuccess(); return; }
+  if (res && res.cancelled) return;
+  if (res && res.unavailable) {
+    showToast('🛒 Satın alma yalnızca uygulamada kullanılabilir');
+    return;
+  }
+  if (res && res.notFound) {
+    showToast('🛒 Ürün şu an mağazada bulunamadı');
+    return;
+  }
+  showToast('🛒 Satın alma tamamlanamadı, sonra tekrar dene');
+  if (res && res.error && typeof console !== 'undefined') {
+    console.warn('[RC] purchase: ' + (res.error.message || res.error));
+  }
+}
+
 function purchasePlus() {
   if (PlusSystem.isActive()) {
     showToast('⭐ Zaten Plus üyesisin!');
     return;
   }
-  // Placeholder — gerçek ödeme entegrasyonu sonra
-  showToast('👑 Plus üyelik yakında aktif olacak!');
+  const productId = IAP.PLUS[_selectedPlan];
+  if (!productId) { showToast('🛒 Plan seçilemedi'); return; }
+  Billing.purchase(productId).then((res) => {
+    _handlePurchaseResult(res, () => {
+      // Hak durumu Billing.purchase içinde zaten senkronlandı; burada
+      // yalnızca geri bildirim ve ekran tazeleme var.
+      showToast('👑 Plus aktif — iyi oyunlar!');
+      renderSettings();
+      closePlusPage();
+    });
+  });
+}
+
+// Cihaz değiştiren veya uygulamayı silip kuran kullanıcı satın almasını
+// geri alabilmeli — mağaza politikası gereği ZORUNLU, ayrıca "param gitti"
+// algısının tek panzehiri.
+function restorePurchases() {
+  if (!Billing.available()) {
+    showToast('🛒 Satın alma yalnızca uygulamada kullanılabilir');
+    return;
+  }
+  showToast('🔄 Satın almalar geri yükleniyor…');
+  Billing.restore().then((res) => {
+    if (!res.ok) { showToast('🔄 Geri yükleme başarısız, sonra tekrar dene'); return; }
+    showToast(res.active ? '👑 Plus üyeliğin geri yüklendi!'
+                         : 'ℹ️ Geri yüklenecek bir satın alma bulunamadı');
+    renderSettings();
+  });
 }
 
 function showPlusPage() {
   document.getElementById('bottom-tabs').style.display = 'none';
   showScreen('screen-plus');
+  // Fiyatlar asenkron: ekran ÖNCE açılır, sayılar geldiğinde dolar.
+  // Beklemek, mağazası yavaş bir kullanıcıya boş ekran göstermek olurdu.
+  refreshPrices();
 }
 
 function closePlusPage() {
@@ -1826,11 +2189,18 @@ function closePlusPage() {
 
 // ==================== ELMAS MAĞAZASI ====================
 
+// FİYAT ALANI YOK ve olmayacak (2026-08-02). Fiyatlar mağazadan geliyor
+// (Billing.priceFor) — Play Console'da bir fiyat değişince koda dokunmak
+// gerekmesin ve kullanıcı kendi bölgesinin parasını görsün diye. Miktar ve
+// bonus KODDA kalıyor: mağaza fiyatın doğruluk kaynağı, ekonominin değil.
+//
+// amount + bonus = ürünün vaat ettiği toplam (100 / 550 / 1800 / 6500) ve
+// IAP.DIAMONDS kimlikleri bu toplamları adlandırıyor.
 const DIAMOND_PACKAGES = [
-  { id: 'small', amount: 100, price: '₺19.99', bonus: 0, badge: null },
-  { id: 'medium', amount: 500, price: '₺79.99', bonus: 50, badge: 'Popüler' },
-  { id: 'large', amount: 1500, price: '₺199.99', bonus: 300, badge: null },
-  { id: 'mega', amount: 5000, price: '₺499.99', bonus: 1500, badge: 'En İyi! ⭐' },
+  { id: 'small', amount: 100, bonus: 0, badge: null },
+  { id: 'medium', amount: 500, bonus: 50, badge: 'Popüler' },
+  { id: 'large', amount: 1500, bonus: 300, badge: null },
+  { id: 'mega', amount: 5000, bonus: 1500, badge: 'En İyi! ⭐' },
 ];
 
 // `soon: true` ARTIK KULLANILMIYOR (2026-08-01) — dört kaynağın dördü de
@@ -1872,7 +2242,7 @@ function renderShop() {
         <span class="shop-pkg-icon">💎</span>
         <span class="shop-pkg-amount">${pkg.amount.toLocaleString()}</span>
         ${pkg.bonus > 0 ? '<span class="shop-pkg-bonus">+' + pkg.bonus + ' BONUS</span>' : ''}
-        <button class="shop-pkg-price">${pkg.price}</button>
+        <button class="shop-pkg-price" data-ph-price="${IAP.DIAMONDS[pkg.id]}">${PRICE_PLACEHOLDER}</button>
       </div>
     `;
   }).join('');
@@ -1914,10 +2284,26 @@ function renderShop() {
   }).join('');
 
   DiamondSystem.updateUI();
+  // innerHTML az önce fiyat düğümlerini de sildi. AvatarSystem.updateUI()
+  // ile aynı kural: markup'ı yeniden kuran, niteliğe bağlı alanları da
+  // yeniden doldurmak zorunda. Offerings önbellekli, bu çağrı bedava.
+  refreshPrices();
 }
 
 function buyPackage(id) {
-  showToast('💎 Satın alma yakında!');
+  const pkg = DIAMOND_PACKAGES.find(p => p.id === id);
+  const productId = IAP.DIAMONDS[id];
+  if (!pkg || !productId) { showToast('🛒 Paket bulunamadı'); return; }
+  Billing.purchase(productId).then((res) => {
+    _handlePurchaseResult(res, () => {
+      // add(), addReward() DEĞİL: satın alınan elmasa Plus'ın +%50
+      // çarpanı UYGULANMAZ. Çarpan kazanılan ödülleri büyütmek için var,
+      // satın alınan miktarı değil — aksi hâlde aynı paranın karşılığı
+      // aboneye farklı olurdu ve mağazadaki sayı yalan söylerdi.
+      DiamondSystem.add(pkg.amount + pkg.bonus, 'Satın alma tamamlandı!');
+      renderShop();
+    });
+  });
 }
 
 function watchAdForDiamonds() {
@@ -2820,6 +3206,12 @@ function showToast(msg) {
     // Gizlilik satırı yalnızca gerekiyorsa çıkıyor (bkz. renderSettings).
     if (AdConsent.privacyOptionsRequired()) renderSettings();
   });
+
+  // Satın alma katmanı: rıza akışıyla aynı desen — açılışta tetiklenir,
+  // BEKLENMEZ. init() abonelik durumunu mağazadan tazeliyor, yani cihaz
+  // değiştirmiş veya aboneliği bitmiş kullanıcının hakları ilk açılışta
+  // kendiliğinden doğruya oturuyor. Anahtar yoksa sessizce atlanır.
+  Billing.init();
 
   // Uygulama açılış sesi — soft bloom (müzik geçici olarak kapalı, bkz. playGame())
   document.addEventListener('click', function _firstTouch() {

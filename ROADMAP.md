@@ -451,6 +451,55 @@ sayaç korunmuş, Ana Sayfa çıkışı reklamlı.
 
 ---
 
+## Sprint 10 — RevenueCat: gerçek satın alma, mağazadan fiyat (2026-08-02)
+
+`purchasePlus()` bir toast'tı, `buyPackage()` da öyle. Artık ikisi de gerçek
+satın alma akışını çağırıyor; fiyatlar **mağazadan** geliyor.
+
+**Sürüm tuzağı üçüncü kez.** `@revenuecat/purchases-capacitor` varsayılanı
+(13.x) Capacitor 8 istiyor, bizde 7 var → **`^11` hattına sabitlendi** (11.3.2).
+splash-screen ve AdMob'da aynısı yaşandığı için artık bu bir kural sayılmalı:
+yeni bir Capacitor eklentisi kurulurken peer bağımlılığı ÖNCE bakılır.
+
+**Merkezî karar: `isActive()` senkron kaldı.** 14 çağrı yeri var ve dördü
+senkron sözleşmeli sistemlerin içinde (`AdBudget.canWatch`,
+`InterstitialAds.canShow`, `DiamondSystem.addReward`, `runRewardedAction`).
+Asenkrona çevirmek o dört sistemi ve dört harness'ı da yeniden yazmak
+olurdu. Bunun yerine `AdConsent`'te kurulan biçim: **asenkron kaynak, senkron
+okuyucu**. Sonuç: değişen çağrı yeri 0, kırılan harness 0.
+
+**Fiyatlar koddan tamamen çıktı.** `index.html`'deki üç `₺` ve
+`DIAMOND_PACKAGES`'taki dört `price` alanı silindi; `data-ph-price` sözleşmesi
+(`data-ph-avatar` ailesinin devamı) dolduruyor. Yıllık kartın "aylığa vurulmuş
+fiyat + tasarruf %" satırı bile **türetiliyor**. Mağazaya ulaşılamazsa nötr `—`
+gösteriliyor; eski sabit fiyata ASLA düşülmüyor.
+
+Elmas miktarları kodda kaldı: mağaza **fiyatın** doğruluk kaynağı, ekonominin
+değil. Satın alınan elmasa Plus çarpanı uygulanmıyor (`add()`, `addReward()`
+değil) — aynı paranın karşılığı aboneye farklı olsaydı mağazadaki sayı yalan
+söylerdi.
+
+**Cihaz doğrulaması — yapılabilenler yapıldı, gerçek satın alma BORÇ.**
+Play Billing sideload edilmiş debug APK'da çalışmıyor: Play track'i, Play'den
+kurulum, yüklenen anahtarla imza ve lisans test hesabı gerekiyor. Bu gerçek
+bir teknik kısıt, atlanmış bir adım değil — ama kapanmamış bir iş, ve Play
+Console kurulumu + imzalı AAB'den sonra ayrı bir turda yapılacak.
+Lisans test hesabı: **onur33360@gmail.com**.
+
+Cihazda (A51, 1.43.0) doğrulananlar: eklenti `Capacitor.Plugins.Purchases`
+olarak erişilebiliyor (paketleyicisiz desen), anahtar boşken uygulama normal
+çalışıyor, üç plan da `—` gösteriyor (bayat fiyat yok), geri yükleme satırı
+yerinde, ve mağaza biçiminde bir hak `_setFromStore`'a verildiğinde Premium
+faydalarının hepsi tetikleniyor (bütçe bypass, interstitial susuyor, tema
+açılıyor, `addReward` 10→15 iken `add` 10 kalıyor).
+
+Kalan tek eksik **RevenueCat API anahtarı** (`TODO(revenuecat)`) ve Play
+Console'da şu kimliklerle ürünlerin açılması: `plus_weekly` / `plus_monthly` /
+`plus_yearly` (entitlement `plus`), `diamonds_100` / `diamonds_550` /
+`diamonds_1800` / `diamonds_6500`, offering `default`.
+
+---
+
 ## Hedef
 
 Sadece yüksek FPS değil:

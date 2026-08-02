@@ -896,6 +896,67 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   Reason for the raise: five actions share one pool, so 3 left the player with no non-diamond
   option after two continues — at that size the pool stops being a choice and becomes a
   shortage. No text needed updating; every surface already reads `AdBudget.label()`.
+- **In-app purchases run through RevenueCat since 2026-08-02 — real code, but not yet
+  provable.** `@revenuecat/purchases-capacitor@^11` (11.3.2) is the fourth approved Capacitor
+  plugin. **Pin the v11 line**: 12.x and 13.x demand `@capacitor/core >= 8` against this
+  project's Capacitor 7 — the same trap already documented for `@capacitor/splash-screen` and
+  `@capacitor-community/admob`, now seen three times, so assume it for the *next* plugin too.
+  Access is `Capacitor.Plugins.Purchases` (`registerPlugin('Purchases')`), device-verified —
+  no bundler involved, same pattern as AdMob.
+  Seven things are load-bearing:
+  1. **`PlusSystem.isActive()` stayed SYNCHRONOUS and that is the central decision.** It has
+     14 call sites, four of them inside systems with synchronous contracts
+     (`AdBudget.canWatch`, `InterstitialAds.canShow`, `DiamondSystem.addReward`,
+     `runRewardedAction`). RevenueCat's entitlement API is async, so the shape is the one
+     `AdConsent` already established: **async source, sync reader**. RevenueCat is the truth;
+     `ph_plus` is its local snapshot, refreshed at boot, on purchase, on restore, and from
+     `customerInfoUpdate`. Not one call site changed and no harness broke.
+  2. **`_setFromStore(null)` does NOTHING, on purpose.** Missing information is not "no
+     entitlement" — a subscriber on a plane would otherwise lose what they paid for. Only a
+     *present* `customerInfo` with no active entitlement clears the snapshot.
+  3. **When info IS present, the store wins over everything**, including a locally
+     `activate()`d Plus. `activate()` survives only as the dev/test path (the four Node
+     harnesses build their Premium scenarios with it) and is marked `source:'local'`.
+  4. **No price is written anywhere in the repo.** `index.html` and `DIAMOND_PACKAGES` lost
+     their price strings; `Billing.priceFor()` fills `[data-ph-price]` elements — same
+     attribute contract as `data-ph-avatar` / `data-ph-ad-budget`. The yearly card's
+     "per-month + savings %" line is **derived** from the two numeric prices, never written.
+     When the store is unreachable the UI shows a neutral `—`, and **never falls back to an
+     old hardcoded number**: showing a wrong price is worse than showing none, because the
+     player assumes they will be charged what they see. `renderShop()` must call
+     `refreshPrices()` after its `innerHTML` rebuild, exactly like `AvatarSystem.updateUI()`.
+  5. **Diamond amounts stay in code; only prices come from the store.** The store is the
+     source of truth for *price*, not for the *economy* — renaming a Play Console product
+     must not move the game's diamond balance. `buyPackage()` grants with **`add()`, not
+     `addReward()`**: Plus's +50% multiplier applies to *earned* rewards, never to purchased
+     ones, or the same money would buy different amounts and the store's number would lie.
+  6. **`RC_API_KEY_ANDROID` is public by design — the `AD_IDS` rule is INVERTED here.** A
+     RevenueCat public SDK key is meant to ship inside the client and grants nothing on its
+     own (validation happens on Google's servers), so the real key belongs in the repo. It is
+     read through `Billing._apiKey()` rather than the constant directly, for the same reason
+     `econ()` exists: a top-level constant cannot be substituted, and the whole purchase path
+     would be untestable in the Node sandbox.
+  7. **The web path does NOT simulate purchases**, and this is the deliberate difference from
+     ads. A fake rewarded ad costs nothing; a fake purchase is a free-Plus door. Web says
+     "only in the app" and stops.
+  **Play Billing cannot be tested with a sideloaded debug APK** — it requires the app
+  published to a Play track, installed from Play, signed with the uploaded key, plus license
+  test accounts. So no real purchase has ever run: product ids, offerings and the sandbox
+  flow are **unverified** until Play Console setup + a signed AAB on internal testing.
+  Everything else *was* device-verified (plugin reachable, prices render as `—` with no key,
+  restore row present, and a store-shaped entitlement fed into `_setFromStore` correctly
+  triggers every Plus benefit: budget bypass, interstitial suppression, theme unlock,
+  `addReward` 10→15 while `add` stays 10). `tools/iap-test.js` pins the rest, including the
+  source scan that fails if any currency-and-digit string reappears in `core/app.js` or
+  `index.html`. License test account: `onur33360@gmail.com`.
+- **A single `Uncaught TypeError: … reading 'triggerEvent'` in logcat at boot is PRE-EXISTING
+  and not yours.** It fires before `rng.js`/`games.js`/`app.js` are even fetched, right after
+  Capacitor logs `App paused → App stopped → Saving instance state!` — the native bridge
+  dispatches an app-state event into a JS context that does not exist yet. Measured on both
+  `am start` and `monkey` launches, and **reproduced at HEAD with the RevenueCat plugin
+  removed entirely**, so it predates the purchase work. It is harmless (the app loads
+  normally afterwards). Don't spend an hour attributing it to whichever plugin you just
+  added — verify by building without it, which is how this was settled.
 - **Background music is globally disabled** behind `MUSIC_DISABLED` in `games.js`'s `GameAudio`, and `#btn-music` in `index.html` is hidden. The synthesized pad/beat engine underneath is intact and deliberately untouched — the existing composition read as tense rather than calm, so silence is the stage-appropriate choice until a new music system is designed. Don't "fix" `startMusic()` returning early.
 
 ---

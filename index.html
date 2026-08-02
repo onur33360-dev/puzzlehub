@@ -331,16 +331,19 @@
             <div class="plus-plan plan-yearly selected" onclick="selectPlan('yearly')" data-plan="yearly">
               <div class="plan-best">🏆 EN İYİ!</div>
               <span class="plan-name">Yıllık</span>
-              <span class="plan-price">₺299.99<small>/yıl</small></span>
-              <span class="plan-monthly">₺25/ay • %50 tasarruf</span>
+              <!-- Fiyatlar MAĞAZADAN geliyor (Billing.priceFor); burada sabit
+                   yazılmaz. Dönem eki (/yıl) markup'ta kalıyor: o ürünün
+                   tanımı, fiyatı değil. -->
+              <span class="plan-price"><span data-ph-price="plus_yearly">—</span><small>/yıl</small></span>
+              <span class="plan-monthly" data-ph-plan-note="yearly"></span>
             </div>
             <div class="plus-plan plan-monthly" onclick="selectPlan('monthly')" data-plan="monthly">
               <span class="plan-name">Aylık</span>
-              <span class="plan-price">₺49.99<small>/ay</small></span>
+              <span class="plan-price"><span data-ph-price="plus_monthly">—</span><small>/ay</small></span>
             </div>
             <div class="plus-plan plan-weekly" onclick="selectPlan('weekly')" data-plan="weekly">
               <span class="plan-name">Haftalık</span>
-              <span class="plan-price">₺19.99<small>/hafta</small></span>
+              <span class="plan-price"><span data-ph-price="plus_weekly">—</span><small>/hafta</small></span>
             </div>
           </div>
           
@@ -461,7 +464,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.42.0';
+    const APP_VERSION = '1.43.0';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile

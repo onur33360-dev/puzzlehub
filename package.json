@@ -1,6 +1,6 @@
 {
   "name": "puzzlehub",
-  "version": "1.42.0",
+  "version": "1.43.0",
   "private": true,
   "description": "PuzzleHub — Turkce, mobil-oncelikli casual oyun merkezi",
   "scripts": {
@@ -14,7 +14,8 @@
     "@capacitor-community/admob": "^7.2.0",
     "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0",
-    "@capacitor/splash-screen": "^7.0.5"
+    "@capacitor/splash-screen": "^7.0.5",
+    "@revenuecat/purchases-capacitor": "^11.3.2"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
