@@ -31,7 +31,7 @@ gerçek kaldıracı budur. Bu yüzden ağır oyunlar Canvas'a taşınıyor.
 
 | Katman | Render |
 |---|---|
-| Home / Discover / Leaderboard / Profile | DOM |
+| Home / Discover / İlerleme / Profile | DOM |
 | **Ağır oyunlar** — Block, Water Sort | **Canvas** |
 | Hafif oyunlar — Sudoku, Hafıza, Kelime, Labirent | DOM |
 
@@ -210,6 +210,144 @@ migration kapalıdır.
 
 ---
 
+## Sprint 5 — Kabuk, marka ve açılış ✅ (KAPANDI, 2026-07-30)
+
+Canvas hikâyesi kapandıktan sonra ilk kez **render dışı** bir sprint. Odak
+kabuğun görünüşü ve uygulamanın "kurulmuş bir ürün" gibi açılması.
+
+- **Kabuk paleti yenilendi**, üçüncü sekme SKORLAR → **İLERLEME** oldu.
+  Sekmenin *anahtarı* hâlâ `lider` — içerik değişti, anahtar değişmedi;
+  yeniden adlandırmak `switchTab`/`showScreen`/`__phHandleBack`'i aynı anda
+  değiştirmek demek ve liderlik tablosunun akıbeti kararlaşmadan getirisi yok.
+- **Ana Sayfa / İlerleme / Profil** sahibin mockup'ına birebir yeniden çizildi.
+  Mockup henüz var olmayan sistemlerin sayılarını gösteriyordu; bunlar
+  **bilerek statik** bırakıldı ve her biri kendini değiştirecek sistemi adıyla
+  anan bir `TODO:` yorumu taşıyor. (Bu borcun büyük kısmı Sprint 7'de kapandı.)
+- **Uygulama ikonu + açılış sahnesi** entegre edildi.
+
+### Açılış ekranı — iki bağımsız engel
+
+Android 12+ platformu açılış ekranını **kendisi** sahipleniyor ve
+`android:background="@drawable/splash"` yok sayılıyor. `@capacitor/splash-screen`
+de bundan kaçamıyor; üstelik plugin'in programatik `show()`'u da çizemiyor
+(görsel, çocuğu olmayan `WRAP_CONTENT` bir layout'un arka planı olarak
+veriliyor → yükseklik sıfır). İkisi de denendi ve ölçüldü.
+
+**Çözüm ikiye bölündü:** sahne **HTML**'de (`#ph-splash`), plugin yalnızca
+ikon fazını tutuyor (`launchAutoHide:false`). Sıra yük taşıyor — ikon tutulur →
+sahne gerçekten **boyanır** (`onload` + **çift** rAF) → sonra `hide()`.
+`onload` "çözüldü" demek, "çizildi" demek değil; tek kare sonra bırakılırsa
+ikon sahneden önce kalkıyor ve "iki kopuk ekran" hissi doğuyor.
+
+**Süre bilinçli olarak sabit 6 saniye** (`PH_SPLASH_TARGET_MS`), gerçek init
+~586 ms. Bar bilerek bekliyor. İki özellik yük taşıyor: süre bir **alt sınır**
+(bar bitmeden VE `__phAppReady` gelmeden kapanmıyor), ve `PH_SPLASH_MAX_MS`
+(7500) zorla kapatırken barı **önce %100'e boyuyor** — yoksa bir script hatası
+"donmuş animasyon" gibi görünürdü. Bar üssü 1.8; kübik 4.6 sn'de %99'a varıp
+son 1.4 saniyeyi orada geçiriyor ve donmuş okunuyordu.
+
+**Cihaz doğrulaması (A51, 2026-08-02):** sahne çiziliyor, bar %43 → %95 →
+`width:100%`, kapanış **6877 ms** — yani `PH_SPLASH_MAX_MS` acil yolu
+tetiklenmiyor, bar doğal olarak bitiyor.
+
+**Ders (build):** `colors.xml` içindeki bir yorumda **çift tire** (`--`) APK
+build'ini kırdı. XML yorumları `--` içeremez; hata mesajı bunu söylemiyor.
+
+---
+
+## Sprint 6 — Ekonomi ✅ (KAPANDI, 2026-07-31)
+
+Reklam/IAP **teslimi** hâlâ sahte (3 saniyelik yapay overlay), ama etrafındaki
+**kurallar gerçek** oldu. İkisini ayır: ödeme SDK'sı yazılmıyor, kurallar
+dürüst tutuluyor.
+
+- **Tek günlük reklam bütçesi** (`AdBudget`, 3/gün) — beş ödüllü aksiyonun
+  hepsi aynı havuzdan yiyor. Aksiyon başına ayrı sayaç bilerek YOK: bütçeyi
+  elmasa harcamak, elmas biriktirmeyi anlamlı kılan şeyin ta kendisi.
+- **`runRewardedAction` tek kapı.** `showForDiamonds`/`showForContinue`
+  bu yüzden **silindi** — `show()`'u doğrudan sarıyorlardı, yani bütçesiz yan
+  kapılardı. `RewardedAd.show()` bu kapının dışından asla çağrılmaz.
+- **Plus faydaları gerçek kod oldu**; +%50 çarpan yalnızca `addReward()`'da,
+  `add()` çarpansız — abonelik oyun içi ilerlemeyi (seviye ödülü +3)
+  hızlandırmıyor. "Erken Erişim" kaldırıldı: herkesi geciktirerek değer
+  üretiyordu.
+- Paylaşımlı **teklif modalı**; 2048'in kendi kopyası silindi. İki ayrı
+  yazılmış teklif penceresi, "arayüz sınır diyor ama kod sınırsız veriyor"
+  hatasının çıkış noktasıydı.
+
+---
+
+## Sprint 7 — İlerleme sistemleri ✅ (KAPANDI, 2026-08-01)
+
+Üç katman, üçü de aynı disiplinle: **oyun-özel kod yok, mevcut sayaçlardan
+türet, yeni takip yazma.**
+
+- **`GameEvents`** — 10 oyun tek kapıdan raporluyor. `game_won`/`game_lost`
+  yerine tek `game_ended` + `result` alanı; sebebi kaybetme durumu OLMAYAN
+  oyunlar (o gün Water Sort) — ayrı olaylarla yarı-entegre görünürlerdi.
+  Üç değişmez: en fazla bir açık tur, sahipsiz `game_ended` sayaçlara
+  dokunmaz, reklamla devam turu **yeniden açar**, yeni tur saymaz.
+- **`DailyQuests`** — üçüncü günlük-sıfırlanan sistem; `StreakSystem`/
+  `AdBudget` desenini birebir kopyalıyor, çünkü "gün"ün üç ayrı tanımı gece
+  yarısı desenkron olurdu. Günlük 45💎. Üçüncü görev "kişisel rekorunu
+  geliştir"den **"1 oyun kazan"a** çevrildi: eskisi evrensel değildi (Arrow ve
+  Jigsaw'da skor kavramı yok).
+- **`Badges`** — beş evrensel rozet, 115💎. Yeniden giriş koruması yük
+  taşıyor: ödeme `addReward()` → `add()` → `check()`'e geri dönüyor, çünkü
+  elmas kazanmak da bir rozet koşulu.
+
+### Bu sprintin iki dersi
+
+- **Ödül harness'leri birbirini kirletir.** Rozetler eklenince 11 görev testi
+  kırıldı; sebep kod değil, ikisinin de aynı olaylardan beslenip elmas
+  ödemesiydi. Her araç artık diğerini "bitmiş" tohumluyor, görev aracı
+  izolasyonun tuttuğunu ayrıca doğruluyor.
+- **Bir testin kırılması iyi haber olabilir.** `game-events-test.js`
+  "waterSort yalnızca 'won' yayınlar" iddiasını sabitliyordu; Sprint 8'de
+  bilerek kırıldı ve kararı yeniden konuşturdu. Testin varlık sebebi buydu —
+  silinmedi, gerekçesiyle güncellendi.
+
+---
+
+## Sprint 8 — Oyun tasarımı ve dayanıklılık ✅ (KAPANDI, 2026-08-02)
+
+- **Water Sort hamle limiti** — oyunun **ilk kaybetme durumu**. Limit
+  `5 × renk`, ve sayı ölçüldü: seviye başına 30 tahtanın gerçek optimali
+  IDA* ile çıkarıldı (kabul edilebilir sezgisel: bir hamle toplam renk-koşusu
+  sayısını en fazla 1 azaltır). Uyum neredeyse doğrusal (p90 ≈ 3.5 × renk),
+  bu yüzden `5 × renk` her kademede sabit **1.47 × p90**. Tahta başına optimal
+  çalışma zamanında denendi ve **reddedildi** — 8 renkte dakikalar sürüyor,
+  seviye üretimi ana ipliği bloke ediyor (Arrow'un `staleMax` dersi).
+  Yük taşıyan kural: **undo hamleyi iade etmez**; etseydi undo sınırsız ve
+  ücretsiz olduğu için limit hiç dolmaz, kaybetme ekranı dekoratif kalırdı.
+- **Jigsaw ağ bağımsızlığı** — ağ yokken 8/8 karo büyük-numara yedeğine
+  düşüyordu. Üç denemeli geri çekilme *geçici* kesintiyi çözer, olmayan ağı
+  çözmez. 6 görsel APK'ya gömüldü (~1.1 MB; APK 14.16 → 15.28 MB) ve yedek
+  bir **zincire** dönüştü: uzak seçim üç denemeyi tüketirse yerel havuza
+  düşülüyor, yani ilk altı değil **her** seviye ağsız hayatta kalıyor.
+
+---
+
+## Doğrulama altyapısı (Sprint 6-8'de oluştu)
+
+`tools/` artık bir test takımı taşıyor — hepsi plain Node, sıfır bağımlılık,
+`tools/dom-sandbox.js` üzerinde vm + DOM stub ile çalışıyor:
+
+| Araç | Neyi koruyor |
+|---|---|
+| `game-events-test.js` | olay sözleşmesi, kaynak taraması, 10 oyunun canlı `init`'i |
+| `daily-quests-test.js` | günlük sıfırlama, tek-ödeme, gece yarısı fixture'ı |
+| `badges-test.js` | tek-seferlik ödeme, Plus çarpanı, yeniden giriş |
+| `watersort-moves-test.js` | limit formülünün ölçümle tutarlılığı, devam ekonomisi |
+| `jigsaw-images-test.js` | yerel havuz dosyaları + dağıtım sözleşmesi |
+| `level-metrics.js` | Arrow seviye tasarımı (Sprint öncesi) |
+
+Ortak desen: **katmanlardan biri her zaman kaynağı tarar.** "Oyun-özel kod
+yok" ya da "bedel EconomyConfig'ten okunuyor" gibi mimari iddialar ancak
+kaynağa bakarak kanıtlanır; çalışma zamanı testi bunları göremez.
+
+---
+
 ## Sprint kapanış kuralı
 
 Hiçbir sprint **push edilmeden** bırakılmaz. Sıra:
@@ -228,6 +366,41 @@ değil **kuyruğu (P90/P95/P99)** raporla. Ayrıntı: `docs/03_PERFORMANCE_RULES
 Tek istisna cihaz değil **ölçüm aracıdır**: uygulama içi FPS overlay kendi rAF
 döngüsünü ve `backdrop-filter`'ını çalıştırdığı için ölçüm sırasında KAPALI
 olmalı.
+
+**Açık boşluk (2026-08-02):** Sprint 5-8 boyunca cihaz testleri **yalnızca
+Galaxy A51'de** yapıldı; zincirdeki **Huawei Y6 adımı atlandı.** Bu sprintler
+render değil sistem/ürün işiydi (ekonomi, olaylar, görevler, rozetler), yani
+düşük segment riski düşüktü — ama kural atlandıysa yazıldığı yerde de
+görünmeli. Y6 ile bir kez toplu doğrulama borç olarak duruyor.
+
+---
+
+## Sıradaki — AdMob (gerçek ödüllü reklam)
+
+Sahte 3 saniyelik overlay'in yerine gerçek SDK. Entegrasyon yüzeyi küçük,
+çünkü Sprint 6 doğru kurulmuştu: **`runRewardedAction` tek kapı**,
+`RewardedAd.show()` tek sahte parça. Bütçe, Plus muafiyeti ve
+"tamamlanınca düş" kuralları DEĞİŞMEYECEK.
+
+Baştan konulan kurallar:
+
+1. **Kod boyunca yalnızca Google'ın resmî TEST reklam kimlikleri.** Gerçek
+   birim kimlikleri hiçbir committe geçmeyecek. Geliştirme sırasında kendi
+   gerçek birimlerini kullanmak geçersiz trafik sayılır ve hesabı askıya
+   aldırabilir — test kimliklerinin varlık sebebi tam olarak bu.
+2. **Gerçek kimlikler yayına çıkarken, ayrı ve son bir adımda** girilir.
+3. **Geliştirme sırasında gerçek reklam tıklanmaz/tamamlanmaz.**
+4. Plugin `@capacitor-community/admob@^7`'ye **sabitlenir.** npm varsayılan
+   olarak Capacitor 8 isteyen bir majöre çözer; runtime Capacitor 7.
+   `--force`/`--legacy-peer-deps` ile geçilmez — bu, splash-screen
+   plugin'inde bir kez öğrenilmiş tuzağın aynısı.
+
+Sahibin paralel yürüttüğü, kod tarafından bağımsız adımlar: AdMob hesabı,
+uygulama kaydı, ödüllü birim, ödeme/vergi bilgileri, ve **kullanıcı rızası
+(UMP/GDPR)** — sonuncusu SDK'dan ayrı bir iş.
+
+**Bu faz öncekilerden farklı:** hatanın bedeli artık kodda kalmıyor, hesap
+askıya alınmasına kadar gidebiliyor.
 
 ---
 
