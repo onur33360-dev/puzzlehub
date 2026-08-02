@@ -808,6 +808,40 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   reward lands only after completion (budget 3→2→1→0, +10💎 each), and at budget 0 no ad
   opens at all. **CDP gotcha:** the SDK spawns its own `googleads…sdk-core` DevTools
   targets, so `/json/list` returns several — pick the `localhost` one or tooling breaks.
+- **Ad consent (UMP/GDPR) runs at boot and gates every ad — `AdConsent` in `core/app.js`
+  (2026-08-02).** Serving ads to an EEA/UK user without a consent flow is a legal risk that
+  is entirely separate from AdMob account suspension, which is why this landed immediately
+  after the SDK rather than "later".
+  Five things are load-bearing:
+  1. **We never guess the region.** `requestConsentInfo()` runs Google's own logic and it
+     decides whether a form is needed. Showing nothing outside the covered regions is the
+     **correct** outcome, not a failure — device-verified: in Turkey the status comes back
+     `NOT_REQUIRED`, `isConsentFormAvailable:false`, and no form appears.
+  2. **`canRequestAds` defaults to NO when the info is missing.** If the plugin is absent,
+     the network is down, or the call throws, we do not know the region — and requesting an
+     ad then means possibly serving one to someone who needed to consent first. The cost of
+     the safe default is one unshown ad.
+  3. **Consent is awaited inside `RewardedAd._showNative`, before `initialize()`.** Boot
+     kicks `AdConsent.ensure()` off and the ad path awaits the *same* promise, so the first
+     ad request can never overtake consent. `runRewardedAction` was **not** touched — the
+     gate still owns budget/Plus/consume, and it contains no consent logic.
+  4. **"Do not consent" does not mean "no ads".** Device-verified with the EEA simulation:
+     after refusing, the status is `OBTAINED` with `canRequestAds:true` and
+     `privacyOptionsRequirementStatus:REQUIRED`, and the SDK stores
+     `IABTCF_PurposeConsents=00000000000` with `IABTCF_gdprApplies=1` — i.e. it keeps
+     serving **non-personalized** ads and transmits the refusal itself. We do not implement
+     the NPA flag by hand; we verified the SDK does it.
+  5. **The debug geography lives ONLY in `localStorage.ph_ump_debug`** (`{"geo":1,"ids":[…]}`),
+     never in the repo — a hardcoded EEA simulation could ship. `debugGeography` is honoured
+     only for device hashes registered in the same call, so a real user cannot trigger it.
+     The hash is printed by the SDK: `logcat | grep TestDeviceHashedId`.
+  The Profil settings list grows a **"🔒 Gizlilik Seçenekleri"** row only while
+  `privacyOptionsRequirementStatus` is `REQUIRED` — in the EEA users must be able to change
+  their choice later; elsewhere the row would open a form that does not exist.
+  `tools/ad-consent-test.js` pins the logic (fake plugin injected into the sandbox): form
+  shown only when required, ads blocked without consent, `initialize` never reached in that
+  case, app still fully usable after a refusal, and a source scan proving the gate was not
+  touched and consent is never assumed.
 - **Background music is globally disabled** behind `MUSIC_DISABLED` in `games.js`'s `GameAudio`, and `#btn-music` in `index.html` is hidden. The synthesized pad/beat engine underneath is intact and deliberately untouched — the existing composition read as tense rather than calm, so silence is the stage-appropriate choice until a new music system is designed. Don't "fix" `startMusic()` returning early.
 
 ---

@@ -1105,6 +1105,123 @@ function adMobPlugin() {
   return (C.Plugins && C.Plugins.AdMob) || null;
 }
 
+// ==================== REKLAM RIZASI (UMP / GDPR) ====================
+//
+// AB/İngiltere kullanıcısına rıza akışı göstermeden reklam istemek gerçek
+// bir GDPR ihlali riski — AdMob hesap askısından AYRI, yasal bir risk.
+//
+// Bölgeyi BİZ TAHMİN ETMİYORUZ. `requestConsentInfo()` Google'ın kendi
+// mantığını çalıştırıyor ve "form gerekli mi" sorusunu o cevaplıyor;
+// kapsam dışı bir bölgede hiçbir şey gösterilmemesi NORMAL, hata değil.
+//
+// Enum'lar ham değer olarak yazılı: paketleyici yok (CLAUDE.md §1), yani
+// paketin AdmobConsentStatus / AdmobConsentDebugGeography enum'ları
+// çalışma zamanında erişilemez. Değerler eklentinin kendi enum
+// dosyalarından birebir alındı.
+const UMP_STATUS = {
+  notRequired: 'NOT_REQUIRED',
+  obtained:    'OBTAINED',
+  required:    'REQUIRED',
+  unknown:     'UNKNOWN',
+};
+const UMP_GEO = { disabled: 0, eea: 1, us: 3, other: 4 };
+
+const AdConsent = {
+  _promise: null,
+  _info: null,
+
+  info() { return this._info; },
+
+  // Reklam istenebilir mi? Google'ın kendi cevabı (`canRequestAds`).
+  // Bilgi HİÇ alınamadıysa (eklenti yok, ağ yok, çağrı patladı) cevap
+  // HAYIR: bölgeyi bilmeden reklam istemek, rıza gerekiyor olabilecek
+  // bir kullanıcıya rızasız reklam göstermek demek. Maliyeti yalnızca
+  // bir reklamın gösterilmemesi; karşılığı yasal risk.
+  canRequestAds() {
+    return !!(this._info && this._info.canRequestAds);
+  },
+
+  // AB'de kullanıcının rızasını SONRADAN değiştirebilmesi zorunlu.
+  privacyOptionsRequired() {
+    return !!(this._info &&
+              this._info.privacyOptionsRequirementStatus === UMP_STATUS.required);
+  },
+
+  // Hata ayıklama kapısı — YALNIZCA localStorage'da açıkça varsa çalışır.
+  // Depoda sabit bir AB simülasyonu YOK: test yapılandırması yayına
+  // sızmasın. Ayrıca debugGeography Google tarafında yalnızca KAYITLI
+  // test cihazlarında geçerli, yani gerçek kullanıcı bunu kullanamaz.
+  //   localStorage.ph_ump_debug = '{"geo":1,"ids":["CIHAZ_HASH"]}'
+  _debugOptions() {
+    try {
+      const raw = localStorage.getItem('ph_ump_debug');
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      const o = {};
+      if (typeof d.geo === 'number') o.debugGeography = d.geo;
+      if (Array.isArray(d.ids) && d.ids.length) o.testDeviceIdentifiers = d.ids;
+      return Object.keys(o).length ? o : null;
+    } catch (e) { return null; }
+  },
+
+  // Bir kez çalışır, sonucu saklanır. İLK REKLAM İSTEĞİNDEN ÖNCE
+  // tamamlanmış olması gerektiği için hem açılışta çağrılıyor hem de
+  // reklam yolunda bekleniyor (ikisi aynı promise'i paylaşıyor).
+  ensure(adArg) {
+    if (this._promise) return this._promise;
+    const ad = adArg || adMobPlugin();
+    if (!ad || !ad.requestConsentInfo) {
+      // Web/PWA: SDK yok, simülasyon çalışıyor, rızanın konusu yok.
+      this._promise = Promise.resolve(null);
+      return this._promise;
+    }
+    const opts = this._debugOptions() || {};
+    this._promise = ad.requestConsentInfo(opts)
+      .then((info) => {
+        this._info = info || null;
+        // Form YALNIZCA gerekiyorsa ve mevcutsa gösterilir.
+        const need = info && info.status === UMP_STATUS.required &&
+                     info.isConsentFormAvailable !== false;
+        if (!need) return info;
+        return ad.showConsentForm().then((after) => {
+          // showConsentForm güncel bilgiyi döndürüyor; kullanıcı reddetmiş
+          // olabilir, o da geçerli bir sonuç — akış devam eder.
+          this._info = after || this._info;
+          return this._info;
+        });
+      })
+      .catch((e) => {
+        // Rıza alınamadıysa reklam gösterilmez ama UYGULAMA ÇALIŞMAYA
+        // DEVAM EDER: menüler, oyunlar, elmas harcama etkilenmez.
+        if (typeof console !== 'undefined') console.warn('[UMP] ' + (e && e.message || e));
+        this._info = null;
+        return null;
+      });
+    return this._promise;
+  },
+
+  // Profil'deki "Gizlilik Seçenekleri" satırı buraya bağlı.
+  showPrivacyOptions() {
+    const ad = adMobPlugin();
+    if (!ad || !ad.showPrivacyOptionsForm) { showToast('Bu cihazda kullanılamıyor'); return; }
+    ad.showPrivacyOptionsForm()
+      .then(() => ad.requestConsentInfo(this._debugOptions() || {}))
+      .then((info) => { if (info) this._info = info; renderSettings(); })
+      .catch((e) => {
+        showToast('Gizlilik formu açılamadı');
+        if (typeof console !== 'undefined') console.warn('[UMP] ' + (e && e.message || e));
+      });
+  },
+
+  // Yalnızca test için: rıza durumunu sıfırlar ki form tekrar çıksın.
+  reset() {
+    const ad = adMobPlugin();
+    if (!ad || !ad.resetConsentInfo) return Promise.resolve(false);
+    this._promise = null; this._info = null;
+    return ad.resetConsentInfo().then(() => true);
+  },
+};
+
 const RewardedAd = {
   _initPromise: null,
 
@@ -1137,10 +1254,10 @@ const RewardedAd = {
     // Reklam gösterilemezse oyuncu ASILI KALMAZ; ödül de verilmez, bütçe de
     // düşmez. Simülasyona geri düşmek cazip ama yanlış olurdu: reklamsız
     // ödül dağıtmak, yayında bedava ödül açığı demek.
-    const fail = (why) => {
+    const fail = (why, msg) => {
       if (settled) return;
       settled = true; cleanup();
-      showToast('📺 Reklam şu an yüklenemedi, sonra tekrar dene');
+      showToast(msg || '📺 Reklam şu an yüklenemedi, sonra tekrar dene');
       if (typeof console !== 'undefined') console.warn('[AdMob] ' + why);
     };
     const finish = () => {
@@ -1150,19 +1267,31 @@ const RewardedAd = {
       else if (!earned) showToast('📺 Ödül için reklamı sonuna kadar izlemelisin');
     };
 
-    this._ensureInit(ad).then(() => Promise.all([
-      ad.addListener(AD_EV.rewarded, () => { earned = true; }),
-      ad.addListener(AD_EV.dismissed, () => finish()),
-      ad.addListener(AD_EV.failedToShow, () => fail('gosterilemedi')),
-      ad.addListener(AD_EV.failedToLoad, () => fail('yuklenemedi')),
-    ])).then((handles) => {
-      subs = handles;
-      return ad.prepareRewardVideoAd({
-        adId: AD_IDS.rewardedAndroid,
-        isTesting: true,            // demo birimiyle birlikte ikinci emniyet
-      });
-    }).then(() => ad.showRewardVideoAd())
-      .catch((e) => fail(e && e.message ? e.message : String(e)));
+    // RIZA ÖNCE. Açılışta zaten başlatıldı; burada aynı promise bekleniyor,
+    // yani ilk reklam isteği rıza çözülmeden ASLA gitmiyor. Google'ın
+    // cevabı hayırsa (kapsam içi bölge + rıza yok) istek hiç yapılmıyor.
+    AdConsent.ensure(ad).then(() => {
+      if (!AdConsent.canRequestAds()) {
+        fail('riza yok (canRequestAds=false)',
+             '📺 Reklam gösterilemiyor — gizlilik tercihlerini Profil’den değiştirebilirsin');
+        return null;
+      }
+      return this._ensureInit(ad)
+        .then(() => Promise.all([
+          ad.addListener(AD_EV.rewarded, () => { earned = true; }),
+          ad.addListener(AD_EV.dismissed, () => finish()),
+          ad.addListener(AD_EV.failedToShow, () => fail('gosterilemedi')),
+          ad.addListener(AD_EV.failedToLoad, () => fail('yuklenemedi')),
+        ]))
+        .then((handles) => {
+          subs = handles;
+          return ad.prepareRewardVideoAd({
+            adId: AD_IDS.rewardedAndroid,
+            isTesting: true,        // demo birimiyle birlikte ikinci emniyet
+          });
+        })
+        .then(() => ad.showRewardVideoAd());
+    }).catch((e) => fail(e && e.message ? e.message : String(e)));
   },
 
   show(reward, onComplete) {
@@ -1983,7 +2112,15 @@ function renderLeaderboard() {
 function renderSettings() {
   const container = document.getElementById('settings-list');
   if (!container) return;
-  container.innerHTML = SETTINGS.map((s, i) => {
+  // Gizlilik Seçenekleri satırı KOŞULLU: AB'de kullanıcının rızasını
+  // sonradan değiştirebilmesi zorunlu, kapsam dışı bölgede ise böyle bir
+  // satır göstermek anlamsız (ve Google formu da açılmaz). Kararı biz
+  // vermiyoruz — privacyOptionsRequirementStatus veriyor.
+  const rows = (typeof AdConsent !== 'undefined' && AdConsent.privacyOptionsRequired())
+    ? SETTINGS.concat([{ icon:'🔒', label:'Gizlilik Seçenekleri',
+                         fn:'AdConsent.showPrivacyOptions()' }])
+    : SETTINGS;
+  container.innerHTML = rows.map((s, i) => {
     // fn varsa doğrudan çalıştırılır; yoksa action toast olarak gösterilir.
     const act = s.fn ? s.fn : `showToast('${s.action}')`;
     return `
@@ -2393,6 +2530,16 @@ function showToast(msg) {
   // Açılışta bir kez: koşullar saf olduğu için, tetikleyicisi kaçmış bir
   // rozet (ör. sistem kurulmadan önce oynanmış oyunlar) burada verilir.
   Badges.check();
+
+  // Reklam rızası: İLK reklam isteğinden önce başlasın diye açılışta
+  // tetikleniyor. BEKLENMİYOR — akış bloklanmaz; rıza formu Google'ın
+  // kendi katmanında açılır ve uygulama arkasında normal çalışır.
+  // Reklam yolu aynı promise'i beklediği için sıralama yine garanti.
+  // Kapsam dışı bölgede hiçbir şey görünmez; bu beklenen davranış.
+  AdConsent.ensure().then(() => {
+    // Gizlilik satırı yalnızca gerekiyorsa çıkıyor (bkz. renderSettings).
+    if (AdConsent.privacyOptionsRequired()) renderSettings();
+  });
 
   // Uygulama açılış sesi — soft bloom (müzik geçici olarak kapalı, bkz. playGame())
   document.addEventListener('click', function _firstTouch() {
