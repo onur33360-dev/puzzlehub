@@ -353,7 +353,7 @@ kaynağa bakarak kanıtlanır; çalışma zamanı testi bunları göremez.
 Hiçbir sprint **push edilmeden** bırakılmaz. Sıra:
 
 ```
-APK build → gerçek cihaz testi → Huawei Y6 testi → commit → push
+APK build → gerçek cihaz testi (Galaxy A51) → commit → push
 ```
 
 Ölçüm yaparken **termal durum normalize EDİLMEZ** (2026-07-28'de değişti).
@@ -367,11 +367,14 @@ Tek istisna cihaz değil **ölçüm aracıdır**: uygulama içi FPS overlay kend
 döngüsünü ve `backdrop-filter`'ını çalıştırdığı için ölçüm sırasında KAPALI
 olmalı.
 
-**Açık boşluk (2026-08-02):** Sprint 5-8 boyunca cihaz testleri **yalnızca
-Galaxy A51'de** yapıldı; zincirdeki **Huawei Y6 adımı atlandı.** Bu sprintler
-render değil sistem/ürün işiydi (ekonomi, olaylar, görevler, rozetler), yani
-düşük segment riski düşüktü — ama kural atlandıysa yazıldığı yerde de
-görünmeli. Y6 ile bir kez toplu doğrulama borç olarak duruyor.
+**Huawei Y6 adımı KAPSAM DIŞI (2026-08-02, sahip kararı).** Zincirde eskiden
+ikinci bir cihaz testi vardı; o cihaz artık test için kullanılmıyor, dolayısıyla
+kural tek cihaza (Galaxy A51) indirildi. Sprint 5-8'de Y6 testinin yapılmamış
+olması bu yüzden **kapanmamış bir iş değil** — geriye dönük de kapsam dışı.
+Y6'da yapılmış eski **ölçümler** geçerliliğini koruyor ve kod yorumlarında
+duruyor (`components.css` blur/blend kayıtları, `games.js` `pickRenderScale`
+zayıf-cihaz kademesi); onlar gerçekten alınmış sayılar ve düşük segment
+bütçesinin gerekçesi — silinmedi, silinmemeli.
 
 ---
 
@@ -437,10 +440,14 @@ sayaç sıfırlanmadan), **ödüllü reklam sonrası zamanlayıcı sıfırlama**
 izliyor. En değerli iki iddiası koda değil gerekçeye ait: her eksenin **tek
 başına** engellediği, ve Keşfet muafiyetinin sayacı **tüketmediği**.
 
-**Cihaz doğrulaması bu sprintte BORÇ.** A51 oturum boyunca adb'de görünmedi
-(bilinen aralıklı USB arızası), bu yüzden dört senaryo — 3 turdan az, 3 tur +
-3 dakika, ödüllü-hemen-ardından, Premium — henüz cihazda koşulmadı. Y6 borcu
-da duruyor.
+**Cihaz doğrulaması TAMAM** (A51, APK 1.42.0, gerçek AdMob test birimi). İki
+tur sonrası reklam yok; üçüncü çıkışta gerçek interstitial açıldı ve kapanınca
+sayaç sıfırlandı. Kritik olan iki eksen kanıtı: **3 tur tamam ama 27 saniye**
+geçmişken reklam gelmedi, 227 saniye sonra geldi. Ödüllü reklam tamamlanınca
+zamanlayıcı sıfırlandı (elmas 30→40, bütçe 7/8, tur sayacı bozulmadan) ve
+hemen ardındaki gerçek çıkışta reklam çıkmadı. Premium'da 12 tur boyunca hiç.
+Muafiyetin A/B kanıtı: **aynı sayaç durumunda** Keşfet çıkışı reklamsız ve
+sayaç korunmuş, Ana Sayfa çıkışı reklamlı.
 
 ---
 

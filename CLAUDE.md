@@ -966,8 +966,12 @@ Reopen the migration only for a critical regression.
 requirements · 6. New game development.
 
 **Roadmap lives in `ROADMAP.md`** — read it for sprint history. It also carries
-the sprint-closing rule (build → device test → Y6 test → commit → push). Note
-that its thermal-measurement rule is superseded — see the thermal bullet in §5.
+the sprint-closing rule (build → device test on the Galaxy A51 → commit → push).
+The chain used to have a second Huawei Y6 pass; that device is **no longer used
+for testing** and the step was dropped by owner decision on 2026-08-02 — its
+absence in past sprints is a scope decision, not an open gap. Y6 *measurements*
+already recorded in code comments stay valid. Note that ROADMAP's
+thermal-measurement rule is superseded — see the thermal bullet in §5.
 Beyond that:
 - Mocked systems (ads, IAP, leaderboard, Plus validation) are correct-for-now. Don't silently "complete" or productionize them.
   **Amended 2026-07-30:** the *delivery* of ads/IAP is still mocked (the 3-second fake video,
