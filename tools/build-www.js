@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* ============================================================
-   PuzzleHub — www/ derleyicisi
+   SlySwipe — www/ derleyicisi
    ============================================================
    NE YAPAR: yayina giden dosyalari www/ altina KOPYALAR. Hepsi bu.
    Derleme, paketleme, donusturme yok — bu bir bundler DEGIL.

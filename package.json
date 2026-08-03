@@ -1,8 +1,8 @@
 {
-  "name": "puzzlehub",
-  "version": "1.43.0",
+  "name": "slyswipe",
+  "version": "1.44.0",
   "private": true,
-  "description": "PuzzleHub — Turkce, mobil-oncelikli casual oyun merkezi",
+  "description": "SlySwipe — Turkce, mobil-oncelikli casual oyun merkezi",
   "scripts": {
     "build": "node tools/build-www.js",
     "sync": "npm run build && cap sync android",

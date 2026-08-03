@@ -1,6 +1,6 @@
 # 05_GAME_DEVELOPMENT.md
 
-# PuzzleHub Game Development Guide
+# SlySwipe Game Development Guide
 
 ## Goal
 

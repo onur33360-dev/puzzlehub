@@ -1,6 +1,6 @@
 # ROADMAP
 
-PuzzleHub'ın sprint planı. `CLAUDE.md` "ne" ve "neden"i anlatır; bu dosya **sıradaki
+SlySwipe'ın sprint planı. `CLAUDE.md` "ne" ve "neden"i anlatır; bu dosya **sıradaki
 işi** anlatır. Bir sprint bitince buradaki durumu güncelle — kod ile bu dosya
 çelişirse kod haklıdır, dosyayı düzelt.
 
@@ -357,7 +357,7 @@ APK build → gerçek cihaz testi (Galaxy A51) → commit → push
 ```
 
 Ölçüm yaparken **termal durum normalize EDİLMEZ** (2026-07-28'de değişti).
-PuzzleHub laboratuvar koşuluna değil gerçek oynanışa göre optimize ediliyor;
+SlySwipe laboratuvar koşuluna değil gerçek oynanışa göre optimize ediliyor;
 cihaz normal kullanımda throttling'e giriyorsa bu oyuncunun deneyiminin bir
 parçasıdır ve sayıya dahildir. Throttled bir turu atma, soğutup tekrarlama —
 `dumpsys thermalservice` değerini başta ve sonda **kaydet**, ve ortalamayı
@@ -508,6 +508,53 @@ Kalan eksikler:
    `diamonds_6500`, offering `default`.
 3. **İmzalı AAB + internal testing track** — bugün yalnızca debug imzası var,
    yani release keystore yapılandırması da bu adımın parçası.
+
+---
+
+## Sprint 11 — Marka: PuzzleHub → SlySwipe (2026-08-03)
+
+**Neden şimdi:** paket kimliği Play Console'a ilk yükleme yapıldığı anda
+**kalıcı** hale gelir, bir daha asla değişmez. Uygulama henüz hiç
+kaydedilmemişti — yani bu iş için son fırsat buydu. Sıra kasıtlı: rebrand
+bitmeden Play Console'a hiçbir kayıt/yükleme yapılmadı.
+
+`com.puzzlehub.app` → **`com.skyroonlabs.slyswipe`**, "PuzzleHub" → **"SlySwipe"**.
+
+**Paket kimliği dört yerde ve dördü birden değişmek zorunda:**
+`capacitor.config.json` (`appId`), `android/app/build.gradle` (`namespace` **ve**
+`applicationId` — ayrı iki anahtar, biri diğerinden türemiyor),
+`res/values/strings.xml` (`package_name` + `custom_url_scheme`) ve **java kaynak
+dizininin kendisi** (`java/com/puzzlehub/app/` → `java/com/skyroonlabs/slyswipe/`,
+gerçek `git mv` + `MainActivity.java`'daki `package` satırı).
+`AndroidManifest.xml` elle düzenlenmedi: `.MainActivity` `namespace`'e göreli,
+FileProvider yetkilisi de `${applicationId}` — ikisi de kendiliğinden takip etti.
+
+**İsim 42 dosyada değişti**, ama iki şeye kasıtlı DOKUNULMADI:
+- `PuzzleGames`, `blockPuzzle` gibi tanımlayıcılar **motor isimlendirmesidir**,
+  marka değil.
+- `ph_` localStorage öneki duruyor. Yeniden adlandırmak mevcut her oyuncunun
+  elmasını, serisini, rozetlerini ve Plus anlık görüntüsünü öksüz bırakırdı —
+  `gh_` önekiyle aynı kural, göç planı olmadan olmaz.
+
+Ürün kimlikleri (`plus_*`, `diamonds_*`) ve AdMob test birimleri paket
+kimliğinden bağımsız; el sürülmedi.
+
+**Splash: asıl tuzak.** Görsel 11 dosyada duruyor ama modern telefonun
+gerçekten gösterdiği tek dosya `assets/icons/splash-hero.jpg` (DOM sahnesi).
+10 density PNG'si yalnızca Android ≤11'e ulaşıyor — yani sadece onları
+değiştirmek "bitti" gibi görünür ve test cihazında hiçbir şeyi değiştirmez.
+Sahibin gönderdiği 5 portre PNG'si yerine kondu, `splash-hero.jpg` xxxhdpi'den
+`sharp` ile yeniden üretildi (852×1846, `quality:86, mozjpeg` ≈ 171 KB —
+dosya SW precache'inde, boyut her sürüm bump'ında yeniden iniyor).
+Uygulama ikonu değişmedi; `🧩` amblemi ve `<title>`'daki `🧩` de şimdilik duruyor
+(yeni "S" kimliğiyle kalıp kalmayacağı ürün kararı, arama-değiştirme işi değil).
+
+`APP_VERSION` 1.43.0 → **1.44.0** (splash-hero.jpg aynı isimle değiştiği için
+bump zorunlu, yoksa web kullanıcısı eski PUZZLEHUB sahnesini görmeye devam eder).
+
+Doğrulama: `npm run build` geçti, 8 Node harness'ının tamamı geçti, debug APK
+üretildi ve `output-metadata.json` `applicationId: com.skyroonlabs.slyswipe`
+diyor.
 
 ---
 

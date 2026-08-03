@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Jigsaw Görsel Havuzu Doğrulama Aracı
+//  SlySwipe — Jigsaw Görsel Havuzu Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 // Yerel garanti havuzunun (2026-08-02) sağlam kaldığını doğrular.
 //
@@ -32,7 +32,7 @@ const s = makeSandbox();
 const eng = s.get('PuzzleGames.jigsawCard.engine');
 const POOL = eng.IMAGE_POOL;
 
-console.log('PuzzleHub — Jigsaw Görsel Havuzu Doğrulaması');
+console.log('SlySwipe — Jigsaw Görsel Havuzu Doğrulaması');
 
 // ───────── 1. HAVUZ BÜTÜNLÜĞÜ ─────────
 console.log('\n1. HAVUZ');

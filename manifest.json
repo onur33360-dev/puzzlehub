@@ -1,7 +1,7 @@
 {
-  "name": "PuzzleHub",
-  "short_name": "PuzzleHub",
-  "description": "PuzzleHub — Rahatlatıcı puzzle oyunları!",
+  "name": "SlySwipe",
+  "short_name": "SlySwipe",
+  "description": "SlySwipe — Rahatlatıcı puzzle oyunları!",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

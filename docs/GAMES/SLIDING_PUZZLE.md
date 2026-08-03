@@ -3,7 +3,7 @@
 Per-game specification. Only what is **genuinely novel** about this game is documented
 here; everything else uses the platform systems unmodified (see `DESIGN_SYSTEM.md` §24).
 
-Built in phases: **1** engine · **2** image + level system · **3** PuzzleHub theme ·
+Built in phases: **1** engine · **2** image + level system · **3** SlySwipe theme ·
 **4** polish · **5** content & scale. Phases 1–2 are done.
 
 ---
@@ -89,7 +89,7 @@ characters is acceptable **provided there is no nudity**. Two practical conseque
 and both are the owner's call to accept:
 
 1. **It changes the whole app's store rating, not just this game.** Google Play and the App
-   Store rate suggestive content into a higher age band, and PuzzleHub ships as one app —
+   Store rate suggestive content into a higher age band, and SlySwipe ships as one app —
    the Discover feed, daily rewards and streaks all target a broad casual audience. A single
    image in one game sets the rating for the hub.
 2. **The three approved sources barely carry this material.** Unsplash, Pexels and Pixabay

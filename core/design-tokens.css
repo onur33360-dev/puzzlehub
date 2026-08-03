@@ -1,5 +1,5 @@
 /* ============================================
-   PuzzleHub — Tasarım Tokenleri (Design Tokens)
+   SlySwipe — Tasarım Tokenleri (Design Tokens)
    docs/DESIGN_SYSTEM.md §3–§11'in birebir CSS karşılığı.
    Bu dosya sadece değer tanımlar — hiçbir görsel öğeye
    uygulanmaz. Hiçbir oyun veya bileşen henüz bunu kullanmıyor
@@ -46,7 +46,7 @@
   --ph-jewel-8-highlight: #f472b6; --ph-jewel-8-base: #ec4899; --ph-jewel-8-shadow: #be185d; --ph-jewel-8-glow: rgba(236,72,153,.4);
 
   /* ── Magic Sahne (§ ortak evren) ──
-     PuzzleHub'ın her oyunu aynı gece göğünün altında geçer. Bu renkler
+     SlySwipe'ın her oyunu aynı gece göğünün altında geçer. Bu renkler
      Water Sort'un sahnesinden çıkarıldı ve paylaşıma alındı: oyuncu hangi
      oyunu açarsa açsın aynı evrende olduğunu buradan anlıyor.
      DİKKAT: ortak olan GÖKYÜZÜ ve MALZEME; her oyunun kendi "yeri" ve

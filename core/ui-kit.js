@@ -1,5 +1,5 @@
 // ============================================
-// PuzzleHub — Paylaşımlı UI Davranışları (ui-kit.js)
+// SlySwipe — Paylaşımlı UI Davranışları (ui-kit.js)
 // docs/DESIGN_SYSTEM.md §20.3'ün JS karşılığı.
 // Bu dosya sadece DAVRANIŞ içerir — görsel tanımlar
 // core/design-tokens.css (keyframe'ler) ve core/components.css
@@ -110,7 +110,7 @@ function phStaggerIn(elements, delayStep) {
 }
 
 // ───────── Magic Sahne Atmosferi ─────────
-// PuzzleHub'ın ortak evrenini kuran katman: yıldızlar, ışık huzmeleri,
+// SlySwipe'ın ortak evrenini kuran katman: yıldızlar, ışık huzmeleri,
 // süzülen zerreler. Oyuncu hangi oyunu açarsa açsın ilk kare CANLI olmalı —
 // oyuncu hiçbir şey yapmadan önce sahne yaşıyor olmalı.
 //
@@ -199,7 +199,7 @@ function phAtmosphereFlare(layer, b, durMs) {
 
 // ═══════════ HIZ VE IŞIK EFEKTLERİ ═══════════
 // Referans olarak incelenen arcade 2048'lerin "canlı/hızlı" hissini
-// PuzzleHub'ın diline çeviren üç yapı taşı. Ortak nokta: hepsi KISA,
+// SlySwipe'ın diline çeviren üç yapı taşı. Ortak nokta: hepsi KISA,
 // DÜŞÜK OPAKLIKLI ve tek seferlik. Amaç dikkat çekmek değil, olayın
 // enerjisini taşımak — parlak sarı bloom ve kalıcı kıvılcımlar bilerek
 // alınmadı, onlar gece/menekşe evrenini bozardı.

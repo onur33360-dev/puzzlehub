@@ -1,5 +1,5 @@
 // ============================================
-// PuzzleHub — Günlük Meydan Okuma (daily.js)
+// SlySwipe — Günlük Meydan Okuma (daily.js)
 // ============================================
 // PLATFORM özelliğidir, Sudoku'ya ait değildir. Sudoku ilk tüketicisi;
 // Water Sort, Rope Puzzle, Block Puzzle ve sonrakiler aynı çerçeveye

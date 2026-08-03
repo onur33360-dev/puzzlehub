@@ -1,10 +1,10 @@
 # 06_UI_UX_GUIDELINES.md
 
-# PuzzleHub UI / UX Guidelines
+# SlySwipe UI / UX Guidelines
 
 ## Vision
 
-PuzzleHub must feel like a premium mobile application from the first
+SlySwipe must feel like a premium mobile application from the first
 second.
 
 ------------------------------------------------------------------------

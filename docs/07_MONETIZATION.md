@@ -1,6 +1,6 @@
 # 07_MONETIZATION.md
 
-# PuzzleHub Monetization
+# SlySwipe Monetization
 
 ## Philosophy
 

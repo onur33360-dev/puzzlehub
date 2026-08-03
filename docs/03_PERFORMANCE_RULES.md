@@ -1,6 +1,6 @@
 # 03_PERFORMANCE_RULES.md
 
-# PuzzleHub Performance Rules
+# SlySwipe Performance Rules
 
 Version: 1.1
 
@@ -8,7 +8,7 @@ Version: 1.1
 
 # Objective
 
-PuzzleHub must feel smooth on both modern and low-end Android devices.
+SlySwipe must feel smooth on both modern and low-end Android devices.
 
 Performance is considered a feature.
 

@@ -1,4 +1,4 @@
-# PuzzleHub — Official GAME_POOL Roadmap
+# SlySwipe — Official GAME_POOL Roadmap
 
 > **Version:** 1.0 — July 2026  
 > **Purpose:** Product roadmap, not a brainstorm. Every game below has a proven track record of player engagement in the real world.  
@@ -8,7 +8,7 @@
 
 ## Strategic Vision
 
-PuzzleHub's goal is **30–40% puzzle, 60–70% other casual genres**.  
+SlySwipe's goal is **30–40% puzzle, 60–70% other casual genres**.  
 The platform succeeds if a user can open it with 2 minutes of free time and feel rewarded. Every game must pass this test:
 
 > *"Can someone understand and enjoy this in under 10 seconds?"*
@@ -23,7 +23,7 @@ The platform succeeds if a user can open it with 2 minutes of free time and feel
 | **Retention** | Day-7 / Day-30 retention potential (1–10) |
 | **Viral** | Shareability / screenshot / challenge potential (1–10) |
 | **Monetize** | Ad + IAP potential (1–10) |
-| **PuzzleHub Fit** | How naturally it fits into the platform (1–10) |
+| **SlySwipe Fit** | How naturally it fits into the platform (1–10) |
 | **Difficulty** | Dev effort: Easy / Medium / Hard |
 | **Session** | Average single play duration |
 
@@ -31,7 +31,7 @@ The platform succeeds if a user can open it with 2 minutes of free time and feel
 
 ## CATEGORY 1 — PUZZLE
 
-These are the backbone of PuzzleHub (30–40% of catalog). Puzzle games dominate IAP revenue in casual gaming — <cite index="3-1">Color Block Jam, Screwdom, and similar hybrid-casual puzzle titles top both download and revenue charts simultaneously.</cite>
+These are the backbone of SlySwipe (30–40% of catalog). Puzzle games dominate IAP revenue in casual gaming — <cite index="3-1">Color Block Jam, Screwdom, and similar hybrid-casual puzzle titles top both download and revenue charts simultaneously.</cite>
 
 | # | Game Name | Core Loop | Why They Replay | Difficulty | Session | Replay | Retention | Viral | Monetize | PH Fit |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -615,7 +615,7 @@ MEDIUM VALUE / MEDIUM EFFORT → PHASE 3
 
 ---
 
-*Document compiled July 2026 by PuzzleHub Product Team.*  
+*Document compiled July 2026 by SlySwipe Product Team.*  
 *Data sources: AppMagic, Sensor Tower, MAF Mobile Gaming Report, YouTube Playables analytics, Gamesforum Intelligence Hypercasual Report 2025.*
 
 ---
@@ -623,13 +623,13 @@ MEDIUM VALUE / MEDIUM EFFORT → PHASE 3
 
 ## ENGINEERING NOTES (Appended)
 
-> **Scope of this section:** implementation guidance only, specific to PuzzleHub's current stack. It does not alter, override, or second-guess any ranking, score, or roadmap decision above — those remain the product/market source of truth. This section exists to flag *how* things get built here, not *what* or *in what order* gets built.
+> **Scope of this section:** implementation guidance only, specific to SlySwipe's current stack. It does not alter, override, or second-guess any ranking, score, or roadmap decision above — those remain the product/market source of truth. This section exists to flag *how* things get built here, not *what* or *in what order* gets built.
 >
 > **Current stack constraints** (see root `CLAUDE.md`): vanilla JavaScript, HTML, CSS — no build step, no bundler, no framework, no package manager. No new external dependencies without an explicit decision. Audio is fully synthesized via Web Audio API (no audio asset files). Rendering is DOM/CSS-driven (imperative `innerHTML` re-renders), with some Canvas/2D use in individual games — no WebGL or 3D engine currently in the project. Each game is a self-contained module following the existing `PuzzleGames.<id> = (() => { init(container), cleanup() })` + `injectStyle` + shared `GameAudio` pattern.
 
 ### Already-built overlap with this pool
 
-Several roadmap entries already exist in PuzzleHub, shipped and playable, prior to this document:
+Several roadmap entries already exist in SlySwipe, shipped and playable, prior to this document:
 
 | Existing game (id) | Roadmap match | Roadmap rank |
 |---|---|---|
@@ -663,4 +663,4 @@ These flag *implementation risk in this codebase specifically* — the roadmap's
 
 ### On genre-mix math vs. the 30–40% puzzle target
 
-The Phase 1+2+3 tables above total **21% puzzle** (16 of ~77 scheduled titles) against the stated 30–40% target. Read in isolation this looks like a shortfall — but PuzzleHub already ships 7 puzzle games outside this roadmap's count. Net of the existing catalog, a lighter puzzle build-rate in new phases may already be correct rather than a gap. Recommend deciding explicitly whether the 30–40% target is meant to apply to the *total* catalog (existing + roadmap) or to *new builds* going forward, since the phase tables currently read as if built from zero.
+The Phase 1+2+3 tables above total **21% puzzle** (16 of ~77 scheduled titles) against the stated 30–40% target. Read in isolation this looks like a shortfall — but SlySwipe already ships 7 puzzle games outside this roadmap's count. Net of the existing catalog, a lighter puzzle build-rate in new phases may already be correct rather than a gap. Recommend deciding explicitly whether the 30–40% target is meant to apply to the *total* catalog (existing + roadmap) or to *new builds* going forward, since the phase tables currently read as if built from zero.

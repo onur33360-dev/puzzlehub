@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Evrensel Oyun-Olayı Sistemi Doğrulama Aracı
+//  SlySwipe — Evrensel Oyun-Olayı Sistemi Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 // GameEvents'in (core/app.js) sözleşmesini ve 10 oyunun BAĞLANTISINI
 // doğrular. Sıfır bağımlılık, yalnızca Node çekirdeği — proje build'siz
@@ -438,7 +438,7 @@ function printTable(calls) {
 const calls = scanSource();
 if (process.argv.indexOf('--table') >= 0) { printTable(calls); process.exit(0); }
 
-console.log('PuzzleHub — Evrensel Oyun-Olayı Sistemi Doğrulaması');
+console.log('SlySwipe — Evrensel Oyun-Olayı Sistemi Doğrulaması');
 testContract();
 testSource(calls);
 testLive();

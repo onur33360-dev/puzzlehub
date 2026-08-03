@@ -1,6 +1,6 @@
 # 04_CANVAS_POLICY.md
 
-# PuzzleHub Canvas Policy
+# SlySwipe Canvas Policy
 
 Version: 2.0
 
@@ -223,7 +223,7 @@ Canvas asks slightly more of the GPU and gives the main thread back.
 
 **Conditions, recorded as measured:**
 
--   Thermal state was **intentionally not normalized**. PuzzleHub is
+-   Thermal state was **intentionally not normalized**. SlySwipe is
     optimised for real gameplay, not laboratory conditions; if a device
     throttles during normal play, that throttling is part of the user's
     experience and belongs in the number. The DOM run was throttling

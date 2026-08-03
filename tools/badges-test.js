@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Rozet Sistemi Doğrulama Aracı
+//  SlySwipe — Rozet Sistemi Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 // Badges'in (core/app.js) sözleşmesini, mevcut sayaçlara BAĞLANMASINI ve
 // ekonomiye dokunuşunu doğrular. daily-quests-test.js'in kardeşi: aynı
@@ -337,7 +337,7 @@ function testEndToEnd() {
 }
 
 // ───────────────────────────────────────────────────────────────
-console.log('PuzzleHub — Rozet Sistemi Doğrulaması');
+console.log('SlySwipe — Rozet Sistemi Doğrulaması');
 testContract();
 testSource();
 testLive();

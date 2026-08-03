@@ -1,12 +1,18 @@
 # CLAUDE.md
 
-Permanent instruction manual for everyone working on PuzzleHub — human or AI. Read this in full at the start of every session. It is dense on purpose: it points at deeper docs rather than repeating them.
+Permanent instruction manual for everyone working on SlySwipe — human or AI. Read this in full at the start of every session. It is dense on purpose: it points at deeper docs rather than repeating them.
 
 ---
 
 ## 1. Project Snapshot
 
-PuzzleHub is a Turkish-language, mobile-first casual puzzle hub: a tab-based shell (Home / Discover / Progress / Profile) around 7 playable puzzle games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top.
+SlySwipe is a Turkish-language, mobile-first casual puzzle hub: a tab-based shell (Home / Discover / Progress / Profile) around 7 playable puzzle games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top.
+
+**The app is SlySwipe, package id `com.skyroonlabs.slyswipe`, since 2026-08-03.** It was
+called PuzzleHub (`com.puzzlehub.app`) from the start of the project until then, so anything
+older than that date — git history, commit messages, the `ph_` storage prefix — still says
+PuzzleHub. The rename landed **before the first Play Console upload on purpose**: a package
+id is permanent from first publish onward. Details and the four files that carry the id: §5.
 
 **Current stage: pre-launch prototype.** Ads, in-app payments, the leaderboard, and Plus-subscription validation are all intentionally mocked right now. That is a staging decision, not a defect — see Section 8 before "fixing" any of it.
 
@@ -127,7 +133,7 @@ numbered documents win** — fix this file.
 |---|---|---|
 | `docs/01_ARCHITECTURE.md` … `docs/10_POST_RELEASE_ROADMAP.md` | written | **first, every session** — official rules |
 | `CLAUDE.md` (this file) | written | every session, after the numbered docs |
-| `VISION.md` | to be written | you need to know *why* PuzzleHub exists, not just what it is |
+| `VISION.md` | to be written | you need to know *why* SlySwipe exists, not just what it is |
 | `PRODUCT_PRINCIPLES.md` | to be written | weighing a product tradeoff |
 | `UX_RULES.md` | to be written | touching any interaction/navigation pattern |
 | `ARCHITECTURE.md` | to be written | onboarding, or before a structural change |
@@ -244,7 +250,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   fire when the lock releases if the finger is still down.
 - **Thermal state is RECORDED, not normalized — this reversed on 2026-07-28.**
   The old rule ("a warm device invalidates the comparison, re-run it cold") is
-  gone by owner decision: PuzzleHub is optimised for real gameplay, not lab
+  gone by owner decision: SlySwipe is optimised for real gameplay, not lab
   conditions, so if a device throttles during normal play that throttling is part
   of the player's experience and belongs in the number. Do **not** discard a
   throttled run and do **not** re-run to get cooler conditions. Do record
@@ -257,7 +263,48 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **A new game must be registered in four places:** `PUZZLE_GAMES` and `GAME_MAP` (`app.js`), `REEL_GAMES` and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or visible-but-broken.
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
-- **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; PuzzleHub is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked.
+- **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; SlySwipe is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked. **"PuzzleHub" is now a third historical layer** (see the rebrand bullet below) — unlike GameHup it was swept out of the source, but it survives in git history and in the `ph_` storage prefix.
+- **The app is SlySwipe / `com.skyroonlabs.slyswipe` since 2026-08-03. The package id was
+  changed BEFORE the first Play Console upload, and that timing is the whole point** — Google
+  binds an app's identity to its package id permanently at first publish, so this was the last
+  moment it could be done at all. Anything that looks like leftover rebrand work is therefore
+  cheap now and impossible later; do not defer it.
+  Four things are load-bearing:
+  1. **The id lives in FOUR places and they must agree**: `capacitor.config.json` (`appId`),
+     `android/app/build.gradle` (**both** `namespace` and `applicationId` — they are separate
+     keys and Gradle does not derive one from the other), `res/values/strings.xml`
+     (`package_name` + `custom_url_scheme`), and the **java source directory itself**
+     (`android/app/src/main/java/com/skyroonlabs/slyswipe/`) whose path must match the
+     `package` line inside `MainActivity.java`. The directory is a real move, not a rename of
+     a string. `AndroidManifest.xml` needs no edit: it references `.MainActivity` relative to
+     `namespace` and `${applicationId}` for the FileProvider authority, so it follows along.
+  2. **The `ph_` localStorage prefix was deliberately NOT renamed.** Renaming it would orphan
+     every existing player's diamonds, streak, badges and Plus snapshot. Same rule as the
+     `gh_` prefix — that is `DATA_AND_STORAGE.md`'s job, and only with a migration.
+  3. **Product ids are independent of the package id and were NOT touched** —
+     `plus_weekly` / `plus_monthly` / `plus_yearly` / `diamonds_*` are managed on the
+     RevenueCat and Play Console side. Same for the AdMob test unit ids.
+  4. **The brand name is written in the source in more places than the visible UI.** Beyond
+     `manifest.json`, `index.html` (`<title>`, `apple-mobile-web-app-title`, the
+     `.brand-name` span), `strings.xml` (`app_name` / `title_activity_main`) and
+     `capacitor.config.json` (`appName`), there is one in-game surface that is easy to miss:
+     Arrow's header renders `<span class="ar-brand-sup">SLYSWIPE</span>ARROW`
+     (`games.js`). The `PuzzleGames` registry, `blockPuzzle` and every other identifier
+     containing "puzzle" are **engine naming, not brand** — they were correctly left alone.
+  Still carrying the old name on purpose: the home header's `🧩` logo emoji and the `🧩` in
+  `<title>`. Whether the puzzle-piece mark survives the new "S" identity is a product call,
+  not a find-and-replace.
+- **The splash artwork exists in ELEVEN files and only one of them is what a modern phone
+  actually shows.** `assets/icons/splash-hero.jpg` is the DOM scene (§5 launch-scene bullet)
+  and it is what renders on Android 12+ **and** on web; the 10 `drawable-{port,land}-*`
+  PNGs only reach Android ≤11. Updating the density PNGs alone therefore looks complete and
+  changes nothing visible on the test device — that trap is exactly why this is written down.
+  `splash-hero.jpg` is 852×1846 (the same 2.167 aspect as the source art), regenerated from
+  the xxxhdpi PNG with `sharp` at `jpeg({quality:86, mozjpeg:true})` ≈ 171 KB. **Quality is
+  not cosmetic here:** the file sits in `sw.js`'s `SHELL_ASSETS` precache, so every byte is
+  re-downloaded on every `APP_VERSION` bump. `drawable/splash.png` (no qualifier) is the
+  fallback and is kept byte-identical to the mdpi copy. `drawable-land-*` stays flat
+  `#14142E` — the app is orientation-locked to portrait and those files never render.
 - **Water Sort's move limit is `5 × colorCount`, and the number came from MEASUREMENT
   (2026-08-01).** This is the game's first lose state. Difficulty has exactly one variable —
   `paramsForLevel` gives `colorCount = min(3 + ⌊lv/3⌋, 8)`, tubes = colors + 2 — so the limit

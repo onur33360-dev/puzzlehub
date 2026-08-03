@@ -1,5 +1,5 @@
 // ============================================
-// PuzzleHub — Deterministik Rastgelelik (rng.js)
+// SlySwipe — Deterministik Rastgelelik (rng.js)
 // ============================================
 // Math.random() TEKRARLANAMAZ. Bu dosya, aynı tohumun her zaman aynı
 // diziyi üretmesini sağlayan küçük bir katman sunar. İki şey için gerekli:

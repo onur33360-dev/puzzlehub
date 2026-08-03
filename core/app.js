@@ -151,7 +151,7 @@ const SETTINGS = [
   // Sürüm tek kaynaktan (index.html APP_VERSION) okunur; burada sabit
   // yazmak bump'ta kaydırır. typeof guard'ı app.js'in izole yüklendiği
   // (test) durumda ReferenceError'ı önler.
-  { icon:'ℹ️', label:'Hakkında', action:'PuzzleHub v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0') },
+  { icon:'ℹ️', label:'Hakkında', action:'SlySwipe v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0') },
 ];
 
 const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];

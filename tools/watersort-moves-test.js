@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Su Sıralama Hamle Limiti Doğrulama Aracı
+//  SlySwipe — Su Sıralama Hamle Limiti Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 // Hamle limiti formülünü, kaybetme akışını ve devam ekonomisini doğrular.
 // badges-test.js / daily-quests-test.js'in kardeşi: aynı vm+stub deseni
@@ -282,7 +282,7 @@ function testEndToEnd() {
 }
 
 // ───────────────────────────────────────────────────────────────
-console.log('PuzzleHub — Su Sıralama Hamle Limiti Doğrulaması');
+console.log('SlySwipe — Su Sıralama Hamle Limiti Doğrulaması');
 testFormula();
 testSource();
 testLive();

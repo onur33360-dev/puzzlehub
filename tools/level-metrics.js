@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Seviye Ölçüm Aracı (Ok Bulmaca)
+//  SlySwipe — Seviye Ölçüm Aracı (Ok Bulmaca)
 // ═══════════════════════════════════════════════════════════════
 // TASARIMIN RESMİ DOĞRULAMA ARACI. Referans seviyeleri de bizim
 // seviyelerimiz de AYNI kodla ölçülür; ayrı ölçüm karşılaştırmayı

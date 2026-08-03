@@ -725,7 +725,7 @@ const GameAudio = (() => {
   // ───── MÜZİK KONTROL ─────
   // GEÇİCİ: arka plan müziği tamamen devre dışı. Mevcut kompozisyon gerilim
   // hissi veriyor ve casual puzzle tonuna uymuyor — sessizlik daha iyi.
-  // PuzzleHub için yeni bir müzik sistemi tasarlanınca bu guard kalkacak;
+  // SlySwipe için yeni bir müzik sistemi tasarlanınca bu guard kalkacak;
   // altındaki pad/beat motoru bilerek olduğu gibi duruyor.
   const MUSIC_DISABLED = true;
   function startMusic() {
@@ -873,7 +873,7 @@ PuzzleGames.game2048 = (() => {
   // ── Renk rampası ──
   // Klasik 2048 ilerlemesinin YAPISI korundu (açık → sıcak → altın →
   // serin), ama tonlar platformun premium diline çekildi ve zirve
-  // MENEKŞEYE bağlandı: 2048'e ulaşmak PuzzleHub'ın kendi imza rengine
+  // MENEKŞEYE bağlandı: 2048'e ulaşmak SlySwipe'ın kendi imza rengine
   // varmak oluyor. Renk yolculuğu markanın yaşadığı yerde bitiyor.
   // 2048'in ÖTESİ de rampanın parçası: devam etmeyi özellik yaptıysak
   // devam etmenin görsel karşılığı olmalı. 65536+ tek "super" tonuna
@@ -9395,7 +9395,7 @@ PuzzleGames.arrowPuzzle = (() => {
     // da z-index hilesi değil, akış düzeni.
     wrapEl.innerHTML =
       '<div class="ar-topbar">' +
-        '<div class="ar-brand"><span class="ar-brand-sup">PUZZLEHUB</span>ARROW</div>' +
+        '<div class="ar-brand"><span class="ar-brand-sup">SLYSWIPE</span>ARROW</div>' +
         '<div class="ar-topbar-right">' +
           '<div class="ar-diamonds" data-role="dia-wrap">' +
             '<span class="ar-dia-ico">◆</span>' +

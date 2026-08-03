@@ -1,5 +1,5 @@
 /* ============================================
-   PuzzleHub — Paylaşımlı Bileşenler (Shared Components)
+   SlySwipe — Paylaşımlı Bileşenler (Shared Components)
    docs/DESIGN_SYSTEM.md §12–§14 / §20.2'nin CSS karşılığı.
    Bu dosya token'ları (design-tokens.css) tüketen hazır
    sınıflar tanımlar.
@@ -169,7 +169,7 @@
 }
 
 /* ============================================
-   MAGIC SAHNE — PuzzleHub'ın ortak evreni
+   MAGIC SAHNE — SlySwipe'ın ortak evreni
    ============================================
    Water Sort'un sahnesinden çıkarılıp paylaşıma alındı. Ortak olan
    ŞUNLAR: gökyüzü, cam malzeme, HUD dili, buton sistemi, atmosfer

@@ -1,6 +1,6 @@
 # 10_POST_RELEASE_ROADMAP.md
 
-# PuzzleHub Post Release Roadmap
+# SlySwipe Post Release Roadmap
 
 Version: 1.0
 
@@ -143,7 +143,7 @@ Only after the application is stable consider
 
 # Long-Term Vision
 
-PuzzleHub should become a platform.
+SlySwipe should become a platform.
 
 New games should plug into the existing architecture without changing
 the application shell.

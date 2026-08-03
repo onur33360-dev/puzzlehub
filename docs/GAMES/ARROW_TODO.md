@@ -82,7 +82,7 @@ so this only matters if §1/§2 grow the boards.
 Unresolved, from `ARROW_REFERENCE_LEVELS.md` §6:
 
 1. Is the level 1 → 2 jump real (7 snakes → ~35)?
-2. Can the player get stuck in the reference? PuzzleHub is provably monotonic — no wrong
+2. Can the player get stuck in the reference? SlySwipe is provably monotonic — no wrong
    moves exist. If the reference is too, "difficulty" in both is search, not planning.
 3. Does per-snake colour carry mechanical meaning?
 4. Do the silhouettes spell something (levels 3 and 4 are "2" and "0")?

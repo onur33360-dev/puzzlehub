@@ -1,6 +1,6 @@
 # 02_RENDERING_ENGINE.md
 
-# PuzzleHub Rendering Engine
+# SlySwipe Rendering Engine
 
 ## Objective
 

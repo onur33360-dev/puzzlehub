@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Günlük Görev Sistemi Doğrulama Aracı
+//  SlySwipe — Günlük Görev Sistemi Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 // DailyQuests'in (core/app.js) sözleşmesini, GameEvents'e BAĞLANMASINI
 // ve ekonomiye dokunuşunu doğrular. game-events-test.js'in kardeşi:
@@ -363,7 +363,7 @@ function testEndToEnd() {
 }
 
 // ───────────────────────────────────────────────────────────────
-console.log('PuzzleHub — Günlük Görev Sistemi Doğrulaması');
+console.log('SlySwipe — Günlük Görev Sistemi Doğrulaması');
 testContract();
 testSource();
 testLive();

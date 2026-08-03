@@ -9,7 +9,7 @@ atmosphere are the shared `.ph-scene` + `phAtmosphere()` layer.
 
 ## 1. What makes this game different
 
-Sudoku is the first PuzzleHub game that **refuses wrong input rather than recording it**,
+Sudoku is the first SlySwipe game that **refuses wrong input rather than recording it**,
 and the first whose material is **light**. Both are deliberate departures, and both exist
 to serve the same goal: this is a *modern mobile puzzle game*, not a faithful reproduction
 of pencil-and-paper Sudoku.

@@ -1,10 +1,10 @@
 # 01_ARCHITECTURE.md
 
-# PuzzleHub Architecture
+# SlySwipe Architecture
 
 ## Goal
 
-This document defines the permanent architecture of PuzzleHub.
+This document defines the permanent architecture of SlySwipe.
 
 ## Core Principles
 

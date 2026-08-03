@@ -1,5 +1,5 @@
 /* ============================================================
-   PuzzleHub — Service Worker
+   SlySwipe — Service Worker
    ============================================================
    ÖNCEKİ DURUM: bu dosya bir "cache killer"dı — her açılışta tüm
    cache'leri siler, fetch'i doğrudan ağa geçirirdi. index.html de

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Geçiş Reklamı (Interstitial) Doğrulama Aracı
+//  SlySwipe — Geçiş Reklamı (Interstitial) Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 //   node tools/interstitial-test.js
 //
@@ -103,7 +103,7 @@ const wait = () => new Promise(r => setImmediate(r));
 async function flush(n) { for (let i = 0; i < (n || 6); i++) await wait(); }
 
 (async function () {
-  console.log('PuzzleHub — Geçiş Reklamı (Interstitial) Doğrulaması');
+  console.log('SlySwipe — Geçiş Reklamı (Interstitial) Doğrulaması');
 
   // ═════════ 1. İKİ EKSENLİ SINIR ═════════
   // Asıl iddia: her iki koşul da AYRI AYRI kontrol ediliyor. Bunu

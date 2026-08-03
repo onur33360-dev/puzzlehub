@@ -1,8 +1,8 @@
-# PuzzleHub Design System
+# SlySwipe Design System
 
 > **Version:** 1.0 — July 2026
 > **Status:** Foundational specification. Every future game, screen, and component is built against this document rather than inventing its own visual language.
-> **Scope:** This document defines PuzzleHub's visual, motion, material, and interaction identity. It is stack-agnostic in intent but stack-honest in execution — see [Implementation Constraints](#implementation-constraints) for where ambition was deliberately bounded by our actual technology.
+> **Scope:** This document defines SlySwipe's visual, motion, material, and interaction identity. It is stack-agnostic in intent but stack-honest in execution — see [Implementation Constraints](#implementation-constraints) for where ambition was deliberately bounded by our actual technology.
 
 ---
 
@@ -10,7 +10,7 @@
 
 **"Luminous calm, tactile precision."**
 
-PuzzleHub is not a bright, cartoonish hyper-casual toy, and it is not a sterile, corporate utility. It sits deliberately between: a dark, confident, jewel-toned world where color and light do the emotional work, and every material — glass, liquid, soft plastic — feels like it would respond if you touched it.
+SlySwipe is not a bright, cartoonish hyper-casual toy, and it is not a sterile, corporate utility. It sits deliberately between: a dark, confident, jewel-toned world where color and light do the emotional work, and every material — glass, liquid, soft plastic — feels like it would respond if you touched it.
 
 Three words govern every visual decision:
 
@@ -66,7 +66,7 @@ Never pure `#fff` — it reads cold against the violet-black base. `--ph-text-pr
 | `--ph-accent-light` | `#c084fc` | Hover/highlight variant |
 | `--ph-accent-dark` | `#7c3aed` | Pressed/shadow variant |
 
-This is the existing PuzzleHub violet (already used for the PLUS badge, primary buttons, undo controls). It is the **only** accent used for platform chrome — it must never be reused as a semantic color (success/error) or diluted by other "brand-ish" purples appearing elsewhere.
+This is the existing SlySwipe violet (already used for the PLUS badge, primary buttons, undo controls). It is the **only** accent used for platform chrome — it must never be reused as a semantic color (success/error) or diluted by other "brand-ish" purples appearing elsewhere.
 
 ### 3.4 Semantic colors
 
@@ -169,7 +169,7 @@ Applied as `box-shadow: 0 0 var(--ph-glow-sm) <color>-glow-token`. This is a nam
 | `--ph-radius-lg` | 24px | Modals, large panels |
 | `--ph-radius-full` | 999px | Pills, avatars, circular controls |
 
-PuzzleHub leans rounded throughout — sharper corners read as "serious utility," which is not the brand. Every game should pick from this fixed set rather than inventing intermediate values (the current inconsistency — `12px`/`14px`/`18px`/`20px` scattered across existing games — is exactly what this table replaces).
+SlySwipe leans rounded throughout — sharper corners read as "serious utility," which is not the brand. Every game should pick from this fixed set rather than inventing intermediate values (the current inconsistency — `12px`/`14px`/`18px`/`20px` scattered across existing games — is exactly what this table replaces).
 
 ---
 
@@ -429,7 +429,7 @@ Tokens are **additive by default** — a new game needing a value not yet in §3
 
 ## 23. Responsive Scaling Rules
 
-PuzzleHub is mobile-first and portrait-oriented, but the same screens are also viewed on tablets and desktop browsers during development/testing — the system should degrade gracefully rather than just clipping at a fixed max-width.
+SlySwipe is mobile-first and portrait-oriented, but the same screens are also viewed on tablets and desktop browsers during development/testing — the system should degrade gracefully rather than just clipping at a fixed max-width.
 
 - **Fluid sizing via `clamp()`** for anything that should scale smoothly across the phone width range (roughly 360px–480px) rather than jumping between fixed breakpoints — zero dependency, well-supported, matches the "no build step" constraint.
 - **A single content max-width** (currently `380px`, matching existing game containers) caps growth on tablet/desktop rather than letting gameplay content stretch to fill unrealistic widths.

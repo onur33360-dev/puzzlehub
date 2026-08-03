@@ -1,4 +1,4 @@
-package com.puzzlehub.app;
+package com.skyroonlabs.slyswipe;
 
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;

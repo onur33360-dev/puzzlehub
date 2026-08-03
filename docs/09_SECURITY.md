@@ -1,6 +1,6 @@
 # 09_SECURITY.md
 
-# PuzzleHub Security Guide
+# SlySwipe Security Guide
 
 Version: 1.0
 

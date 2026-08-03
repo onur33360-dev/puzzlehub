@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Node için DOM/tarayıcı kum havuzu (test aracı)
+//  SlySwipe — Node için DOM/tarayıcı kum havuzu (test aracı)
 // ═══════════════════════════════════════════════════════════════
 // PAYLAŞILAN altyapı: uygulamayı bir vm bağlamında, tarayıcı olmadan
 // çalıştırır. Sıfır bağımlılık, yalnızca Node çekirdeği — proje

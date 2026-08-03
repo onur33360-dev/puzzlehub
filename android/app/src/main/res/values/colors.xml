@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  PuzzleHub paleti — DEGERLER manifest.json ile AYNI OLMALI.
+  SlySwipe paleti — DEGERLER manifest.json ile AYNI OLMALI.
   background_color #14142E ve theme_color #8B5CF6 orada da yaziyor;
   ikisi ayrisirsa uygulama acilirken bir kare boyunca yanlis renk
   gorunur (native splash bir renk, web sayfasi baska bir renk).

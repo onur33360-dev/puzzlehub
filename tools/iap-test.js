@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Satın Alma (RevenueCat) Doğrulama Aracı
+//  SlySwipe — Satın Alma (RevenueCat) Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 //   node tools/iap-test.js
 //
@@ -138,7 +138,7 @@ const wait = () => new Promise(r => setImmediate(r));
 async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
 
 (async function () {
-  console.log('PuzzleHub — Satın Alma (RevenueCat) Doğrulaması');
+  console.log('SlySwipe — Satın Alma (RevenueCat) Doğrulaması');
 
   // ═════════ 1. ÜRÜN HARİTASI ═════════
   console.log('\n1. ÜRÜN HARİTASI');

@@ -1,6 +1,6 @@
 {
-  "appId": "com.puzzlehub.app",
-  "appName": "PuzzleHub",
+  "appId": "com.skyroonlabs.slyswipe",
+  "appName": "SlySwipe",
   "webDir": "www",
   "android": {
     "backgroundColor": "#14142E",

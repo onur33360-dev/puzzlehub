@@ -1,6 +1,6 @@
 # 08_GOOGLE_PLAY_RELEASE.md
 
-# PuzzleHub Google Play Release Guide
+# SlySwipe Google Play Release Guide
 
 ## Goal
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-//  PuzzleHub — Reklam Rızası (UMP / GDPR) Doğrulama Aracı
+//  SlySwipe — Reklam Rızası (UMP / GDPR) Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
 //   node tools/ad-consent-test.js
 //
@@ -82,7 +82,7 @@ function boot(cfg) {
 const wait = () => new Promise(r => setImmediate(r));
 
 (async function () {
-  console.log('PuzzleHub — Reklam Rızası (UMP) Doğrulaması');
+  console.log('SlySwipe — Reklam Rızası (UMP) Doğrulaması');
 
   // ───────── 1. SÖZLEŞME ─────────
   console.log('\n1. SÖZLEŞME');

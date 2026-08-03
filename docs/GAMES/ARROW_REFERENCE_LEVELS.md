@@ -5,7 +5,7 @@ publisher *vectorgames*). Per `ARROW_REFERENCE.md` and its clarifications, the r
 is studied for **level design only** — progression, puzzle structure, dependency chains,
 teaching order, difficulty curve. Its visual presentation is explicitly *not* a reference.
 
-**This document must be complete for the first 30 levels before PuzzleHub's own
+**This document must be complete for the first 30 levels before SlySwipe's own
 handcrafted campaign begins.** That is the current milestone.
 
 ---
@@ -115,7 +115,7 @@ visible head at one end.
 ## 4. Cross-level observations
 
 Findings that hold across every level seen so far. These are the ones that should
-actually drive PuzzleHub's campaign.
+actually drive SlySwipe's campaign.
 
 1. **Levels are figures, not filled rectangles.** From level 3 onward the occupied cells
    spell a shape. The playfield is much larger than the figure, so the figure is an island
@@ -123,15 +123,15 @@ actually drive PuzzleHub's campaign.
 2. **Consequence of (1): exits are cheap, tangles are expensive.** With empty space all
    round, an outer snake can nearly always leave. All the difficulty is interior.
 3. **The figure is always framed whole, with generous margin.** Never cropped, never
-   edge-to-edge. (PuzzleHub violated this until `9e876ad`; the board was clipped.)
+   edge-to-edge. (SlySwipe violated this until `9e876ad`; the board was clipped.)
 4. **Silhouette stroke width caps snake length.** A 3-cell-wide stroke cannot hold a long
    serpentine. Reference figures with thicker strokes carry longer snakes — measured on
-   PuzzleHub's own generator: packing a "2" mask gave average snake length 3.4 cells
+   SlySwipe's own generator: packing a "2" mask gave average snake length 3.4 cells
    versus 5.6 on an open board.
 5. **Scale saturates almost immediately.** By level 3 the boards are already full size.
    The difficulty curve therefore cannot be coming from board growth.
 6. **Zoom appears when the board outgrows the screen** (absent on level 1, present later),
-   which matches PuzzleHub's measurement that boards beyond ≈20 cells per side are not
+   which matches SlySwipe's measurement that boards beyond ≈20 cells per side are not
    tappable without zoom on a phone.
 7. **Per-snake colour is a readability device**, required to trace one body through a
    dense tangle. Whether it carries any mechanical meaning is unconfirmed.
@@ -152,7 +152,7 @@ To fill the table — especially the dependency graph — each level needs:
 A short screen recording of a level being solved would additionally settle three things no
 still image can: what happens on tapping a blocked snake, whether several snakes can move
 at once, and whether the player can ever get stuck (i.e. whether the reference is
-monotonic the way PuzzleHub is).
+monotonic the way SlySwipe is).
 
 ---
 
@@ -160,7 +160,7 @@ monotonic the way PuzzleHub is).
 
 | # | Question | Why it matters |
 |---|---|---|
-| 1 | Is the level 1 → 2 jump real? | Determines whether the reference actually ramps gently or throws full-scale boards immediately. Changes PuzzleHub's whole early curve. |
-| 2 | Can the player get stuck in the reference? | PuzzleHub is provably monotonic — no wrong moves exist. If the reference is too, "difficulty" in both games is search, not planning. |
-| 3 | Does colour mean anything mechanically? | If snakes must reach a matching exit, the genre model is different from PuzzleHub's. |
+| 1 | Is the level 1 → 2 jump real? | Determines whether the reference actually ramps gently or throws full-scale boards immediately. Changes SlySwipe's whole early curve. |
+| 2 | Can the player get stuck in the reference? | SlySwipe is provably monotonic — no wrong moves exist. If the reference is too, "difficulty" in both games is search, not planning. |
+| 3 | Does colour mean anything mechanically? | If snakes must reach a matching exit, the genre model is different from SlySwipe's. |
 | 4 | Do the silhouettes spell something? | Levels 3 and 4 are "2" and "0". If the campaign spells words or numbers, that is a content decision, not a mechanic. |

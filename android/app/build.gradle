@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.puzzlehub.app"
+    namespace "com.skyroonlabs.slyswipe"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.puzzlehub.app"
+        applicationId "com.skyroonlabs.slyswipe"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
