@@ -502,12 +502,13 @@ belirsizdi ve "önce erişim isteyelim" diye yanlış bir sıra kurulabilirdi:
 sandbox testinin önündeki tek engel Play kurulumunun kendisi, izin değil.
 
 Kalan eksikler:
-1. **RevenueCat API anahtarı** (`TODO(revenuecat)`, `core/app.js`) — tek satır.
+1. ~~**RevenueCat API anahtarı**~~ — **girildi 2026-08-03**, `goog_OTM…`.
 2. **Play Console ürünleri**: `plus_weekly` / `plus_monthly` / `plus_yearly`
    (entitlement `plus`), `diamonds_100` / `diamonds_550` / `diamonds_1800` /
-   `diamonds_6500`, offering `default`.
-3. **İmzalı AAB + internal testing track** — bugün yalnızca debug imzası var,
-   yani release keystore yapılandırması da bu adımın parçası.
+   `diamonds_6500`, offering `default`. **Henüz oluşturulmadı** — sahip,
+   AAB internal testing'e yüklendikten sonra oluşturacak.
+3. ~~**İmzalı AAB**~~ — **üretildi 2026-08-03** (`bundleRelease`, `CN=Skyroon
+   Labs` upload key'iyle imzalı, 19.5 MB). **Yüklenmedi.**
 
 ---
 
@@ -555,6 +556,46 @@ bump zorunlu, yoksa web kullanıcısı eski PUZZLEHUB sahnesini görmeye devam e
 Doğrulama: `npm run build` geçti, 8 Node harness'ının tamamı geçti, debug APK
 üretildi ve `output-metadata.json` `applicationId: com.skyroonlabs.slyswipe`
 diyor.
+
+---
+
+## Sprint 12 — Release imzası + RevenueCat anahtarı (2026-08-03)
+
+Play Console'da SlySwipe oluşturuldu (`com.skyroonlabs.slyswipe`), gerçek
+RevenueCat public SDK anahtarı `core/app.js`'e girildi, upload key üretildi
+ve **ilk imzalı AAB çıktı**: `android/app/build/outputs/bundle/release/app-release.aab`.
+
+**Anahtar ve şifre depo dışında.** Gradle `android/keystore.properties`
+okuyor; dosya yoksa release imzasız derleniyor ve `assembleDebug` etkilenmiyor
+(doğrulandı). `.gitignore`'a AYRI bir satır gerekti: `*.jks` anahtarın
+kendisini tutuyordu ama şifre dosyasının uzantısı `.properties`, o desene
+takılmıyordu — dört şifre commit'e girebilirdi.
+
+**RC anahtarı ise BİLEREK depoda.** `AD_IDS` kuralının tersi: `goog_...`
+public SDK anahtarı istemciye gömülmek üzere üretiliyor ve tek başına yetki
+vermiyor (doğrulama Google'ın sunucusunda).
+
+**`iap-test.js`'in iki iddiası kırıldı ve ikisi de ÇEVRİLDİ, silinmedi:**
+1. *"anahtar depoda boş + TODO işaretli"* → **"anahtar `goog_` public
+   anahtarı"** + yeni bir iddia: **`sk_` SECRET anahtarı depoda YOK**.
+   RevenueCat'in iki anahtarı da "anahtar" diye anılıyor; `sk_` REST API'ye
+   tam yetki veriyor (abonelik verir, iade eder, müşteri siler) ve bir APK'ya
+   girerse sızmış sayılır. Kopyala-yapıştır hatasıyla karışabilirler, artık
+   harness yakalıyor.
+2. *"anahtar boşken configure çağrılmadı"* — bu bir **harness kurgu
+   hatasıydı**. `apiKey:false` yalnızca override'ı atlıyor, yani deponun
+   sabitinin boş olmasına bel bağlıyordu; sabit dolunca "anahtarsız" senaryosu
+   gerçek anahtarla koştu. Artık iki yön de açıkça enjekte ediliyor —
+   test kodun davranışını ölçüyor, deponun o anki sabitini değil.
+
+**Ürünler henüz yok, offerings boş dönecek — beklenen davranış.**
+`loadOfferings` bunu zaten karşılıyor (`if (!off || !off.availablePackages)
+return null`), fiyatlar nötr `—` gösteriyor. Sahip ürünleri yüklemeden sonra
+oluşturacak.
+
+`APP_VERSION` 1.44.0 → **1.45.0**. `versionCode` **1**, `versionName` **1.0**
+— ilk yükleme için yeterli, ama **her yeni yüklemede `versionCode` artmalı**
+(`android/app/build.gradle`), yoksa Play reddeder.
 
 ---
 

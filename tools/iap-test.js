@@ -124,12 +124,18 @@ function boot(cfg) {
     plugin = fakePlugin(cfg);
     s.sb.Capacitor = { isNativePlatform: () => true, Plugins: { Purchases: plugin } };
   }
-  // Anahtar depoda BOŞ (hesap henüz yok, TODO(revenuecat)). Satın alma
-  // yolunun tamamı yine de ölçülebilsin diye testte sahte bir anahtar
-  // enjekte ediliyor — Billing._apiKey() tam olarak bunun için var.
+  // Anahtar HER İKİ yönde de enjekte ediliyor — Billing._apiKey() tam
+  // olarak bunun için var.
+  //
+  // `apiKey:false` artık AÇIKÇA boş dönüyor; önceden yalnızca override'ı
+  // atlıyordu ve deponun sabitinin boş olmasına bel bağlıyordu. Anahtar
+  // 2026-08-03'te gerçek değeriyle dolunca o kurgu sessizce anlamını
+  // yitirdi: "anahtarsız" senaryosu gerçek anahtarla koşup configure'ü
+  // çağırdı. Testin ölçmek istediği şey deponun o anki sabiti değil,
+  // kodun davranışı — bu yüzden iki yön de enjekte ediliyor.
   const B = s.get('Billing');
   B._ready = null; B._offerings = null;
-  if (cfg.native && cfg.apiKey !== false) B._apiKey = () => 'goog_TEST';
+  if (cfg.native) B._apiKey = (cfg.apiKey === false) ? () => '' : () => 'goog_TEST';
   return { s, B, plugin, store, get: s.get,
            plus: () => JSON.parse(store.ph_plus || '{}') };
 }
@@ -386,9 +392,23 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
           /data-ph-price="plus_weekly"/.test(HTML_SRC));
   }
   {
-    // Anahtar depoda BOŞ olmalı (hesap henüz yok) ve işaretli.
-    check('RC anahtarı depoda boş + TODO işaretli',
-          /const RC_API_KEY_ANDROID = '';/.test(APP_SRC) && /TODO\(revenuecat\)/.test(APP_SRC));
+    // 2026-08-03'e kadar bu iddia "anahtar BOŞ + TODO işaretli" idi ve
+    // hesap açılınca doğru şekilde düştü. Silinmedi, çevrildi: artık
+    // ölçtüğü şey anahtarın DOĞRU TÜRDE olduğu.
+    //
+    // Kritik olan ikinci yarısı. RevenueCat'in iki anahtarı var ve
+    // ikisi de "anahtar" diye anılıyor: `goog_...` PUBLIC SDK anahtarı
+    // (istemciye gömülmek üzere üretiliyor, tek başına yetki vermiyor)
+    // ve `sk_...` SECRET anahtarı (REST API'ye tam yetki: abonelik
+    // verebilir, iade edebilir, müşteri silebilir). İkincisi bir APK'ya
+    // girerse APK herkesçe açılabildiği için sızmış sayılır ve döndürmek
+    // gerekir. Kopyala-yapıştır hatasıyla karışmaları mümkün, o yüzden
+    // burada yakalanıyor.
+    const rcKey = (APP_SRC.match(/const RC_API_KEY_ANDROID = '([^']*)';/) || [])[1];
+    check('RC anahtarı public Android anahtarı (goog_)',
+          !!rcKey && /^goog_[A-Za-z0-9]+$/.test(rcKey));
+    check('RC SECRET anahtarı (sk_) depoda YOK',
+          !/\bsk_[A-Za-z0-9]{10,}/.test(APP_SRC) && !/\bsk_[A-Za-z0-9]{10,}/.test(HTML_SRC));
     // Plan süreleri KODDA kalmalı (mağaza fiyatı verir, dönemi biz biliriz).
     check('plan süreleri korundu',
           /setDate\(now\.getDate\(\) \+ 7\)/.test(APP_SRC) &&

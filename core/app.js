@@ -1731,9 +1731,10 @@ const IAP = {
 // AD_IDS'teki "gerçek kimlik depoda durmaz" kuralı buraya UYGULANMAZ —
 // burada gerçek anahtarın durması doğru olan.
 //
-// TODO(revenuecat): hesap açılınca gerçek anahtarla değiştir. Boş kaldığı
-// sürece Billing.init() sessizce atlanır ve uygulama normal çalışır.
-const RC_API_KEY_ANDROID = '';
+// Gerçek anahtar girildi (2026-08-03). Boş kalsaydı Billing.init() sessizce
+// atlanır ve uygulama normal çalışırdı — o davranış duruyor, artık sadece
+// tetiklenmiyor.
+const RC_API_KEY_ANDROID = 'goog_OTMeoEeifXmuMWwbdKXhVYqawEb';
 
 function purchasesPlugin() {
   const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;

@@ -983,6 +983,13 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      read through `Billing._apiKey()` rather than the constant directly, for the same reason
      `econ()` exists: a top-level constant cannot be substituted, and the whole purchase path
      would be untestable in the Node sandbox.
+     **The real key landed 2026-08-03** (`goog_OTM…`). RevenueCat has a *second* key that is
+     also called "the key" — `sk_…`, the REST **secret**, which grants full account control
+     (grant entitlements, refund, delete customers). That one must never reach the client:
+     an APK is publicly unpackable, so shipping it counts as a leak and forces a rotation.
+     The two are confusable by copy-paste, so `iap-test.js` now asserts both directions —
+     the constant matches `^goog_[A-Za-z0-9]+$`, and no `sk_…` appears in `core/app.js` or
+     `index.html`.
   7. **The web path does NOT simulate purchases**, and this is the deliberate difference from
      ads. A fake rewarded ad costs nothing; a fake purchase is a free-Plus door. Web says
      "only in the app" and stops.
@@ -990,6 +997,11 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   published to a Play track, installed from Play, signed with the uploaded key, plus license
   test accounts. So no real purchase has ever run: product ids, offerings and the sandbox
   flow are **unverified** until Play Console setup + a signed AAB on internal testing.
+  **Status 2026-08-03: the app is registered on Play Console, the key is in, and the first
+  signed AAB is built — but not uploaded, and the 7 products do not exist yet.** With no
+  products, `getOfferings()` returns nothing and every price renders `—`. That is the
+  correct path, not a bug: `loadOfferings` guards it (`if (!off || !off.availablePackages)
+  return null`) and the whole chain is `.catch`-wrapped.
   Everything else *was* device-verified (plugin reachable, prices render as `—` with no key,
   restore row present, and a store-shaped entitlement fed into `_setFromStore` correctly
   triggers every Plus benefit: budget bypass, interstitial suppression, theme unlock,
