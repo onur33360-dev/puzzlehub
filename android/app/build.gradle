@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+// Release imza yapilandirmasi (2026-08-03).
+//
+// Anahtar da sifresi de DEPODA DEGIL: ikisi de gitignore'da. Gradle
+// android/keystore.properties dosyasini okur; dosya YOKSA release varyanti
+// imzasiz derlenir ve hicbir sey patlamaz. Bu kasitli: temiz bir klonda,
+// baska bir makinede ve `assembleDebug` yolunda anahtar hic gerekmez, yoksa
+// imza dosyasi olmayan herkes debug APK bile uretemezdi.
+//
+// Sablon ve uretim komutu: android/keystore.properties.example
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace "com.skyroonlabs.slyswipe"
     compileSdk rootProject.ext.compileSdkVersion
@@ -16,8 +32,21 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

@@ -17,3 +17,10 @@ android/.idea/
 android/app/release/
 *.keystore
 *.jks
+
+# Release imza sirlari. keystore.properties DOSYA YOLU + DORT SIFRE tasir;
+# depoya girerse imza anahtarinin sifresi herkese acik olur. Anahtarin
+# kendisi zaten *.jks ile disarida, ama sifre dosyasi ayri bir satir
+# gerektiriyor cunku uzantisi .properties.
+# Sablon: android/keystore.properties.example (o dosya depoya GIRER).
+android/keystore.properties
