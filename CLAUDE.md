@@ -344,6 +344,41 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   measured optima are pinned in the tool as reference data, so changing `MOVE_LIMIT_PER_COLOR`
   fails loudly instead of quietly drifting. It also asserts the limit did not leak into any
   other game, and that undo never decrements the counter.
+- **Water Sort's UNDO WAS REMOVED and the bar is now `◀` previous-level + `🔄` restart, both
+  rewarded (2026-08-07, owner decision).** This reverses several things documented above, so
+  read this before trusting the undo passages in the move-limit bullet.
+  The trigger was a bug report: both bar buttons were dead. Cause — `updateControlsBar()`
+  gave the `off` class (which is `pointer-events:none`) to **restart** as well whenever
+  `history.length === 0`, so at level start neither button could be tapped. Device-verified
+  before the fix: computed `pointer-events` was `none` on both. `restartLevel()`'s own
+  comment said it should work with an empty history; the code contradicted the comment, and
+  the code was wrong.
+  Four consequences of dropping undo, each with a replacement:
+  1. **`history[]` → `initialTubes` snapshot.** Restart used to rewind the move log; it now
+     restores a deep copy taken in `loadLevel`. `snapshotTubes` must stay a **deep** copy —
+     each tube owns its colour array and pouring mutates it in place, so a shallow copy
+     would drift with play and restart would do nothing. `initialScore` is snapshotted
+     alongside: score accumulates across levels, so resetting it to 0 would erase earlier
+     levels' points. The old rewind did this correctly by accident (it subtracted each
+     move's `scoreDelta`).
+  2. **Stars now measure MOVE EFFICIENCY.** The old rule keyed on undo count; with no undo
+     everyone would score 3★ forever, i.e. stars would measure nothing. The new thresholds
+     are not invented — they come from the IDA* measurement already recorded in this file:
+     p90 ≈ 3.5 × colours and the limit is 5 × colours, so p90 = **0.70 × limit** (3★) and
+     0.85 × limit (2★). Being ratios of the limit, they rescale with colour count on their
+     own; no per-level constants.
+  3. **`level` is ZERO-BASED** — the header renders `Seviye ${level+1}`. The `◀` disable
+     threshold is therefore `level <= 0`, not `<= 1`. Writing `1` left the button dead on
+     "Seviye 2"; caught on device, not by reading.
+  4. **The in-game `🔄` costs an ad but the game-over "Tekrar Oyna" stays FREE**, and that
+     asymmetry is the whole soft-lock defence. Running out of moves already demands an ad or
+     diamonds to continue; if restarting also required an ad, a player with an empty
+     `AdBudget` would be stuck on that level with no way forward. The "free escape hatch"
+     rule in the move-limit bullet survives there, and `watersort-moves-test.js` asserts
+     `onRestart` still points at `restartLevel`, not `restartWithAd`.
+  The move-limit bullet's undo passages are now history: "undo does not refund a move" has
+  become the broader invariant **nothing refunds a move**, and the test was reworded to that
+  (a future bonus or reward could reintroduce the same hole).
 - **`waterSort`'s DOM renderer is still in `games.js` ON PURPOSE — do NOT delete it as dead code.**
   The unused DOM functions (`buildTubeEl`, `pourTransform`, `pourStream`, `drainSource`,
   `syncLiquidShade`, …) and the `.wsrt-tube` / `.wsrt-body` / `.wsrt-layer` CSS are the
@@ -354,6 +389,31 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   checklist in `docs/04_CANVAS_POLICY.md` — of which step 3 (DOM vs Canvas benchmark) is
   **not yet done**. Same rule applies to any future migration.
 - **`flowConnect` has a polished demo animation but no real game behind it.** Marked `playable:false` on purpose — a backlog item, not an oversight to quietly complete. (`waterSort` and `arrowPuzzle` were built earlier; `jigsawCard` is in progress, see below.)
+- **`jigsawCard` is ENDLESS since 2026-08-07 — completing a picture is a level, not the end
+  of the game.** The `▸` next button was deleted and the game-over box no longer appears on
+  a win; `finish()` runs the completion animation, adds score, toasts, then auto-advances
+  after `WIN_HOLD_MS`. Removing manual skip is what makes "pictures completed" mean
+  anything — a player who skips past pictures they dislike would make the counter measure
+  nothing.
+  Three things are load-bearing:
+  1. **Score is added BEFORE `game_ended` is emitted.** Emitting first was the original
+     shape and it under-reported: device-verified, a 270-point round left
+     `GameEvents.forGame('jigsawCard').bestScore` at 0, so "best score" trailed a level
+     behind. Score is genuinely new here — the old comment "this game has no score concept"
+     was true until endless progression made one necessary.
+  2. **`startLevel(level + 1, 0)`, never `(level + 1, N)`.** Passing the current size
+     freezes the player's board and silently kills the difficulty curve (`sizeFor` ramps
+     3×3 → 4×4 across levels 11-30). Score is not reset there either — `init()` resets it,
+     because a level change continues the run rather than starting one.
+  3. **`↻` costs a rewarded ad; the size buttons do NOT.** 3×3/4×4/5×5 is a difficulty
+     choice, `↻` is a convenience (escaping a board you dislike). Gating difficulty would
+     discourage players from finding their own level. Device-verified with an exhausted
+     `AdBudget`: the board did not change.
+  **Image rotation was NOT rewritten** — the existing epoch-shuffle already satisfies
+  "random, no recent repeats, scales to thousands": it reshuffles the pool per epoch and
+  pushes the previous epoch's second half to the back, and `orderFor` is cached. The
+  measurement behind it is in `SLIDING_PUZZLE.md` (unguarded: 174 early repeats in 400
+  levels).
 - **`jigsawCard` (Resim Kaydır) tiles must stay exactly `100/N%` wide.** The image is split
   with `background-position` percentages divided by **N-1**, not N, and that math assumes the
   tile box is exactly one Nth of the board. Giving tiles a visual gap by shrinking the box
@@ -557,7 +617,32 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   Same story on Home: the random-game button and the rewarded-ad tile are not in the mockup
   and are no longer rendered, so `playRandomGame()` has no home-screen caller (the ad flow is
   still reachable from the shop and the game-over screen).
-- **The economy has ONE daily ad budget and it is the load-bearing rule (2026-07-30).**
+- **REVERSED 2026-08-07 — the daily ad budget now limits DIAMONDS ONLY.** Read this before
+  the shared-pool bullet below; that bullet describes the old design and its reasoning is no
+  longer in force. Owner decision, and the reason it failed in practice: utility actions
+  (continue, restart, previous level, shuffle, hint, undo, 2× score) drained the same pool,
+  so a player who never wanted diamonds could still find the game unadvanceable by
+  mid-afternoon. A rewarded ad the player *chooses* to watch in exchange for a convenience
+  costs nothing to allow — the only thing worth capping is the **free-diamond tap**, because
+  that is the only one that moves the economy.
+  Three things are load-bearing:
+  1. **`runRewardedAction(reward, onReward, opts)` — the default still consumes.** Utility
+     call sites opt out with `{ skipDailyLimit: true }`. The direction is deliberate:
+     forgetting the flag on a new *diamond* action would silently create unlimited free
+     diamonds, while forgetting it on a utility action merely imposes a needless limit. The
+     cheap side to be wrong on is the default. `ad-release-test.js` §3.6 asserts both
+     directions, including that `watchAdForDiamonds` has **no** flag.
+  2. **The UI had to stop advertising the limit.** The game-over continue and 2× buttons no
+     longer print `(3/8)` and no longer disable at zero — leaving that in would have greyed
+     out a button that actually works, which is worse than the old behaviour. Same for the
+     shared `offerRewardChoice` modal.
+  3. **`preload()` lost its `AdBudget` check.** With the check in place the budget kept
+     exerting its influence through *latency*: utility ads still worked at zero budget but
+     each one paid the full ~4 s load. Also, a completed ad now triggers `preloadNext()`, so
+     back-to-back utility actions stay fast — measured on device at **149 ms** with an
+     exhausted budget, and `_ready` true again immediately after the ad closed.
+- **The economy has ONE daily ad budget and it is the load-bearing rule (2026-07-30) —
+  SUPERSEDED, see the bullet directly above.**
   `AdBudget` (`ph_ad_budget`, 8/day from `EconomyConfig.AD_DAILY_LIMIT` — was 3 from the
   system's first commit until 2026-08-02, never 5) is a **single shared
   pool** for all five rewarded actions — diamonds, continue, hint, undo, 2x score. There are
@@ -641,6 +726,16 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   deliberately absent where the game has no score concept (Arrow, Jigsaw) — an invented
   number would be worse than a missing field.
   Counters live in `ph_game_stats` (`totalGamesStarted`, `totalGamesWon`, `perGame`).
+  **`forGame()` also carries `streak` / `bestStreak` / `bestMs` / `bestScore` (2026-08-07).**
+  Endless games (Jigsaw, Water Sort, Arrow) cannot answer "how far have I got" with
+  started/won alone. `_record()` derives all four from the `game_ended` payload and **names
+  no game** — same discipline as `DailyQuests` and `Badges`, so adding a game needs no edit
+  there. A game that sends no `score` or `durationMs` simply never earns that field; an
+  invented number would be worse than a missing one. The streak increments on `'won'` and
+  resets on **every** other result — `'lost'` and `'quit'` both break "consecutive
+  completions" by definition — while `bestStreak` never decreases. Invariant 3 applies here
+  too: a stray `game_ended` must not inflate the streak, which is why `_record` runs only
+  when the round was open.
   `DailyQuests` and `Badges` (both 2026-08-01) are the real subscribers, and the İlerleme
   screen now reads the badge counters. `totalGamesStarted`/`totalGamesWon` themselves are
   still not displayed anywhere — that is a later decision, not an oversight.

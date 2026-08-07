@@ -107,6 +107,35 @@ function countFiles(p) {
   return fs.readdirSync(p).reduce((n, f) => n + countFiles(path.join(p, f)), 0);
 }
 
+// ── SOZDIZIMI KAPISI (2026-08-07) ──
+//
+// Neden var: games.js icindeki bir template literal'e (backtick) yorum
+// icinde ters tirnak yazildi, dizgi erken kapandi ve DOSYANIN TAMAMI
+// ayristirilamaz hale geldi. Derleme bunu fark etmedi, bozuk dosyayi
+// www/'ye ve APK'ya kopyaladi. Cihazda belirtisi son derece yaniltici:
+// uygulama normal aciliyor, ana ekran calisiyor, ama PuzzleGames tanimsiz
+// oldugu icin HICBIR OYUN acilmiyor ve hicbir yerde hata gorunmuyor.
+//
+// new Function() ayristirir ama CALISTIRMAZ — yani yan etkisi yok, sadece
+// sozdizimi denetlenir. Bagimlilik yok (depo kurali).
+function checkSyntax() {
+  const JS = SHIP.filter(rel => rel.endsWith('.js'))
+    .concat(['games/games.js', 'core/app.js'].filter(p => !SHIP.includes(p)));
+  const seen = new Set();
+  for (const rel of JS) {
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    const p = path.join(OUT, rel);
+    if (!fs.existsSync(p)) continue;
+    try {
+      new Function(fs.readFileSync(p, 'utf8'));
+    } catch (e) {
+      fail('SOZDIZIMI HATASI — ' + rel + ': ' + e.message +
+           '\n  (bozuk dosya APK\'ya girmesin diye derleme durduruldu)');
+    }
+  }
+}
+
 function main() {
   verifyAgainstSw();
 
@@ -122,6 +151,8 @@ function main() {
     copyRecursive(src, path.join(OUT, rel));
     n += countFiles(src);
   }
+
+  checkSyntax();
 
   // Surumu ekrana bas: telefonda hangi surumun kosacagini burada gorursun.
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

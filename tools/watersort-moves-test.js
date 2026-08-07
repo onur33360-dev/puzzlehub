@@ -137,13 +137,47 @@ function testSource() {
   const code = block.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
 
   check('hamle sayacı döküşte artıyor', /movesUsed\+\+/.test(code));
-  // BU SİSTEMİN TEK KRİTİK KURALI: undo hamleyi iade etmez. İade etseydi
-  // undo sınırsız+ücretsiz olduğu için limit hiç dolmazdı.
-  check('undo hamleyi İADE ETMİYOR (movesUsed-- yok)',
+  // BU SİSTEMİN TEK KRİTİK KURALI, ve GERİ ALMA KALKTIKTAN SONRA DA GEÇERLİ:
+  // hiçbir şey hamleyi iade etmiyor. Eskiden bu kural "undo iade etmez"
+  // diye yazılıydı çünkü tek şüpheli oydu; geri alma 2026-08-07'de
+  // kaldırıldı ama kuralın kendisi kalıcı — bir gün başka bir mekanizma
+  // (bonus, ödül, hile) sayacı azaltmaya kalkarsa limit işlevsiz kalır.
+  check('hiçbir şey hamleyi İADE ETMİYOR (movesUsed-- yok)',
         !/movesUsed--/.test(code) && !/movesUsed\s*-=/.test(code),
         'movesUsed azaltılıyor — limit işlevsiz kalır');
-  check('undo mantığına dokunulmamış (yıldız hâlâ undo sayısından)',
-        /undosUsedThisLevel === 0\) return 3/.test(code));
+
+  // YILDIZ KURALI DEĞİŞTİ (2026-08-07). Eski iddia "yıldız hâlâ undo
+  // sayısından" diyordu; geri alma kaldırılınca o kural ölçecek bir şey
+  // bırakmıyordu (herkes hep 3★ alırdı). Yeni dayanak hamle verimliliği.
+  // Silmek yerine güncelleniyor, çünkü korunması gereken şey aynı: yıldız
+  // GERÇEK bir performans farkını yansıtmalı.
+  check('yıldız hamle verimliliğinden hesaplanıyor',
+        /movesUsed \/ moveLimit/.test(code) && !/undosUsedThisLevel/.test(code),
+        'yıldız kuralı hâlâ geri almaya bakıyor olabilir');
+  // Eşikler LİMİTE ORANLI olmak zorunda: sabit bir hamle sayısı, renk
+  // sayısı arttıkça anlamsızlaşırdı (limit 5×renk ile ölçekleniyor).
+  check('yıldız eşikleri limite ORANLI, sabit hamle değil',
+        /STAR_3_RATIO/.test(code) && /STAR_2_RATIO/.test(code));
+
+  // Geri almanın gerçekten kalktığı, kalıntı bırakmadığı.
+  check('geri alma kaldırıldı (undoLast/undoOne/undosUsed yok)',
+        !/undoLast|undoOne|undosUsedThisLevel/.test(code));
+  check('◀ önceki seviye ödüllü reklamdan geçiyor',
+        /function prevLevelWithAd/.test(code) && /runRewardedAction/.test(code));
+  // SIFIR TABANLI SAYAÇ TUZAĞI: başlık `Seviye ${level+1}` yazıyor, yani
+  // ekranda "Seviye 2" görünürken `level` 1. Eşiği 1 yazmak Seviye 2'de de
+  // düğmeyi kapatıyordu — cihazda görüldü. Her iki yer de 0 olmalı.
+  check('◀ eşiği sıfır tabanlı sayaca göre (level <= 0)',
+        /level <= 0\) return/.test(code) && /'off', level <= 0\)/.test(code),
+        'eşik 1 yazılmış olabilir — Seviye 2\'de düğme ölü kalır');
+  check('🔄 oyun içi yeniden başlatma ödüllü',
+        /function restartWithAd/.test(code) && /runRewardedAction/.test(code));
+  // SOFT-LOCK KORUMASI: kaybetme ekranındaki "Tekrar Oyna" ÜCRETSİZ
+  // kalmalı. Reklamlı olsaydı, bütçesi bitmiş bir oyuncu hamle limitine
+  // takıldığı seviyede sıkışırdı — ne devam edebilir ne yeniden başlayabilir.
+  check('kaybetme ekranındaki Tekrar Oyna ÜCRETSİZ (restartLevel, restartWithAd değil)',
+        /onRestart: \(\) => \{ animating = false; restartLevel\(\); \}/.test(code),
+        'onRestart reklamlı yola bağlanmış olabilir — soft-lock riski');
 
   check('kaybetme game_ended(lost) yayınlıyor',
         /gameId: 'waterSort', result: 'lost'/.test(code));
@@ -198,7 +232,11 @@ function testLive() {
 
   // Limit dolmuş gibi bitir.
   b.GE.emit('game_ended', { gameId: 'waterSort', result: 'lost', score: 120, durationMs: 9000 });
-  eq('lost sayaçlara işliyor (started 1, won 0)', b.GE.forGame('waterSort'), { started: 1, won: 0 });
+  // started/won üzerinden: forGame() 2026-08-07'den beri seri/en-hızlı/
+  // en-yüksek alanlarını da taşıyor ve burada ölçülen şey onlar değil.
+  const wg = b.GE.forGame('waterSort');
+  eq('lost sayaçlara işliyor (started 1, won 0)', [wg.started, wg.won], [1, 0]);
+  eq('kaybetme seriyi sıfırlıyor', wg.streak, 0);
   const st = b.GE.stats();
   check('değişmez: won <= started', st.totalGamesWon <= st.totalGamesStarted);
 }

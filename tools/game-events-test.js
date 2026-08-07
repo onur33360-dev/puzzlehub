@@ -168,19 +168,80 @@ function testContract() {
   // ── temel tur ──
   GE.emit('game_started', { gameId: 'sudoku' });
   GE.emit('game_ended', { gameId: 'sudoku', result: 'won', score: 4200 });
+  // perGame'in TAMAMI karşılaştırılmıyor (2026-08-07). Eskiden nesne birebir
+  // eşitleniyordu; _record seri/en-hızlı/en-yüksek alanlarını ekleyince o
+  // iddia, ölçmek istediği şeyle ilgisiz bir sebepten kırıldı. Sayaçların
+  // kendisi hâlâ aynı sıkılıkta denetleniyor — kırılgan olan karşılaştırma
+  // biçimiydi, iddianın kendisi değil.
   eq('kazanılan tur sayaçlara işliyor',
-     GE.stats(), { totalGamesStarted: 1, totalGamesWon: 1, perGame: { sudoku: { started: 1, won: 1 } } });
+     [GE.stats().totalGamesStarted, GE.stats().totalGamesWon], [1, 1]);
+  eq('oyun bazlı sayaç işliyor',
+     [GE.forGame('sudoku').started, GE.forGame('sudoku').won], [1, 1]);
 
   // ── kaybetme sayılmıyor (yalnızca started artıyor) ──
   GE.emit('game_started', { gameId: 'blockPuzzle' });
   GE.emit('game_ended', { gameId: 'blockPuzzle', result: 'lost', score: 900 });
   eq('kaybedilen tur won sayacına işlemiyor',
-     GE.forGame('blockPuzzle'), { started: 1, won: 0 });
+     [GE.forGame('blockPuzzle').started, GE.forGame('blockPuzzle').won], [1, 0]);
+
+  // ── seri / en hızlı / en yüksek (2026-08-07) ──
+  //
+  // Sonsuz ilerleyen oyunlar için eklendi (Resim Kaydır'ın sonsuz akışı).
+  // Buradaki iddiaların değeri, seriyi BOZAN şeyleri saymakta: 'lost' ve
+  // 'quit' ikisi de bozmalı, çünkü ikisi de "arka arkaya tamamlama"nın
+  // tanımını bozuyor. bestStreak ise asla azalmamalı.
+  {
+    const G = 'jigsawCard';
+    GE.abandon();
+    for (let i = 0; i < 3; i++) {
+      GE.emit('game_started', { gameId: G });
+      GE.emit('game_ended', { gameId: G, result: 'won', score: 50 + i, durationMs: 9000 - i * 1000 });
+    }
+    eq('üst üste 3 tamamlama seriyi 3 yapıyor', GE.forGame(G).streak, 3);
+    eq('en iyi seri 3', GE.forGame(G).bestStreak, 3);
+    eq('en hızlı tamamlama en KÜÇÜK süre', GE.forGame(G).bestMs, 7000);
+    eq('en yüksek skor', GE.forGame(G).bestScore, 52);
+
+    GE.emit('game_started', { gameId: G });
+    GE.emit('game_ended', { gameId: G, result: 'lost' });
+    eq('kaybetme seriyi sıfırlıyor', GE.forGame(G).streak, 0);
+    eq('en iyi seri AZALMIYOR', GE.forGame(G).bestStreak, 3);
+
+    GE.emit('game_started', { gameId: G });
+    GE.emit('game_started', { gameId: G });      // öncekini quit'ler
+    eq('quit de seriyi sıfırlıyor', GE.forGame(G).streak, 0);
+
+    // Daha yavaş bir tamamlama en hızlıyı BOZMAMALI.
+    GE.emit('game_ended', { gameId: G, result: 'won', score: 1, durationMs: 99000 });
+    eq('yavaş tur en hızlıyı bozmuyor', GE.forGame(G).bestMs, 7000);
+    eq('düşük skor en yükseği bozmuyor', GE.forGame(G).bestScore, 52);
+
+    // Süre/skor GÖNDERMEYEN oyun o alanı hiç kazanmamalı — uydurma bir
+    // sayı, eksik bir alandan kötüdür.
+    GE.abandon();
+    GE.emit('game_started', { gameId: 'arrowPuzzle' });
+    GE.emit('game_ended', { gameId: 'arrowPuzzle', result: 'won' });
+    eq('skor göndermeyen oyunda bestScore 0', GE.forGame('arrowPuzzle').bestScore, 0);
+
+    // Başıboş olay (açık tur yok) seriyi ŞİŞİRMEMELİ — Değişmez 3.
+    GE.abandon();
+    const s0 = GE.forGame(G).streak;
+    GE.emit('game_ended', { gameId: G, result: 'won', score: 9999 });
+    eq('başıboş bitiş seriyi artırmıyor', GE.forGame(G).streak, s0);
+    eq('başıboş bitiş en yüksek skoru bozmuyor', GE.forGame(G).bestScore, 52);
+  }
 
   // ── kalıcılık: sayaç localStorage'da ──
+  // Sabit sayı yerine CANLI durumla karşılaştırılıyor (2026-08-07):
+  // ölçülmek istenen şey "diskteki kayıt bellektekiyle aynı mı", belirli
+  // bir tur sayısı değil. Sabit [2,1] beklentisi, testin başka bir yerine
+  // tur eklenince ilgisiz bir sebeple kırılıyordu.
   const raw = JSON.parse(store['ph_game_stats']);
+  const mem = GE.stats();
   eq('ph_game_stats diske yazılıyor',
-     [raw.totalGamesStarted, raw.totalGamesWon], [2, 1]);
+     [raw.totalGamesStarted, raw.totalGamesWon],
+     [mem.totalGamesStarted, mem.totalGamesWon]);
+  check('diske en az bir tur işlenmiş', mem.totalGamesStarted > 0);
 
   // ── Değişmez 1+2: açık tur varken yeni başlangıç, eskisini quit'ler ──
   seen.length = 0;
@@ -395,11 +456,16 @@ function testSimulation(calls) {
     expect[g] = { started: rounds, won };
   }
 
+  // started/won ÜZERİNDEN karşılaştırılıyor, nesnenin tamamı üzerinden
+  // değil: forGame() artık seri/en-hızlı/en-yüksek alanlarını da taşıyor
+  // ve burada ölçülen şey onlar değil, sayaçlar. Birebir nesne eşitliği
+  // her yeni alanda bu iddiayı ilgisiz bir sebeple kırardı.
   let allOk = true;
   for (const g of GAMES) {
     const got = GE.forGame(g);
-    if (JSON.stringify(got) !== JSON.stringify(expect[g])) {
-      bad(g + ' sayacı', 'beklenen ' + JSON.stringify(expect[g]) + ', gelen ' + JSON.stringify(got));
+    const sade = { started: got.started, won: got.won };
+    if (JSON.stringify(sade) !== JSON.stringify(expect[g])) {
+      bad(g + ' sayacı', 'beklenen ' + JSON.stringify(expect[g]) + ', gelen ' + JSON.stringify(sade));
       allOk = false;
     }
   }

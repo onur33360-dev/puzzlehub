@@ -347,6 +347,106 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
           !/_pending/.test((APP_SRC.match(/function runRewardedAction\([\s\S]*?\n\}/) || [''])[0]));
   }
 
+  // ═════════ 3.6. GÜNLÜK HAK YALNIZCA ELMASA ═════════
+  //
+  // 2026-08-07 sahip kararı: günlük reklam hakkı SADECE ücretsiz elmas
+  // musluğunu sınırlar. Devam etme, yeniden başlatma, önceki seviye,
+  // karıştırma, ipucu, 2x skor — hepsi fayda eylemi ve sınırsız.
+  //
+  // Buradaki en kritik iddia SON İKİSİ: varsayılan "bütçeye tabi" olmak
+  // zorunda. Yeni bir elmas veren eylem eklenip bayrak unutulursa sonuç
+  // sınırsız elmas olur; fayda eyleminde unutulursa sadece gereksiz sınır.
+  // Yani yanlış tarafa düşmenin ucuz olduğu yön korunmalı.
+  console.log('\n3.6. GÜNLÜK HAK YALNIZCA ELMASA');
+  {
+    const b = boot();
+    const AB = b.get('AdBudget');
+    const bas = AB.remaining();
+    // Fayda eylemi: bütçeye DOKUNMAMALI.
+    b.get('runRewardedAction')({ icon: 'x', text: 'y' }, function () {}, { skipDailyLimit: true });
+    await flush();
+    b.plugin.fire(b.get('AD_EV').rewarded);
+    b.plugin.fire(b.get('AD_EV').dismissed);
+    await flush();
+    eq('fayda eylemi günlük hakkı TÜKETMİYOR', AB.remaining(), bas);
+  }
+  {
+    const b = boot();
+    const AB = b.get('AdBudget');
+    const bas = AB.remaining();
+    // Bayraksız çağrı: bütçeye İŞLEMELİ (güvenli varsayılan).
+    b.get('runRewardedAction')({ icon: 'x', text: 'y' }, function () {});
+    await flush();
+    b.plugin.fire(b.get('AD_EV').rewarded);
+    b.plugin.fire(b.get('AD_EV').dismissed);
+    await flush();
+    eq('bayraksız çağrı günlük hakkı TÜKETİYOR (güvenli varsayılan)',
+       AB.remaining(), bas - 1);
+  }
+  {
+    // Bütçe SIFIRKEN: fayda eylemi çalışmalı, elmas eylemi reddedilmeli.
+    const b = boot();
+    const AB = b.get('AdBudget');
+    while (AB.canWatch()) AB.consume();
+    eq('bütçe sıfırlandı', AB.remaining(), 0);
+
+    const faydaOk = b.get('runRewardedAction')({ icon: 'x', text: 'y' }, function () {},
+                                               { skipDailyLimit: true });
+    eq('bütçe 0 iken fayda eylemi KABUL EDİLİYOR', faydaOk, true);
+    await flush();
+    check('bütçe 0 iken fayda eylemi için reklam istendi',
+          b.plugin.names().indexOf('showRewardVideoAd') >= 0, b.plugin.names().join(','));
+
+    const b2 = boot();
+    const AB2 = b2.get('AdBudget');
+    while (AB2.canWatch()) AB2.consume();
+    const elmasOk = b2.get('runRewardedAction')({ icon: 'x', text: 'y' }, function () {});
+    eq('bütçe 0 iken elmas eylemi REDDEDİLİYOR', elmasOk, false);
+    await flush();
+    check('reddedilen elmas eylemi için reklam İSTENMEDİ',
+          b2.plugin.names().indexOf('showRewardVideoAd') < 0, b2.plugin.names().join(','));
+  }
+  {
+    // Bütçe 0 iken ÖN YÜKLEME de çalışmalı. Aksi hâlde bütçe, kaldırıldığı
+    // hâlde gecikme üzerinden etkisini sürdürürdü: fayda eylemleri çalışır
+    // ama her biri ~4 saniye beklerdi. Cihazda bildirilen gecikme buydu.
+    const b = boot();
+    const AB = b.get('AdBudget');
+    while (AB.canWatch()) AB.consume();
+    b.get('RewardedAd').preload();
+    await flush();
+    check('bütçe 0 iken ön yükleme yine de istek yapıyor',
+          b.plugin.names().indexOf('prepareRewardVideoAd') >= 0,
+          'preload AdBudget kontrolü yüzünden erken dönüyor olabilir');
+  }
+  {
+    // Gösterim bitince bir SONRAKİ reklam yükleniyor mu? Fayda eylemleri
+    // sınırsız olduğu için arka arkaya kullanım normal; ikincisinin yavaş
+    // olması düzeltmeyi yarım bırakırdı.
+    const b = boot();
+    const R = b.get('RewardedAd');
+    R.show(10, function () {});
+    await flush();
+    const oncekiSayi = b.plugin.names().filter(n => n === 'prepareRewardVideoAd').length;
+    b.plugin.fire(b.get('AD_EV').rewarded);
+    b.plugin.fire(b.get('AD_EV').dismissed);
+    await flush();
+    check('gösterimden sonra bir sonraki reklam ön yükleniyor',
+          b.plugin.names().filter(n => n === 'prepareRewardVideoAd').length > oncekiSayi,
+          'ikinci fayda eylemi ~4 sn gecikir');
+  }
+  {
+    // Kaynak taraması: elmas veren tek yol (watchAdForDiamonds) bayrağı
+    // ALMAMIŞ olmalı — aldığı an ücretsiz elmas sınırsızlaşır.
+    const fn = (APP_SRC.match(/function watchAdForDiamonds\(\)[\s\S]*?\n\}/) || [''])[0];
+    check('watchAdForDiamonds günlük hakka TABİ (skipDailyLimit YOK)',
+          fn.length > 0 && !/skipDailyLimit/.test(fn),
+          'elmas eylemi bütçeden muaf tutulmuş — ücretsiz elmas açığı:\n' + fn);
+    // Oyun içi fayda eylemleri bayrağı almış olmalı.
+    check('devam etme muaf', /_runGameOverContinuation\('ad'\)[\s\S]{0,160}skipDailyLimit: true/.test(APP_SRC));
+    check('skor 2x muaf', /Skor 2 katına çıktı[\s\S]{0,200}skipDailyLimit: true/.test(APP_SRC));
+  }
+
   // ═════════ 4. MANİFEST İLE TUTARLILIK ═════════
   //
   // Uygulama kimliği (~ ile) ve birim kimlikleri (/ ile) aynı yayıncıya

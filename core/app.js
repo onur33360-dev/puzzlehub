@@ -508,7 +508,14 @@ const GameEvents = {
 
   forGame(gameId) {
     const g = this.stats().perGame[gameId];
-    return { started: (g && g.started) || 0, won: (g && g.won) || 0 };
+    return {
+      started:   (g && g.started) || 0,
+      won:       (g && g.won) || 0,
+      streak:    (g && g.streak) || 0,      // üst üste tamamlama (şu an)
+      bestStreak:(g && g.bestStreak) || 0,  // gelmiş geçmiş en uzun
+      bestMs:    (g && g.bestMs) || 0,      // en hızlı tamamlama (0 = yok)
+      bestScore: (g && g.bestScore) || 0,
+    };
   },
 
   _bump(gameId, field) {
@@ -516,6 +523,36 @@ const GameEvents = {
     if (field === 'started') s.totalGamesStarted++; else s.totalGamesWon++;
     const g = s.perGame[gameId] || (s.perGame[gameId] = { started: 0, won: 0 });
     g[field]++;
+    try { localStorage.setItem(this._key, JSON.stringify(s)); } catch (e) {}
+  },
+
+  // ───── tur kaydı: seri, en hızlı, en yüksek ─────
+  //
+  // Sonsuz ilerleyen oyunlar (Resim Kaydır, Su Sıralama, Ok Bulmaca)
+  // "ne kadar ilerledim" sorusunu started/won ikilisiyle cevaplayamıyor.
+  // Bu üç alan onun için var: üst üste tamamlama, en hızlı tamamlama,
+  // en yüksek skor.
+  //
+  // OYUN-ÖZEL KOD YOK, DailyQuests ve Badges'taki disiplinin aynısı: burası
+  // hiçbir oyunun adını anmıyor, alanlar `game_ended` yükünden türüyor.
+  // Yeni bir oyun eklemek bu bloğa dokunmayı gerektirmiyor; bir oyun
+  // `score` ya da `durationMs` göndermiyorsa o alanı hiç kazanmıyor
+  // (uydurma bir sayı, eksik bir alandan kötüdür — CLAUDE.md).
+  //
+  // Seri KAZANMAYLA artar, kazanma DIŞINDAKİ her sonuçla sıfırlanır:
+  // 'lost' de 'quit' de seriyi bozar, çünkü ikisi de "arka arkaya
+  // tamamlama"nın tanımını bozuyor. bestStreak asla azalmaz.
+  _record(ev) {
+    const s = this.stats();
+    const g = s.perGame[ev.gameId] || (s.perGame[ev.gameId] = { started: 0, won: 0 });
+    if (ev.result === 'won') {
+      g.streak = (g.streak || 0) + 1;
+      if (g.streak > (g.bestStreak || 0)) g.bestStreak = g.streak;
+      if (ev.durationMs != null && (!g.bestMs || ev.durationMs < g.bestMs)) g.bestMs = ev.durationMs;
+      if (ev.score != null && ev.score > (g.bestScore || 0)) g.bestScore = ev.score;
+    } else {
+      g.streak = 0;
+    }
     try { localStorage.setItem(this._key, JSON.stringify(s)); } catch (e) {}
   },
 
@@ -554,6 +591,9 @@ const GameEvents = {
     } else if (ev.result === 'won') {
       this._bump(p.gameId, 'won');
     }
+    // Değişmez 3'ün aynısı burada da geçerli: BAŞIBOŞ olay sayaçlara
+    // dokunmaz. Yoksa açık tur olmadan gelen bir 'won' seriyi şişirirdi.
+    if (!stray) this._record(ev);
     this._dispatch('game_ended', ev);
   },
 
@@ -1354,7 +1394,12 @@ const RewardedAd = {
     if (this._ready) return Promise.resolve(true);
     if (this._loading) return this._loading;
     if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return Promise.resolve(false);
-    if (typeof AdBudget !== 'undefined' && !AdBudget.canWatch()) return Promise.resolve(false);
+    // AdBudget KONTROLÜ KALDIRILDI (2026-08-07). Günlük hak artık yalnızca
+    // elmas kazanmayı sınırlıyor; fayda eylemleri (devam, yeniden başlat,
+    // önceki seviye, karıştır, ipucu) bütçe sıfırken de çalışıyor. Kontrol
+    // burada kalsaydı, bütçesi bitmiş oyuncu için ön yükleme sessizce
+    // devre dışı kalır ve o eylemlerin HEPSİ yeniden ~4 saniye gecikirdi —
+    // yani bütçe, kaldırıldığı hâlde gecikme üzerinden etkisini sürdürürdü.
 
     this._loading = AdConsent.ensure(ad).then(() => {
       if (!AdConsent.canRequestAds()) return false;
@@ -1438,6 +1483,13 @@ const RewardedAd = {
       this._pending = false; this._ready = false;
       if (typeof refreshGameOverOffers === 'function') refreshGameOverOffers();
     };
+    // Gösterilen reklam TÜKENİR; bir sonraki için hemen yenisini yükle.
+    // Bu, fayda eylemleri sınırsız olduğundan (2026-08-07) çok daha önemli
+    // hale geldi: oyuncu arka arkaya "yeniden başlat" diyebiliyor ve ilki
+    // hızlı, ikincisi ~4 saniye gecikmeli olsaydı düzeltme yarım kalırdı.
+    // YALNIZCA başarılı gösterimden sonra: başarısızlıktan sonra yeniden
+    // denemek, kopan bir ağda sonsuz istek döngüsü olurdu.
+    const preloadNext = () => { try { this.preload(); } catch (e) {} };
     const fail = (why, msg) => {
       if (settled) return;
       settled = true; cleanup(); release();
@@ -1447,6 +1499,7 @@ const RewardedAd = {
     const finish = () => {
       if (settled) return;
       settled = true; cleanup(); release();
+      preloadNext();
       if (earned && onComplete) onComplete();
       else if (!earned) showToast('📺 Ödül için reklamı sonuna kadar izlemelisin');
     };
@@ -1575,19 +1628,41 @@ const RewardedAd = {
 // Dönüş değeri "ödül akışı başladı mı" demektir, "ödül verildi mi" DEMEZ:
 // reklam asenkron. Çağıran tarafın ödül anında iş yapması gerekiyorsa
 // onReward içine yazmalı.
-function runRewardedAction(reward, onReward) {
+// GÜNLÜK HAK ARTIK YALNIZCA ELMAS KAZANMAYA UYGULANIR (2026-08-07,
+// sahip kararı). Bu, 2026-07-30'daki "tek paylaşımlı havuz" kuralının
+// BİLİNÇLİ olarak geri alınmasıdır — aşağıdaki gerekçe artık geçerli değil:
+//   "bütçeyi elmasa harcamak, elması biriktirmeyi anlamlı kılıyor"
+// Pratikte ters çalıştı: devam etme, yeniden başlatma, önceki seviye,
+// karıştırma, ipucu gibi FAYDA eylemleri de aynı havuzu tükettiği için
+// oyuncu, hiç elmas istemediği hâlde günün ortasında oyunu ilerletemez
+// hâle geliyordu. Reklamı oyuncu KENDİ İSTEĞİYLE izliyor ve karşılığında
+// bir kolaylık alıyor; bunu sınırlamak ne oyuncuyu ne de geliri koruyor.
+// Sınırlanması gereken tek şey ÜCRETSİZ ELMAS musluğu, çünkü ekonomiyi
+// bozan tek şey o.
+//
+// VARSAYILAN BİLEREK "BÜTÇEYE TABİ": yeni bir elmas veren eylem eklenip
+// bayrak unutulursa sonuç sınırsız elmas olurdu — sessiz ve pahalı bir
+// açık. Fayda eylemi ekleyip bayrağı unutmanın bedeli ise yalnızca gereksiz
+// bir sınır; yani yanlış tarafa düşmek ucuz olan yön bu.
+//
+// Kapı hâlâ TEK: Plus baypası, reklam gösterimi, tüketim ve geçiş reklamı
+// köprüsü hepsi burada. Değişen tek şey, tüketimin KOŞULLU olması.
+function runRewardedAction(reward, onReward, opts) {
+  opts = opts || {};
+  const sayilir = !opts.skipDailyLimit;   // günlük hakka işler mi
+
   if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) {
     onReward();
     return true;
   }
   // UI zaten devre dışı bırakılmış olmalı; bu savunma katmanı (oyun
   // içinden doğrudan çağrılan yollar için).
-  if (!AdBudget.canWatch()) {
-    showToast('📺 Bugünkü reklam hakkın bitti — yarın tekrar gel!');
+  if (sayilir && !AdBudget.canWatch()) {
+    showToast('📺 Bugünkü elmas hakkın bitti — yarın tekrar gel!');
     return false;
   }
   RewardedAd.show(reward, () => {
-    AdBudget.consume();
+    if (sayilir) AdBudget.consume();
     // Oyuncu AZ ÖNCE bir reklam izledi. Geçiş reklamının zamanlayıcısı tam
     // burada sıfırlanıyor, yoksa "ödülü al → oyundan çık → hemen bir reklam
     // daha" dizisi mümkün olurdu: oyuncunun kendi isteğiyle izlediği reklam,
@@ -1837,7 +1912,6 @@ GameEvents.on('game_ended', function (ev) { InterstitialAds.onRoundEnded(ev); })
 function offerRewardChoice(opts) {
   const gemCost = opts.gemCost;
   const plus = (typeof PlusSystem !== 'undefined') && PlusSystem.isActive();
-  const adOk = AdBudget.canWatch();
   const balance = DiamondSystem.get();
   const gemOk = gemCost != null && balance >= gemCost;
 
@@ -1848,10 +1922,13 @@ function offerRewardChoice(opts) {
   panel.innerHTML =
     '<div class="ph-offer">' +
       '<div class="ph-offer-title"></div>' +
-      '<button class="ph-offer-btn primary" data-a="ad"' + (adOk ? '' : ' disabled') + '>' +
+      // Bütçeye göre PASİFLEŞMİYOR: bu modal fayda eylemleri için
+      // (ipucu, geri al, ekstra hamle) ve onlar 2026-08-07'den beri günlük
+      // hakka işlemiyor. Günlük hak satırı da kaldırıldı — burada artık
+      // yanlış bir sınırı anlatıyordu.
+      '<button class="ph-offer-btn primary" data-a="ad">' +
         (plus ? '👑 ' : '📺 ') + (opts.adText || 'Reklam İzle') +
       '</button>' +
-      '<div class="ph-offer-budget" data-ph-ad-budget></div>' +
       (gemCost != null
         ? '<button class="ph-offer-btn" data-a="gem"' + (gemOk ? '' : ' disabled') + '>💎 ' +
             gemCost + ' → ' + (opts.gemText || 'Al') + '</button>' +
@@ -1876,7 +1953,8 @@ function offerRewardChoice(opts) {
       return;
     }
     close();
-    runRewardedAction({ icon: '🎁', text: opts.adText || 'Ödül' }, () => opts.onGrant('ad'));
+    runRewardedAction({ icon: '🎁', text: opts.adText || 'Ödül' }, () => opts.onGrant('ad'),
+                      { skipDailyLimit: true });
   });
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
 }
@@ -3209,7 +3287,6 @@ let _gameOverContinueCost = EconomyConfig.CONTINUE_DIAMONDS;
 
 function refreshGameOverOffers() {
   const plus = (typeof PlusSystem !== 'undefined') && PlusSystem.isActive();
-  const adOk = AdBudget.canWatch();
 
   const setBtn = (btn, ico, lbl, enabled) => {
     if (!btn) return;
@@ -3232,10 +3309,13 @@ function refreshGameOverOffers() {
     // artık fazladan reklam açılmasını engelliyor, ama sessiz kalmak
     // "bozuk" hissini tek başına ortadan kaldırmıyor.
     setBtn(contAd, '⏳', 'Reklam yükleniyor…', false);
-  } else if (adOk) {
-    setBtn(contAd, '📺', 'Reklam İzle → Devam Et  (' + AdBudget.remaining() + '/' + AdBudget.limit() + ')', true);
   } else {
-    setBtn(contAd, '📺', 'Reklam hakkın bitti — yarın tekrar gel', false);
+    // Günlük hak SAYISI ARTIK YAZMIYOR ve düğme bütçe yüzünden PASİFLEŞMİYOR:
+    // devam etmek 2026-08-07'den beri günlük hakka işlemiyor (bkz.
+    // runRewardedAction). Sayıyı burada göstermeye devam etmek, oyuncuya
+    // artık geçerli olmayan bir sınırı vaat etmek olurdu — ve daha kötüsü,
+    // sayı sıfırlandığında çalışan bir düğmeyi "bitti" diye kapatırdı.
+    setBtn(contAd, '📺', 'Reklam İzle → Devam Et', true);
   }
 
   // Devam — elmas satırı. Premium'da GİZLİ: ücretsiz devam varken elmas
@@ -3254,10 +3334,9 @@ function refreshGameOverOffers() {
   const dbl = document.getElementById('go-double');
   if (plus) {
     setBtn(dbl, '👑', 'Skor 2x (Plus)', true);
-  } else if (adOk) {
-    setBtn(dbl, '📺', 'Reklam İzle → Skor 2x!  (' + AdBudget.remaining() + '/' + AdBudget.limit() + ')', true);
   } else {
-    setBtn(dbl, '📺', 'Reklam hakkın bitti — yarın tekrar gel', false);
+    // Devam düğmesiyle aynı gerekçe: skor 2x günlük hakka işlemiyor.
+    setBtn(dbl, '📺', 'Reklam İzle → Skor 2x!', true);
   }
 }
 
@@ -3282,9 +3361,10 @@ function _runGameOverContinuation(source) {
 // bakılmaz — yani "sınırsız ücretsiz devam" faydası ayrı bir kod yolu
 // değil, kapının doğal sonucu.
 function continueWithAd() {
+  // Günlük hakka İŞLEMEZ: devam etmek bir fayda, elmas musluğu değil.
   runRewardedAction({ icon: '🔄', text: 'Devam Et!' }, () => {
     if (!_runGameOverContinuation('ad')) showToast('🔄 Devam ediyorsun!');
-  });
+  }, { skipDailyLimit: true });
 }
 
 function continueWithDiamonds() {
@@ -3310,7 +3390,9 @@ function doubleScoreWithAd() {
       const current = parseInt(scoreEl.textContent.replace(/,/g, '')) || 0;
       scoreEl.textContent = (current * 2).toLocaleString();
       showToast('🎉 Skor 2 katına çıktı!');
-    }
+    },
+    // Günlük hakka İŞLEMEZ: skor bir fayda, elmas değil.
+    { skipDailyLimit: true }
   );
 }
 

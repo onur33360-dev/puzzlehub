@@ -5714,8 +5714,17 @@ PuzzleGames.waterSort = (() => {
   // aynı değeri paylaşmak zorunda — tek kaynak burası.
   const LAYER_PCT = 25;
 
-  let container, level, score, tubes, selected, history, animating, wrapEl, tubesEl, atmosphereEl;
-  let comboCount, undosUsedThisLevel;
+  // GERİ ALMA KALDIRILDI (2026-08-07, sahip kararı). `↩` düğmesi artık
+  // ÖNCEKİ SEVİYE. Kaldırılan üç şeyin yerine ne geldiği:
+  //   history[]           → initialTubes (yeniden başlatma için anlık kopya)
+  //   undosUsedThisLevel  → yıldız artık HAMLE VERİMLİLİĞİNE bakıyor
+  //   undoLast/undoOne    → prevLevelWithAd
+  // history yalnızca geri alma için vardı; tahtayı geri sarmak için her
+  // hamleyi saklamak yerine BAŞLANGICI saklamak hem daha az bellek hem de
+  // daha doğru: kopyayı geri yazmak, N hamleyi ters çevirmekten kısa.
+  let container, level, score, tubes, selected, initialTubes, animating, wrapEl, tubesEl, atmosphereEl;
+  let initialScore = 0;          // seviye basindaki skor (yeniden baslatma icin)
+  let comboCount;
   let movesUsed, moveLimit, levelStartedAt;
 
   // ═══════════ HAMLE LİMİTİ ═══════════
@@ -5967,7 +5976,22 @@ PuzzleGames.waterSort = (() => {
       .wsrt-wrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--ph-space-4);width:100%;max-width:430px;min-height:100%;margin:0 auto;padding:var(--ph-space-3) var(--ph-space-2)}
       /* Seviye kapsülü ortada, kontroller sağda mutlak konumlu (referans üst
          barı). Böylece kapsül geri/kontrol düğmelerinden bağımsız ortalanır. */
-      .wsrt-bar{position:relative;display:flex;justify-content:center;align-items:center;width:100%;padding:0 4px;min-height:40px}
+      /* z-index YÜK TAŞIYOR — süs değil, düğmelerin çalışmasının şartı.
+         Tüp tuvali (.wsrt-cv) BİLEREK barın da üstüne taşan, negatif
+         konumlu, aşırı büyük bir yüzey (efektler tüplerin dışına dökülsün
+         diye: ölçüldü, üst kenarı barın 54px yukarısına çıkıyor). DOM'da
+         bardan SONRA geldiği için, yığın bağlamında üste düşüyor ve barın
+         üstündeki her dokunuşu yutuyordu — iki düğme de tamamen ölüydü.
+         Bu, "off" sınıfı hatasından AYRI ve ondan sonra ortaya çıkan İKİNCİ
+         sebepti; ilki düzeltilene kadar görünmüyordu, çünkü düğmeler zaten
+         pointer-events:none taşıyordu.
+         Tuvali küçültmek çözüm değil (efekt alanı gerçekten gerekli);
+         doğru olan, barı tuvalin üstüne çıkarmak.
+         NOT: bu blok bir template literal (backtick) içinde — yoruma ters
+         tırnak YAZILAMAZ, dizgiyi erken kapatır ve games.js'in TAMAMI
+         yüklenmez (PuzzleGames tanımsız kalır, hiçbir oyun açılmaz).
+         Tam olarak bu yaşandı; node --check yakalar, gözle bakmak yakalamaz. */
+      .wsrt-bar{position:relative;z-index:2;display:flex;justify-content:center;align-items:center;width:100%;padding:0 4px;min-height:40px}
       /* Seviye etiketi artık cam kapsül (referanstaki gibi) — üst barı
          "app kabuğu" değil, oyunun kendi parçası gibi gösterir. */
       .wsrt-bar .wb-lbl{
@@ -6423,10 +6447,23 @@ PuzzleGames.waterSort = (() => {
   // cerrahisi vardi (katman ekle/cikar, dikis sinifi, isik ortusu senkronu).
   function applyPourDOM() { wPaint(); }
   function updateControlsBar() {
-    const undoBtn = wrapEl.querySelector('#wsrt-undo');
+    const prevBtn = wrapEl.querySelector('#wsrt-prev');
     const restartBtn = wrapEl.querySelector('#wsrt-restart');
-    if (undoBtn) undoBtn.classList.toggle('off', history.length === 0);
-    if (restartBtn) restartBtn.classList.toggle('off', history.length === 0);
+    // Önceki seviye: yalnızca ilk seviyede kapalı — öncesi yok.
+    // `level` SIFIR TABANLI (başlık `Seviye ${level+1}` yazıyor), o yüzden
+    // eşik 0. `level <= 1` yazmak Seviye 2'de de düğmeyi kapatıyordu —
+    // cihazda görüldü, ekranda "Seviye 2" varken düğme hâlâ ölüydü.
+    if (prevBtn) prevBtn.classList.toggle('off', level <= 0);
+    // YENİDEN BAŞLAT HİÇ KAPANMAZ. Bildirilen hatanın kaynağı buydu:
+    // eskiden `history.length === 0` iken `off` alıyordu ve
+    // `.wsrt-icon-btn.off` pointer-events:none demek — yani seviye başında
+    // düğme tıklanamıyordu. Cihazda doğrulandı (2026-08-07): computed
+    // pointer-events "none". Hatanın sinsiliği, yeniden başlatmanın hamle
+    // yapılmamışken zaten anlamsız görünmesiydi; oysa oyuncu tahtayı
+    // beğenmediğinde İLK dokunuşu bu düğmeye oluyor.
+    // Tek meşru kapalılık sebebi dökülme animasyonu; onu restartWithAd'ın
+    // kendi `if (animating) return` koruması zaten hallediyor.
+    if (restartBtn) restartBtn.classList.remove('off');
     // Hamle sayacı. Son 5 hamlede uyarı rengine geçiyor — limit oyuncuyu
     // hazırlıksız yakalamamalı; sürpriz bir kaybetme, tasarlanmış bir
     // kaybetmeden çok daha kötü hissettirir.
@@ -7113,8 +7150,8 @@ PuzzleGames.waterSort = (() => {
         <span class="wb-lbl">Seviye ${level+1}</span>
         <span class="wb-moves" id="wsrt-moves"></span>
         <div class="wb-right">
-          <button class="wsrt-icon-btn" id="wsrt-undo" title="Geri Al">↩</button>
-          <button class="wsrt-icon-btn" id="wsrt-restart" title="Yeniden Başlat">🔄</button>
+          <button class="wsrt-icon-btn" id="wsrt-prev" title="Önceki Seviye (reklam)">◀</button>
+          <button class="wsrt-icon-btn" id="wsrt-restart" title="Yeniden Başlat (reklam)">🔄</button>
         </div>
       </div>
       <div class="wsrt-dais"><div class="wsrt-tubes"><canvas class="wsrt-cv"></canvas></div></div>
@@ -7145,8 +7182,8 @@ PuzzleGames.waterSort = (() => {
       if (animating) { wPendingTap = { i, t: performance.now() }; return; }
       onTapTube(i);
     });
-    addEv(wrapEl.querySelector('#wsrt-undo'), 'click', undoLast);
-    addEv(wrapEl.querySelector('#wsrt-restart'), 'click', restartLevel);
+    addEv(wrapEl.querySelector('#wsrt-prev'), 'click', prevLevelWithAd);
+    addEv(wrapEl.querySelector('#wsrt-restart'), 'click', restartWithAd);
     addEv(window, 'resize', () => { if (wSize()) wPaint(); });
     updateControlsBar();
   }
@@ -7350,9 +7387,8 @@ PuzzleGames.waterSort = (() => {
     // kalmazsa ikinci hamle yarı-güncel durum üzerinde işlem yapar.
     animating = true;
     score += scoreDelta;
-    history.push({from, to, count, colorIdx, scoreDelta});
-    // Sayaç YAPILAN DÖKÜŞÜ sayar; geri alınan hamle sayaçtan DÜŞMEZ
-    // (bkz. undoOne'daki not) — limitin işe yaraması buna bağlı.
+    // Hamle kaydı TUTULMUYOR: geri alma kalktı, tek tüketicisi oydu.
+    // Yeniden başlatma başlangıç kopyasından dönüyor (bkz. restartLevel).
     movesUsed++;
     updateGameScore(score);
     updateControlsBar();
@@ -7506,32 +7542,65 @@ PuzzleGames.waterSort = (() => {
   // sayıyor: denemenin bedeli hamle bütçesi. Undo'nun kendi mantığına
   // (ücretsiz, sınırsız, yıldız düşürür) DOKUNULMADI — kaçış kapısı
   // ücretsiz "Yeniden Başla".
-  function undoOne(bulk) {
-    if (!history.length) return;
-    const move = history.pop();
-    transferUnits(tubes, move.to, move.from, move.count);
-    score -= move.scoreDelta;
-    if (!bulk) applyPourDOM(move.to, move.from, move.count, move.colorIdx);
+  // Tüplerin derin kopyası. Sığ kopya YETMEZ: her tüp kendi renk dizisini
+  // taşıyor ve döküş o diziyi yerinde değiştiriyor — sığ kopyada başlangıç
+  // anlık görüntüsü oyunla birlikte "kayar" ve yeniden başlatma hiçbir şey
+  // yapmaz hâle gelir.
+  function snapshotTubes(src) {
+    return src.map(t => ({ colors: t.colors.slice() }));
   }
-  function undoLast() {
-    if (!history.length || animating) return;
-    deselect();
-    undoOne(false);
-    updateGameScore(score);
-    updateControlsBar();
-    comboCount = 0;
-    undosUsedThisLevel++;
-    GameAudio.play('slide'); GameAudio.haptic('soft');
+
+  // ◀ ÖNCEKİ SEVİYE — ÖDÜLLÜ (2026-08-07, sahip kararı).
+  // Ödül verilmezse seviye DEĞİŞMEZ; bunu sağlayan şey burada bir kontrol
+  // değil, runRewardedAction'ın sözleşmesi: geri çağırma yalnızca ödül hak
+  // edilince çalışıyor (CLAUDE.md ekonomi kuralı 2).
+  //
+  // 1. seviyede kapalı: "öncesi" yok. Düğmeyi gizlemek yerine pasif
+  //    bırakıyoruz — AdBudget'taki aynı dil: gri bir düğme "şimdi olmaz"
+  //    der, kaybolan bir düğme "böyle bir şey yok" der.
+  function prevLevelWithAd() {
+    if (animating || level <= 0) return;      // level SIFIR TABANLI
+    if (typeof runRewardedAction !== 'function') { loadLevel(level - 1); return; }
+    runRewardedAction({ icon: '◀', text: 'Önceki Seviye' }, () => {
+      // loadLevel yeni bir game_started yayınlıyor; açık tur Değişmez 2
+      // gereği 'quit' ile kapanıyor. Doğru olan bu: oyuncu bu seviyeyi
+      // terk edip başka bir seviyeye geçti, tamamlamadı.
+      loadLevel(level - 1);
+    }, { skipDailyLimit: true });   // fayda eylemi — günlük elmas hakkına işlemez
   }
   // Dökme sırasında yeniden başlatma yok (durum yarı yolda değişiyor olurdu);
   // ama geçmiş boşken de render() çalışır — tahta zaten başlangıçtaysa bile
   // dokunuş görünür bir karşılık verir ve DOM durumdan yeniden kurulur.
+  // 🔄 YENİDEN BAŞLAT — oyun içi düğmeden ÖDÜLLÜ, kaybetme ekranından
+  // ÜCRETSİZ (2026-08-07, sahip kararı).
+  //
+  // Bu ayrım soft-lock'u önlüyor ve tek sebebi bu: hamle limiti bitince
+  // devam etmek reklam/elmas istiyor; yeniden başlatmanın TEK yolu da
+  // reklam olsaydı, bütçesi bitmiş bir oyuncu o seviyede sıkışırdı.
+  // Kaybetme ekranındaki "Tekrar Oyna" bu yüzden ücretsiz kalıyor —
+  // CLAUDE.md'nin "ücretsiz kaçış kapısı" kuralı orada yaşamaya devam
+  // ediyor. Oyun içi düğme ise bir kolaylık: tahtayı beğenmeyen oyuncu
+  // için, kaybetmeden önce.
+  function restartWithAd() {
+    if (animating) return;
+    if (typeof runRewardedAction !== 'function') { restartLevel(); return; }
+    runRewardedAction({ icon: '🔄', text: 'Yeniden Başlat' }, () => restartLevel(), { skipDailyLimit: true });
+  }
+
   function restartLevel() {
     if (animating) return;
-    while (history.length) undoOne(true);
+    // Başlangıç kopyasını GERİ YAZ. Eskiden geçmiş ters çevriliyordu;
+    // geri alma kalkınca geçmiş de kalktı, ama "başlangıç durumuna dön"
+    // sözü aynen duruyor — kopya onu daha doğrudan tutuyor.
+    tubes = snapshotTubes(initialTubes);
+    // Skor SEVİYE BAŞINA sıfırlanmıyor, koşu boyunca birikiyor — o yüzden
+    // 0'a çekmek önceki seviyelerin puanını da silerdi. Geçmişi ters
+    // çeviren eski kod bunu farkında olmadan doğru yapıyordu (her hamlenin
+    // scoreDelta'sını düşüyordu); kopya yöntemi aynı sonucu vermek için
+    // seviye başındaki skoru ayrıca saklamak zorunda.
+    score = initialScore;
     selected = null;
     comboCount = 0;
-    undosUsedThisLevel = 0;
     // Yeniden başlatmak GERÇEKTEN yeni bir tur: hamle bütçesi sıfırlanıyor
     // ve GameEvents'e yeni bir başlangıç bildiriliyor. Değişmez 2 gereği
     // açık tur önce 'quit' ile kapanır — oyuncu o denemeyi terk etti.
@@ -7585,9 +7654,26 @@ PuzzleGames.waterSort = (() => {
   // phShowCelebration'a NİHAİ metin geçilir — ui-kit.js'e dokunulmuyor
   // (bkz. plan §5: paylaşımlı katman yalnızca gerçek ikinci tüketici
   // çıktığında büyür).
+  // YILDIZ ARTIK HAMLE VERİMLİLİĞİNE BAKIYOR (2026-08-07).
+  // Eski kural geri alma sayısına dayanıyordu; geri alma kaldırılınca
+  // dayanağı kalmadı (kural aynen bırakılsaydı herkes hep 3★ alırdı, yani
+  // yıldız hiçbir şey ölçmezdi).
+  //
+  // Eşikler UYDURULMADI, zaten ölçülmüş verilerden türüyor. CLAUDE.md'deki
+  // Water Sort ölçümü: 30 tahta/seviye IDA* ile gerçek optimumuna çözüldü
+  // ve p90 ≈ 3.5 × renk sayısı çıktı; limit ise 5 × renk. Yani
+  //   p90 = 0.70 × limit  →  bunun altı "en zor tahtalar kadar iyi" = 3★
+  //   0.85 × limit        →  limitin rahatça altında bitirme     = 2★
+  //   üstü                                                        = 1★
+  // Oranlar limitten türediği için renk sayısı değişince kendiliğinden
+  // ölçekleniyor; hiçbir seviyeye özel sayı yok.
+  const STAR_3_RATIO = 0.70;   // ölçülen p90 / limit
+  const STAR_2_RATIO = 0.85;
   function starsForLevel() {
-    if (undosUsedThisLevel === 0) return 3;
-    if (undosUsedThisLevel <= 2) return 2;
+    if (!moveLimit) return 3;
+    const oran = movesUsed / moveLimit;
+    if (oran <= STAR_3_RATIO) return 3;
+    if (oran <= STAR_2_RATIO) return 2;
     return 1;
   }
   function countUpAndCelebrate(bonus, stars) {
@@ -7641,11 +7727,15 @@ PuzzleGames.waterSort = (() => {
     gameEvent('game_started', { gameId: 'waterSort' });
     level = lv;
     tubes = generateLevel(lv);
-    history = [];
+    // Yeniden başlatmanın doğruluk kaynağı: seviyenin BAŞLANGIÇ hâli.
+    // generateLevel(lv) yeniden çağrılmıyor — üretecin aynı tahtayı
+    // vereceği garanti değil ve "başlangıç durumuna dön" sözü, başka bir
+    // tahta vermekle tutulmuş olmaz.
+    initialTubes = snapshotTubes(tubes);
+    initialScore = score;
     selected = null;
     animating = false;
     comboCount = 0;
-    undosUsedThisLevel = 0;
     movesUsed = 0;
     moveLimit = moveLimitFor(lv);
     levelStartedAt = Date.now();
@@ -9503,6 +9593,10 @@ PuzzleGames.jigsawCard = (() => {
   let N = 3, board = null, moves = 0, won = false;
   let startedAt = 0, timerId = 0, seed = null, winT = 0;
   let level = 1, image = null, imageOk = false;
+  // Skor KOŞU boyunca birikiyor, seviye başına sıfırlanmıyor: sonsuz
+  // ilerlemede ölçülen şey tek bir resim değil, arka arkaya kaç resim
+  // çözüldüğü. startLevel bunu bilerek sıfırlamıyor; init() sıfırlıyor.
+  let score = 0;
   let imgRetryT = 0;                  // bekleyen yeniden deneme (bkz. loadImage)
 
   // ═══════════ RESİM HAVUZU ═══════════
@@ -9998,17 +10092,6 @@ PuzzleGames.jigsawCard = (() => {
   function finish() {
     won = true;
     stopTimer();
-    // Skor alanı YOK: bu oyunda skor kavramı yok, ölçü hamle ve yıldız.
-    // Süre oyunun kendi sayacından — kazanma kutusu 1100 ms sonra açılıyor,
-    // olay ise gerçekten bittiği anda yayınlanıyor.
-    gameEvent('game_ended', {
-      gameId: 'jigsawCard', result: 'won',
-      durationMs: startedAt ? Date.now() - startedAt : undefined,
-    });
-    // Oyunun ödülü: aralıklar ve rozetler kaybolur, fotoğraf TEK PARÇA
-    // olur. Oynarken parçalar ayrık duruyor ki tahta okunsun; çözülünce
-    // dikişler kapanıyor.
-    if (boardEl) boardEl.classList.add('won');
 
     // Yıldız: hamle sayısı PAR'a göre. Par = N²·2.5 (3×3→22, 4×4→40,
     // 5×5→62). 3×3'ün teorik en kötü optimali 31, ortalaması ~22 —
@@ -10016,9 +10099,29 @@ PuzzleGames.jigsawCard = (() => {
     // hedef koymak bu oyunun rahatlatıcı tonuna ters düşerdi.
     const par = Math.round(N * N * 2.5);
     const stars = moves <= par ? 3 : moves <= Math.round(par * 1.7) ? 2 : 1;
+    const levelMs = startedAt ? Date.now() - startedAt : undefined;
     const secs = Math.floor((Date.now() - startedAt) / 1000);
     const mmss = String((secs / 60) | 0).padStart(2, '0') + ':' +
                  String(secs % 60).padStart(2, '0');
+
+    // SIRA YÜK TAŞIYOR: skor OLAYDAN ÖNCE ekleniyor.
+    // İlk hâlinde olay en başta yayınlanıyordu ve `score` henüz bu turun
+    // puanını içermiyordu; cihazda görüldü — 270 puanlık bir tur sonrası
+    // GameEvents.forGame('jigsawCard').bestScore hâlâ 0 duruyordu, yani
+    // "en yüksek skor" istatistiği bir seviye geriden geliyordu.
+    addScore(scoreFor(stars, secs));
+
+    // Skor alanı eskiden bilerek YOKTU ("bu oyunda skor kavramı yok");
+    // sonsuz ilerleme onu anlamlı kıldı, o yüzden uydurma değil gerçek bir
+    // alan. durationMs bu SEVİYENİN süresi — "en hızlı tamamlama" onu okuyor.
+    gameEvent('game_ended', {
+      gameId: 'jigsawCard', result: 'won', score, durationMs: levelMs,
+    });
+
+    // Oyunun ödülü: aralıklar ve rozetler kaybolur, fotoğraf TEK PARÇA
+    // olur. Oynarken parçalar ayrık duruyor ki tahta okunsun; çözülünce
+    // dikişler kapanıyor.
+    if (boardEl) boardEl.classList.add('won');
 
     GameAudio.play('premium');
     GameAudio.haptic('win');
@@ -10029,26 +10132,55 @@ PuzzleGames.jigsawCard = (() => {
                       'var(--ph-accent)', 16);
     }
 
-    // Platformun paylaşımlı kutusu; kendi modalimizi kurmuyoruz.
-    // Kısa gecikme, dikişlerin kapanma anının görülmesi için.
+    // SONSUZ İLERLEME (2026-08-07). Eskiden burada oyun-sonu kutusu
+    // açılıyordu ve oyun BİTİYORDU; artık her tamamlanan resim bir seviye
+    // ve bir sonraki kendiliğinden geliyor — Water Sort ve Ok Bulmaca ile
+    // aynı ritim. Kutu kaldırıldı çünkü sonsuz bir akışta "oyun bitti"
+    // ekranı yanlış bir cümle: hiçbir şey bitmiyor.
+    //
+    // Sıra yük taşıyor: dikişlerin kapanışı GÖRÜLMELİ (kazanmanın ödülü o),
+    // skor ONDAN SONRA yükselmeli, yeni resim en son gelmeli. Hepsi tek
+    // seferde olsaydı oyuncu neyi başardığını göremezdi.
+    // (Skor yukarıda, olaydan önce eklendi — gerekçesi orada.)
+    showWinToast(stars, mmss);
     winT = setTimeout(() => {
       winT = null;
-      showGameOver(true, '★'.repeat(stars) + '☆'.repeat(3 - stars),
-        image ? image.category + ' · ' + N + '×' + N : N + '×' + N, {
-        accent: 'var(--ph-accent-dark)',
-        accentLight: 'var(--ph-accent-light)',
-        accentGlow: 'var(--ph-accent)',
-        mark: '✦',
-        stats: [
-          { label: 'Hamle', value: moves },
-          { label: 'Süre', value: mmss },
-          { label: 'Hedef', value: par },
-        ],
-        // "Tekrar Oyna" oyuncuyu 1. seviyeye DÜŞÜRMEMELİ; kazandığı
-        // seviyenin bir sonrasını verir.
-        onRestart: () => startLevel(level + 1, 0),
-      });
-    }, 1100);
+      if (!boardEl) return;                 // arada cleanup olduysa
+      // forcedSize 0: boyutu ZORLAMIYORUZ, sizeFor() eğrisi karar versin.
+      // N geçirmek oyuncunun o anki tahtasını dondurur ve zorluk eğrisini
+      // sessizce öldürürdü (11-30 arası 3×3→4×4 kademeli geçişi).
+      startLevel(level + 1, 0);
+    }, WIN_HOLD_MS);
+  }
+
+  // ═══════════ SKOR ═══════════
+  // Skor kavramı bu oyuna sonsuz ilerlemeyle GİRDİ: bir sonu olmayan
+  // oyunda "ne kadar ilerledim" sorusunun görünür bir cevabı olmalı.
+  //
+  // Hiçbir sayı elle yazılmıyor — hepsi zaten var olan büyüklüklerden
+  // türüyor. Taban tahta boyuyla ölçekleniyor (N² parça), yıldız çarpanı
+  // hamle verimliliğini ödüllendiriyor, hız primi ise PAR SÜREden sapmayla
+  // hesaplanıyor. Böylece 5×5'te bir resim, 3×3'te bir resimden fazla
+  // ediyor ve iyi oynamak sayıya yansıyor.
+  const WIN_HOLD_MS = 1400;         // dikişlerin kapanışı + skorun okunması
+  function scoreFor(stars, secs) {
+    const base = N * N * 10;                       // tahta büyüklüğü
+    const parSecs = N * N * 4;                     // ~4 sn/parça: hız primi eşiği
+    const speed = Math.max(0, 1 - secs / (parSecs * 2));
+    return Math.round(base * stars * (1 + speed));
+  }
+  function addScore(pts) {
+    score += pts;
+    updateGameScore(score);
+  }
+  // Kendi modalimizi KURMUYORUZ (platform kuralı). Sonsuz akışta kazanma
+  // geri bildirimi kesintisiz olmalı: tam ekran bir kutu, tam da "devam"
+  // hissini kırdığı için kaldırıldı. Toast aynı bilgiyi akışı durdurmadan
+  // veriyor; asıl kutlama zaten tahtada (dikişler kapanıyor + parçacıklar).
+  function showWinToast(stars, mmss) {
+    if (typeof showToast !== 'function') return;
+    showToast('★'.repeat(stars) + '☆'.repeat(3 - stars) + '  ' +
+              (image ? image.category + ' · ' : '') + mmss);
   }
 
   function startTimer() {
@@ -10102,6 +10234,24 @@ PuzzleGames.jigsawCard = (() => {
   }
   function reset(n) { startLevel(level, n || 0); }
 
+  // ↻ Karıştır — ÖDÜLLÜ. Ödül verilmezse tahta DEĞİŞMEZ: reklam
+  // kapatılırsa, yüklenemezse veya günlük hak bittiyse hiçbir şey olmaz.
+  // Bunu garanti eden şey burada bir kontrol değil, runRewardedAction'ın
+  // sözleşmesi: geri çağırma YALNIZCA ödül hak edilince çalışıyor
+  // (CLAUDE.md ekonomi kuralı 2). Kapıyı atlayıp RewardedAd.show'u
+  // doğrudan çağırmak bütçeyi de baypas ederdi.
+  //
+  // Kazanma anında çağrılmıyor: orada tahta zaten çözülmüş, karıştırmanın
+  // anlamı yok. `won` kontrolü o yüzden.
+  function shuffleWithAd() {
+    if (won) return;
+    // Çağrı ANINDA aranıyor, modül kapsamında değil: app.js games.js'ten
+    // SONRA yükleniyor (econ/gameEvent ile aynı gerekçe). Bulunamadığı tek
+    // yer tools/*.js'in kabuksuz vm kum havuzu; orada reklam kavramı yok.
+    if (typeof runRewardedAction !== 'function') { reset(0); return; }
+    runRewardedAction({ icon: '🔀', text: 'Karıştır' }, () => reset(0), { skipDailyLimit: true });
+  }
+
   function init(cont, opts) {
     container = cont;
     opts = opts || {};
@@ -10125,8 +10275,12 @@ PuzzleGames.jigsawCard = (() => {
           '<span class="' + P + '-seg">' +
             SIZES.map(s => '<button data-size="' + s + '">' + s + '×' + s + '</button>').join('') +
           '</span>' +
-          '<button class="ph-icon-btn" data-role="reset" aria-label="Yeniden">↻</button>' +
-          '<button class="ph-icon-btn" data-role="next" aria-label="Sonraki">▸</button>' +
+          // ▸ SONRAKİ KALDIRILDI (2026-08-07). Oyuncu bir sonraki resmi
+          // artık SEÇMİYOR; resim tamamlanınca kendiliğinden geliyor
+          // (bkz. finish → advance). Elle atlama, sonsuz ilerlemenin
+          // "her resim bir seviye" anlamını boşa çıkarıyordu: beğenmediğini
+          // atlayıp geçen oyuncu için tamamlama sayacı bir şey ölçmez.
+          '<button class="ph-icon-btn" data-role="reset" aria-label="Karıştır">↻</button>' +
         '</div>' +
       '</div>');
     wrapEl = container.querySelector('.' + P + '-wrap');
@@ -10141,14 +10295,22 @@ PuzzleGames.jigsawCard = (() => {
     // devam etti; hiçbir düğmeye dinleyici bağlanmadı ve 3×3/4×4/5×5,
     // Yeniden, Sonraki hepsi sessizce öldü. data-* öznitelikleri
     // düğmenin GÖRÜNÜŞÜ değiştiğinde de yerinde kalıyor.
-    wrapEl.querySelectorAll('[data-size],[data-role="reset"],[data-role="next"]')
+    // Boyut düğmeleri ÜCRETSİZ, Karıştır ÖDÜLLÜ. Ayrım keyfi değil:
+    // 3×3/4×4/5×5 bir zorluk tercihi (oyuncu kendine daha zor bir tahta
+    // seçiyor), Karıştır ise bir kolaylık (sıkıştığı tahtadan kurtuluyor).
+    // Zorluk seçimini reklamın arkasına koymak, oyuncuyu kendi seviyesini
+    // bulmaktan caydırırdı.
+    wrapEl.querySelectorAll('[data-size],[data-role="reset"]')
       .forEach(b => {
         addEv(b, 'click', () => {
-          if (b.dataset.size) reset(Number(b.dataset.size));
-          else if (b.dataset.role === 'next') startLevel(level + 1, 0);
-          else reset(0);
+          if (b.dataset.size) { reset(Number(b.dataset.size)); return; }
+          shuffleWithAd();
         });
       });
+    // Koşu burada başlıyor: skor SIFIRLANIR. startLevel sıfırlamıyor,
+    // çünkü orası seviye geçişi — koşunun devamı, yenisi değil.
+    score = 0;
+    updateGameScore(0);
     startLevel(Math.max(1, opts.level || 1), SIZES.indexOf(opts.size) >= 0 ? opts.size : 0);
   }
 
