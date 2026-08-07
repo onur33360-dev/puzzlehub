@@ -846,16 +846,116 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      (§1), so neither `import` nor the package's `RewardAdPluginEvents` enum is reachable at
      runtime — the strings are copied from the plugin's own enum file. Same pattern as the
      splash-screen plugin in `index.html`.
-  6. **Only Google's official TEST ids are in the repo** (`AD_IDS` in `core/app.js` and the
-     `APPLICATION_ID` meta-data in `AndroidManifest.xml`). Developing against your own real
-     units counts as invalid traffic and can get the AdMob account suspended, so this is a
-     safety rule, not tidiness. Real ids go in at release, in those **two** places, as a
-     separate final step.
+  6. **Real ad unit ids are now allowed in the repo, but only alongside `AD_TEST_DEVICES`
+     — amended 2026-08-06.** The old rule was "test ids only, real ids at release"; it was
+     the right rule while there was no safe way to hold a real id, and it expires the moment
+     the app ships. The danger was never that the ids leak (an APK is unpackable — they are
+     readable from any published build anyway); it is **developing against them**, because
+     watching or tapping your own ad is invalid traffic and can suspend the AdMob account.
+     Google's own mechanism for that is a test-device list, so that is what replaced the
+     prohibition: hashes in `AD_TEST_DEVICES` reach
+     `MobileAds.setRequestConfiguration().setTestDeviceIds(...)`, and a listed device is
+     served **test ads even against a real unit id**. The hash is not secret and belongs in
+     the repo.
+     **The hash is per-SIGNING-KEY, not per-device — measured, not assumed (2026-08-07).**
+     One Galaxy A51 produced **three different values**: `50CD4ED8…` under the debug key,
+     `58A6B464…` under the release/upload key, and `88D815B2…` under a third-party-signed
+     install that happened to be on the phone. So a protection verified in a debug build
+     does **not** carry into the release APK — this was caught only because the release
+     build was measured separately rather than assumed, and the first guess was wrong.
+     Re-read the hash after any change of signing key; extra entries are harmless. UMP and
+     the Ads SDK print the *same* hash as each other, so UMP's boot-time line is a usable
+     proxy — but it is the same 32-hex format either way, which is exactly what makes it
+     easy to paste one build's value and believe you are covered.
+     **Open risk — Play App Signing:** Play re-signs the app with Google's key, so a build
+     installed *from Play* will report a fourth value that is not in the list. Read it from
+     logcat on the first internal-testing install and add it; until then, do not tap ads in
+     a Play-installed build.
+     **A wrong hash fails silently** — the SDK just serves real ads. The only proof is
+     seeing `I/Ads: This request is sent from a test device.` in logcat; if instead you see
+     `Use RequestConfiguration.Builder().setTestDeviceIds(…)`, the hash is wrong and the
+     correct one is printed inside that very line. Note the request must actually be made:
+     the line appears on the first *ad request*, not at boot.
+     Four things are load-bearing:
+     - **The id lives in THREE places that must agree**: `AD_IDS` (both units), the
+       `APPLICATION_ID` meta-data in `AndroidManifest.xml`, and the same publisher
+       (`pub-…`) across all three. A unit id from one publisher under another publisher's
+       app id fails *silently* — the app runs, no error, ads simply never fill.
+     - **`isTesting` must be `false`, and it does the opposite of what its name suggests.**
+       The plugin's `AdViewIdHelper.getFinalAdId` **discards our `adId` and substitutes
+       Google's demo unit** when `isTesting` is true on a non-test device. It was `true`
+       here for months, which was harmless only because the ids were demo units too;
+       leaving it on with real ids would serve demo ads to real players — zero revenue,
+       and nothing in the UI would say so. Our own device is protected by
+       `AD_TEST_DEVICES`, never by this flag.
+     - **`testingDevices` is read only inside `initialize()`**, not per ad request
+       (`AdMob.java` `setRequestConfiguration`, lines 200-203 / 252). One call covers every
+       ad format, so breaking that wiring leaves rewarded *and* interstitial unprotected at
+       once. `RewardedAd._ensureInit` is the single initialize and is already shared with
+       `InterstitialAds`.
+     - **`tools/ad-release-test.js` enforces it**: real ids with an empty `AD_TEST_DEVICES`
+       fails the run, as does any `isTesting: true`, a publisher mismatch, or a missing
+       privacy policy. Verified by simulation — the guard was made to fail before it was
+       trusted. This is the assertion that had to move out of `interstitial-test.js`, whose
+       "only test ids may be in the repo" check was updated (with its reasoning) rather
+       than deleted.
   Cost: APK 15.28 → **22.27 MB** — the Google Mobile Ads SDK is ~7 MB, by far the largest
   single addition in the project. Device-verified: test ad shows (labelled "Test Reklamı"),
   reward lands only after completion (budget 3→2→1→0, +10💎 each), and at budget 0 no ad
   opens at all. **CDP gotcha:** the SDK spawns its own `googleads…sdk-core` DevTools
   targets, so `/json/list` returns several — pick the `localhost` one or tooling breaks.
+- **`RewardedAd` keeps a `_pending` guard and a targeted `preload()` — both added 2026-08-07
+  after a device bug report, and they fix two different things.** Measured on a Galaxy A51
+  against the real ad unit: `prepareRewardVideoAd` → `Loaded` takes **3360 / 4352 / 4459 ms**,
+  while showing an already-loaded ad takes **~125 ms**. So the whole delay is the load.
+  1. **`_pending` is the correctness half.** `show()` had no in-flight guard (unlike
+     `InterstitialAds._showing`), so during that ~4 s dead window every tap started a fresh
+     request and several ads played back to back. The economic damage is the point: each
+     completed ad calls `AdBudget.consume()`, so one "continue" intent ate 3-4 of the
+     player's daily ad allowance — and on diamond-granting paths it paid out 3-4×. The guard
+     lives in `show()`, **not** in `runRewardedAction`: the async window belongs to
+     `RewardedAd`, and the Plus path never reaches it (`onReward` is called synchronously).
+     A rejected tap costs nothing, because `consume()` is already inside `onComplete`.
+     Both exit paths (`fail`, `finish`) must call `release()`; miss one and the player can
+     never watch another ad — a silent, hard-to-diagnose lock. The web simulation clears it
+     too, or the primary development surface (§1) locks after one ad.
+  2. **`preload()` is the latency half, and WHERE it is triggered is the whole fix.** It
+     took two attempts, both corrected by device reports rather than reasoning:
+     - **`refreshGameOverOffers()` — wrong.** Looks like "the panel appeared" and isn't:
+       `AdBudget.updateUI()` also calls it and `updateUI` runs at boot, so the chosen
+       *targeted* strategy silently became *always-warm*. Caught by seeing `_ready:true`
+       on a freshly launched device.
+     - **`showGameOver()` — still wrong, and this is the instructive one.** The lead time
+       it buys is only however long the player takes to tap, which is milliseconds: people
+       hit "continue" the instant they lose. A lab measurement that waited for the preload
+       first showed 144 ms and looked like success; the real device still felt broken.
+     - **`playGame()` — right.** The lead time is a whole round, which dwarfs the load.
+       Still targeted: the request only goes out for players actually in a game, i.e. the
+       only ones who can be offered a rewarded ad (continue, hint, undo, 2× score).
+       `showGameOver()`/`openShop()` keep a call as a cheap top-up (a no-op when `_ready`).
+     Measured cold-start breakdown that forced this: consent 1 ms (already warm from boot),
+     `initialize()` 393 ms, **ad load 6580 ms** — total ~7 s for the first ad, 3.4-4.5 s
+     after. Result after moving the trigger: panel opens → immediate tap → **ad visible in
+     334 ms**.
+     `initialize()` is now also warmed at boot, right after `AdConsent.ensure()` resolves.
+     That is **not** an ad request, so it does not violate the targeted-preload decision —
+     it just stops a fixed 393 ms from landing on the player's first ad.
+     A "⏳ Reklam yükleniyor…" disabled state covers the case the preload cannot win (a
+     round short enough to end before the load finishes, e.g. Memory or Maze). The guard
+     already stopped extra ads; the label is what stops the button from looking dead, which
+     is what made players tap repeatedly in the first place.
+  `preload()` is deliberately silent (the player asked for nothing, so a failure shows no
+  toast) and self-guarding (it checks Plus and `AdBudget` itself, so call sites don't
+  repeat those conditions). `_showNative` awaits an in-flight `_loading` before requesting,
+  or a fast tap would waste the preload on a duplicate request.
+  **Device-verified end to end:** four rapid taps → `KABUL, RED, RED, RED`, exactly one ad,
+  budget consumed exactly once. `tools/ad-release-test.js` §3.5 pins all of it, including
+  the assertion that `AdBudget.updateUI()` must **not** trigger a preload — that one exists
+  because the mistake actually happened.
+  **Reading device state races the SDK:** `Dismissed` and the reward callback arrive
+  noticeably *after* the ad UI closes. A CDP read taken right after tapping ✕ shows
+  `_pending:true` and an unchanged budget, which looks exactly like a stuck guard. Read
+  again before concluding anything — this cost a wrong diagnosis.
 - **Ad consent (UMP/GDPR) runs at boot and gates every ad — `AdConsent` in `core/app.js`
   (2026-08-02).** Serving ads to an EEA/UK user without a consent flow is a legal risk that
   is entirely separate from AdMob account suspension, which is why this landed immediately
@@ -937,6 +1037,72 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   `tools/interstitial-test.js` pins all of it, including the assertions that encode the
   reasoning rather than the code: each axis must block *on its own*, the Discover exemption
   must not consume the counter, and `maybeShow` must still have exactly one call site.
+- **`Billing.init()` must keep its `Promise.resolve(...)` wrapper, and `openShop()` must
+  keep `showScreen` BEFORE `renderShop` (2026-08-07).** Two halves of one shipped bug that
+  made the diamond shop completely unopenable on device — the row was tapped, nothing
+  happened, and nothing was logged.
+  1. **The raw bridge's `configure()` does not return a Promise.** The package's `.d.ts`
+     declares `Promise<void>`, but we reach the plugin through
+     `Capacitor.Plugins.Purchases` (§1: no bundler, so the wrapper class is unreachable) and
+     there it returns a **string** — measured on a Galaxy A51 via CDP. A bare
+     `p.configure(...).then` therefore threw a synchronous `TypeError`. Treat the `.d.ts` of
+     any Capacitor plugin as describing the *wrapper*, not the bridge.
+  2. **Order was what turned a contained error into a dead screen.** The throw climbed
+     `init()` → `loadOfferings()` → `refreshPrices()` → `renderShop()` and killed
+     `openShop()` before it ever reached `showScreen`. `showPlusPage()` does the opposite —
+     screen first, prices after — which is exactly why Plus survived the same exception and
+     the shop did not. That asymmetry is what made the bug findable; keep both functions
+     screen-first. `refreshPrices()` also gained a `.catch` so a store outage cannot produce
+     an unhandled rejection; prices still fall back to `—`, never to a stale number.
+  **`iap-test.js` pins all three, and the fake plugin needed fixing first**: its `configure`
+  returned a well-behaved Promise, so the harness was greener than reality and never saw
+  the bug. `configureReturnsString: true` now reproduces the device. Verified by reverting
+  the fix — the three assertions fail, then pass. A mock is only as honest as the thing it
+  imitates.
+- **Two things found on device 2026-08-07 that are NOT bugs in our code — do not "fix" them
+  here.** Both surfaced while wiring the real ad units and both are resolved in the AdMob
+  console, not the repo.
+  1. **`requestConsentInfo` fails with `Publisher misconfiguration: … no form(s) configured
+     for the input app ID`** until a privacy/GDPR message is published under AdMob →
+     *Gizlilik ve mesajlaşma*. The consequence is total: `canRequestAds` goes false, so
+     `AdConsent`'s safe default (rule 2) refuses **every** ad, and no ad request is ever
+     made — logcat shows no `Ads:` lines at all, which reads exactly like a broken SDK
+     integration. It is the gate working as designed. Verified with the real app id
+     `ca-app-pub-5960894143182893~1883487916`.
+  2. **`I/Ads: Invoke Firebase method getInstance error` at boot is expected.** The Mobile
+     Ads SDK looks for the optional Firebase integration and this project deliberately has
+     no Firebase (no `google-services.json` — see the Firebase note below). Harmless, and
+     it is not a reason to add Firebase.
+- **Firebase is deliberately NOT installed (decision 2026-08-07).** AdMob does not need it:
+  the SDK only requires the `APPLICATION_ID` meta-data, proven by rewarded ads working on
+  device with no `google-services.json` anywhere. Adding it would mean a fourth Capacitor
+  plugin (§6 — a fresh decision each time, and the v7/v8 peer trap has now bitten three
+  times) plus APK weight on an app with zero users to measure. The one real reason to
+  revisit is linking AdMob↔Firebase for per-user revenue reporting; that can be added later
+  with no migration.
+- **`site/` is NOT part of the app — it is the source of the public URLs Google requires
+  (2026-08-06).** `tools/build-www.js` uses an explicit whitelist, so nothing here reaches
+  `www/` or the APK; that is why a new top-level folder was safe to add. It holds
+  `slyswipe/gizlilik.html` (the privacy policy) and, once the publisher id is known,
+  `app-ads.txt`.
+  **The privacy policy is mandatory, and the reason is in the merged manifest, not ours.**
+  The Google Mobile Ads SDK injects `com.google.android.gms.permission.AD_ID` (plus three
+  `ACCESS_ADSERVICES_*`) at manifest-merge time — confirmed in
+  `android/app/build/intermediates/merged_manifest/release/…`. So the app collects an
+  advertising identifier even though `AndroidManifest.xml` only asks for `INTERNET`, and
+  Play rejects a release with no policy URL and no Data Safety declaration.
+  Two things are load-bearing:
+  1. **It must be a GitHub Pages *user* site (`onur33360-dev.github.io`), not a project
+     site.** `app-ads.txt` is only honoured at the **root** of the domain, and a project
+     site puts everything under `/<repo>/`. The Play listing's "Website" field must name the
+     same domain or AdMob's crawler looks for the file somewhere else and the verification
+     fails silently.
+  2. **The policy has to describe what the app actually does.** It currently names AdMob,
+     Google Play Billing, RevenueCat, Google Fonts and Unsplash — that last one is easy to
+     forget, and it is only there because Jigsaw fetches its remote image pool from
+     `images.unsplash.com`. `ad-release-test.js` asserts all five are mentioned, so adding an
+     SDK or a new network host fails the run until the policy is updated. Same rule as §9,
+     enforced instead of remembered.
 - **`EconomyConfig.AD_DAILY_LIMIT` went 3 → 8 on 2026-08-02.** Recorded because the value was
   misremembered as 5: `git log -S` shows the constant was added once (`0e68322`, the commit
   that created `EconomyConfig`) and never edited, so **it was 3 from birth and never 5**.

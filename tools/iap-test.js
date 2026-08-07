@@ -71,6 +71,13 @@ function fakePlugin(cfg) {
 
     configure(o) {
       calls.push(['configure', o && o.apiKey]);
+      // `configureReturnsString`: CİHAZDAKİ GERÇEK DAVRANIŞ (2026-08-07).
+      // Ham köprüden (Capacitor.Plugins.Purchases) çağrıldığında configure()
+      // paketin .d.ts'inin vaat ettiği Promise'i değil, bir string döndürüyor.
+      // Bu seçenek olmadan sahte eklenti gerçeğinden DAHA USLU davranıyordu ve
+      // harness, elmas mağazasını tamamen açılmaz yapan hatayı kaçırdı — bir
+      // taklit ancak taklit ettiği şey kadar dürüst olabilir.
+      if (cfg.configureReturnsString) return 'ok';
       return cfg.configureError ? Promise.reject(new Error(cfg.configureError)) : Promise.resolve();
     },
     addCustomerInfoUpdateListener(fn) { listener = fn; calls.push(['addListener']); return Promise.resolve('cb1'); },
@@ -432,6 +439,45 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     check('kurulu sürümün peer bağımlılığı Capacitor 7 kabul ediyor',
           />=7/.test(rcPkg.peerDependencies['@capacitor/core']),
           JSON.stringify(rcPkg.peerDependencies));
+  }
+
+  // ═════════ configure() PROMISE DÖNDÜRMEZSE ═════════
+  //
+  // Cihazda yaşanmış bir gerileme (2026-08-07). Çıplak `p.configure(...).then`
+  // senkron bir TypeError atıyordu; hata init() → loadOfferings() →
+  // refreshPrices() → renderShop() zincirini tırmanıp openShop()'u
+  // showScreen'e HİÇ ulaşamadan kesiyordu. Sonuç: elmas mağazası
+  // tamamen açılmıyordu ve hiçbir yerde bir hata görünmüyordu.
+  //
+  // Buradaki iddiaların değeri, ikisinin AYRI şeyleri koruması: biri
+  // sarmalayıcıyı, diğeri mağazanın açılma sırasını. Sarmalayıcı geri
+  // alınsa bile ekran sırası doğruysa mağaza boş açılır, ölmez.
+  console.log('\nconfigure() PROMISE DÖNDÜRMEZSE (cihaz davranışı)');
+  {
+    const b = boot({ native: true, configureReturnsString: true });
+    let threw = null;
+    try { b.get('Billing').init(); } catch (e) { threw = e; }
+    check('Billing.init() senkron istisna ATMIYOR', !threw,
+          threw && (threw.message || String(threw)));
+    check('init() yine de bir promise döndürüyor',
+          !!(b.get('Billing')._ready && b.get('Billing')._ready.then));
+
+    let shopThrew = null;
+    try { b.get('openShop()'); } catch (e) { shopThrew = e; }
+    check('openShop() istisna atmıyor', !shopThrew,
+          shopThrew && (shopThrew.stack || String(shopThrew)).slice(0, 200));
+  }
+  {
+    // Sıra kaynakta da sabitleniyor: renderShop, showScreen'den SONRA.
+    const fn = (APP_SRC.match(/function openShop\(\) \{[\s\S]*?\n\}/) || [''])[0];
+    const iShow = fn.indexOf('showScreen');
+    const iRender = fn.indexOf('renderShop');
+    check('openShop: showScreen ÖNCE, renderShop SONRA',
+          iShow > 0 && iRender > iShow,
+          'render önce çalışırsa bir istisna mağazayı sessizce öldürür:\n' + fn);
+    check('configure() Promise.resolve ile sarılı',
+          /Promise\.resolve\(\s*p\.configure\(/.test(APP_SRC),
+          'çıplak p.configure(...).then ham köprüde patlıyor');
   }
 
   console.log('\n' + (failures === 0 ? 'TÜM TESTLER GEÇTİ' : failures + ' TEST BAŞARISIZ'));

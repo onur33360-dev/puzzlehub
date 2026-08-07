@@ -182,9 +182,13 @@ async function flush(n) { for (let i = 0; i < (n || 6); i++) await wait(); }
     const names = b.plugin.names();
     check('prepareInterstitial çağrıldı', names.indexOf('prepareInterstitial') >= 0, names.join(','));
     check('showInterstitial çağrıldı', names.indexOf('showInterstitial') >= 0, names.join(','));
-    eq('TEST reklam kimliği kullanıldı',
+    // Kimlik SABİT YAZILMIYOR: yayına çıkarken gerçek birimle değişti ve
+    // sabit bir dizge testi her kimlik değişiminde kırardı. Buradaki soru
+    // zaten "hangi kimlik" değil, "geçiş reklamı KENDİ alanını mı
+    // kullanıyor" — ödüllününkiyle karışması klasik kopyala-yapıştır hatası.
+    eq('geçiş, AD_IDS.interstitialAndroid ile istendi',
        b.plugin.calls.find(c => c[0] === 'prepareInterstitial')[1],
-       'ca-app-pub-3940256099942544/1033173712');
+       b.get('AD_IDS').interstitialAndroid);
 
     b.plugin.fire('interstitialAdShowed');
     b.plugin.fire('interstitialAdDismissed');
@@ -318,15 +322,28 @@ async function flush(n) { for (let i = 0; i < (n || 6); i++) await wait(); }
           splash.indexOf('InterstitialAds') < 0);
   }
   {
-    // Yalnızca Google'ın resmî TEST birimi, ve yayın için işaretli.
+    // Buradaki iddia 2026-08-06'da DEĞİŞTİ ve gerekçesi kaydedilmeye değer.
+    //
+    // Eskiden "depoda yalnızca Google'ın TEST birimi olabilir" deniyordu.
+    // O kural yayına çıkarken zorunlu olarak bozulur — kimlikler gerçek
+    // olacak. Testi silmek yerine kuralın kendisi taşındı: gerçek kimliğin
+    // güvenli olup olmadığını artık `tools/ad-release-test.js` denetliyor
+    // (gerçek kimlik ⇒ AD_TEST_DEVICES dolu olmak zorunda).
+    //
+    // Burada kalan şey bu aracın gerçekten ilgilendiği kısım: geçiş
+    // reklamının kimliği KENDİ alanından geliyor mu, ödüllününkiyle
+    // karışmış mı. Kopyala-yapıştır hatası bu dosyanın klasik hedefi.
     const ids = (APP_SRC.match(/const AD_IDS = \{[\s\S]*?\n\};/) || [''])[0];
-    check('interstitial kimliği Google TEST birimi',
-          /interstitialAndroid:\s*'ca-app-pub-3940256099942544\/1033173712'/.test(ids), ids);
-    check('yayın için TODO işareti var',
-          (ids.match(/TODO\(yayın\)/g) || []).length >= 2, ids);
-    check('depoda başka (gerçek olabilecek) reklam kimliği yok',
-          (APP_SRC.match(/ca-app-pub-\d+/g) || [])
-            .every(x => x === 'ca-app-pub-3940256099942544'));
+    check('AD_IDS bloğu bulundu', ids.length > 0);
+    check('interstitial için ayrı bir kimlik alanı var',
+          /interstitialAndroid:\s*'ca-app-pub-[\d~/]+'/.test(ids), ids);
+    {
+      const b = boot({});
+      const a = b.get('AD_IDS');
+      check('ödüllü ve geçiş kimlikleri FARKLI',
+            a.rewardedAndroid !== a.interstitialAndroid,
+            'iki biçim aynı birimi kullanıyor: ' + a.interstitialAndroid);
+    }
   }
   {
     // Ödüllünün tek kapı mimarisi bozulmamalı (CLAUDE.md ekonomi kuralı 1).

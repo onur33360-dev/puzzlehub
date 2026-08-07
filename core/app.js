@@ -1090,21 +1090,83 @@ const AdBudget = {
 
 // ==================== ÖDÜLLÜ REKLAM ====================
 //
-// TEST KİMLİKLERİ — GERÇEK KİMLİK BURAYA YAZILMAZ.
-// Geliştirme boyunca yalnızca Google'ın resmî demo birimleri kullanılıyor.
-// Sebebi kozmetik değil: kendi gerçek birimlerini geliştirirken kullanmak
-// "geçersiz trafik" sayılıyor ve AdMob hesabının askıya alınmasına yol
-// açabiliyor. Demo birimleri hiçbir hesaba bağlı değil, o yüzden risk yok.
-// (developers.google.com/admob/android/test-ads, teyit 2026-08-02)
+// Reklam birimi kimlikleri. Gerçek birime geçiş yayın adımıdır; kimlik ÜÇ
+// yerde birden değişir ve üçü de birbiriyle tutarlı olmak zorunda:
+// burası, AndroidManifest'teki APPLICATION_ID meta-data'sı ve AD_TEST_DEVICES.
 //
-// Gerçek birim kimliği YAYINA ÇIKARKEN, ayrı ve son bir adımda girilir —
-// burada ve AndroidManifest'teki APPLICATION_ID meta-data'sında.
+// Kimliklerin kendisi SIR DEĞİL — APK açılabilir bir dosya, oradan zaten
+// okunuyorlar. Tehlike sızmaları değil, GELİŞTİRİRKEN KULLANILMALARI:
+// kendi reklamını kendin izlemek/tıklamak "geçersiz trafik" sayılıyor ve
+// AdMob hesabını askıya aldırabiliyor. Bu yüzden gerçek kimliğe geçiş
+// AD_TEST_DEVICES olmadan YAPILMAZ (aşağıdaki nota bak).
+// (developers.google.com/admob/android/test-ads, teyit 2026-08-06)
+// Gerçek birimler girildi 2026-08-07. Yayıncı: pub-5960894143182893.
+// Üçü de aynı yayıncıya ait olmak zorunda (bkz. ad-release-test.js §4);
+// manifestteki uygulama kimliği ca-app-pub-5960894143182893~1883487916.
+//
+// TEK ödüllü birim, beş eylemin hepsi için: elmas, devam et, ipucu, geri
+// al, 2x skor. runRewardedAction tek kapı olduğu için yerleşim başına
+// kimlik kavramı burada yok. AdMob'da yerleşim bazlı raporlama istenirse
+// bu alan bir eşleme tablosuna dönüşür — göç gerektirmeyen bir değişiklik,
+// o yüzden sıfır kullanıcıyla şimdi yapmanın faydası yok.
 const AD_IDS = {
-  // TODO(yayın): gerçek ödüllü birim kimliğiyle değiştir.
-  rewardedAndroid: 'ca-app-pub-3940256099942544/5224354917',
-  // TODO(yayın): gerçek geçiş (interstitial) birim kimliğiyle değiştir.
-  interstitialAndroid: 'ca-app-pub-3940256099942544/1033173712',
+  rewardedAndroid: 'ca-app-pub-5960894143182893/1987429698',
+  interstitialAndroid: 'ca-app-pub-5960894143182893/7435197490',
 };
+
+// GERÇEK KİMLİKLE GELİŞTİRMENİN TEK GÜVENLİ YOLU.
+//
+// Buradaki hash'ler `MobileAds.setRequestConfiguration().setTestDeviceIds(...)`
+// listesine giriyor; o listedeki cihaza SDK, birim kimliği gerçek olsa bile
+// TEST reklamı sunuyor. Yani gösterimler ve tıklamalar hesaba hiç işlemiyor —
+// geçersiz trafik riski yapısal olarak ortadan kalkıyor. Google'ın bu iş için
+// önerdiği mekanizma budur; `isTesting` bayrağı DEĞİL (aşağıya bak).
+//
+// Hash cihaza özgü ve gizli değil; reklam kimliğinden türetiliyor, tek başına
+// hiçbir şeye erişim vermiyor, o yüzden depoda durması doğru. Oyuncunun
+// reklam kimliğini sıfırlaması hash'i de değiştirir — o zaman yenisi alınır.
+//
+// Nereden bulunur: uygulamayı cihazda aç, BİR REKLAM İSTE, sonra
+//   adb logcat | grep "setTestDeviceIds"
+// Ads SDK'sı ilk reklam isteğinde hash'i kendisi yazdırıyor:
+//   I/Ads: Use RequestConfiguration.Builder().setTestDeviceIds(
+//          Arrays.asList("...")) to get test ads on this device.
+//
+// HASH CİHAZA DEĞİL, İMZAYA BAĞLI — listede birden çok değer olmasının
+// sebebi bu. Aynı telefonda ÜÇ farklı değer ölçüldü (2026-08-07, Galaxy A51):
+//   debug anahtarı            → 50CD4ED8DA91D950C1BFDFB07897BFB5
+//   upload (yayın) anahtarı   → 58A6B46444BBBA9EF97BA72ECA2BE728
+//   üçüncü taraf imzalı kurulum → 88D815B20F99227E224E91EB84233D54
+// Yani debug'da doğruladığın koruma, yayın APK'sında KENDİLİĞİNDEN geçerli
+// olmuyor. İmza değiştiğinde hash yeniden okunmalı; fazlalık girdi zararsız.
+//
+// AÇIK RİSK — Play App Signing: Play'den kurulan uygulama Google'ın kendi
+// imza anahtarıyla yeniden imzalanıyor, yani oradan gelen kurulumun hash'i
+// muhtemelen DÖRDÜNCÜ bir değer olacak ve bu listede bulunmayacak. Uygulamayı
+// Play'den kendi cihazına kurup reklamlarına dokunursan geçersiz trafik
+// üretirsin. İç test kanalından ilk kurulumda logcat'ten yeni hash'i oku ve
+// buraya ekle; ölçülene kadar Play'den kurulmuş sürümde reklamlara DOKUNMA.
+//
+// UMP ile Ads AYNI hash'i kullanıyor (ikisi de aynı satırı yazdırıyor),
+// ama biçimleri de aynı olduğu için hangi kurulumdan geldiğini karıştırmak
+// çok kolay — asıl tuzak orada.
+//
+// Yanlış hash SESSİZCE başarısız olur: SDK cihazı tanımaz ve gerçek reklam
+// sunar, yani korunduğunu sanarken korunmuyor olursun. Doğrulamanın tek
+// yolu logcat'te şu satırı GÖRMEK:
+//   I/Ads: This request is sent from a test device.
+// Onun yerine "Use RequestConfiguration.Builder().setTestDeviceIds(...)"
+// satırını görüyorsan hash yanlıştır ve doğrusu o satırın içinde yazılıdır.
+//
+// LİSTE BOŞKEN GERÇEK KİMLİK KULLANILMAZ. Bu kural `tools/ad-release-test.js`
+// tarafından denetleniyor: AD_IDS demo birimlerinden farklıysa ve bu dizi
+// boşsa test başarısız olur. Sessizce kendi reklamına tıklama ihtimalini
+// koda değil, teste bağladık — çalışma zamanında reklamı kapatmak, gerçek
+// oyuncunun reklamını da kapatmak demek olurdu.
+const AD_TEST_DEVICES = [
+  '50CD4ED8DA91D950C1BFDFB07897BFB5',   // Galaxy A51 — debug imzalı kurulum
+  '58A6B46444BBBA9EF97BA72ECA2BE728',   // Galaxy A51 — release (upload) anahtarıyla imzalı
+];
 
 // Olay adları HAM DİZGİ olarak yazılı. `RewardAdPluginEvents` enum'u
 // paketin ES modülünde yaşıyor ve bu projede paketleyici YOK (CLAUDE.md §1),
@@ -1115,6 +1177,8 @@ const AD_EV = {
   dismissed:    'onRewardedVideoAdDismissed',
   failedToShow: 'onRewardedVideoAdFailedToShow',
   failedToLoad: 'onRewardedVideoAdFailedToLoad',
+  // Ön yükleme için: "reklam yüklendi, gösterilmeye hazır".
+  loaded:       'onRewardedVideoAdLoaded',
 };
 
 // Geçiş reklamının olayları AYRI bir enum'da (interstitial-ad-plugin-events),
@@ -1259,11 +1323,86 @@ const AdConsent = {
 const RewardedAd = {
   _initPromise: null,
 
+  // ───────── GECİKME VE ÇİFT DOKUNUŞ ─────────
+  //
+  // Ölçüm (2026-08-07, Galaxy A51, gerçek birim, test reklamı):
+  //   prepareRewardVideoAd → Loaded : 3360 / 4352 / 4459 ms
+  //   yüklü reklamı göstermek        : ~125 ms
+  // Yani gecikmenin tamamı YÜKLEMEDE. Dokunuşta yüklemeye başlamak,
+  // oyuncuya ~4 saniyelik ölü bir pencere bırakıyordu ve o pencerede
+  // düğmeye 3-4 kez basılabiliyordu — her basış YENİ bir istek başlatıyor,
+  // arka arkaya reklamlar açılıyordu. Bildirilen hata buydu.
+  //
+  // İki ayrı kusur, iki ayrı çare; ikisi de gerekli:
+  //   _pending → aynı anda ikinci bir gösterim başlamasın (DOĞRULUK).
+  //              Ekonomik yanı asıl mesele: her tamamlanan reklam
+  //              AdBudget.consume() çağırıyor, yani tek bir "devam et"
+  //              niyeti oyuncunun 3-4 reklam hakkını yiyordu; elmas veren
+  //              yollarda ise tersine 3-4 kat ödül dağıtıyordu.
+  //   preload  → reklam ÖNCEDEN yüklensin, gösterim 125 ms'ye insin (HIZ).
+  _pending: false,     // bir gösterim uçuşta
+  _ready: false,       // yüklü, gösterilmeye hazır bir reklam var
+  _loading: null,      // uçuşta olan ön yükleme promise'i
+
+  // Teklif ekranı açılınca çağrılır (oyun-sonu paneli, elmas mağazası).
+  // SESSİZ: oyuncu bir şey istemedi, başarısızlığında toast çıkmaz.
+  // Hedefli çağrı bilinçli — her oturumda peşinen reklam istemek, hiç
+  // reklam izlemeyen oyuncular için boşa istek demek (AdMob eşleşme oranı).
+  preload() {
+    const ad = adMobPlugin();
+    if (!ad) return Promise.resolve(false);          // web: simülasyon, yükleme yok
+    if (this._ready) return Promise.resolve(true);
+    if (this._loading) return this._loading;
+    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return Promise.resolve(false);
+    if (typeof AdBudget !== 'undefined' && !AdBudget.canWatch()) return Promise.resolve(false);
+
+    this._loading = AdConsent.ensure(ad).then(() => {
+      if (!AdConsent.canRequestAds()) return false;
+      return this._ensureInit(ad)
+        .then(() => new Promise((resolve) => {
+          let subs = [], settled = false;
+          const done = (ok) => {
+            if (settled) return;
+            settled = true;
+            subs.forEach((h) => { try { h && h.remove && h.remove(); } catch (e) {} });
+            this._ready = ok;
+            resolve(ok);
+          };
+          Promise.all([
+            ad.addListener(AD_EV.loaded, () => done(true)),
+            ad.addListener(AD_EV.failedToLoad, () => done(false)),
+          ]).then((handles) => {
+            subs = handles;
+            return ad.prepareRewardVideoAd({
+              adId: AD_IDS.rewardedAndroid,
+              isTesting: false,
+            });
+          }).catch(() => done(false));
+        }));
+    }).catch(() => false)
+      .then((ok) => { this._loading = null; return ok; });
+
+    return this._loading;
+  },
+
   // initialize() BİR KEZ. Promise saklanıyor ki üst üste gelen iki istek
   // SDK'yı iki kez başlatmasın.
+  //
+  // Test cihazı listesi BURADAN geçiyor, reklam isteğinden değil: eklenti
+  // `testingDevices`'ı yalnızca initialize sırasında okuyup
+  // setRequestConfiguration'a veriyor (AdMob.java, setRequestConfiguration).
+  // Yani liste tüm reklam biçimleri için tek seferde kuruluyor — geçiş
+  // reklamı da aynı yapılandırmayı kullanıyor, ayrıca bir şey yapmak gerekmiyor.
+  //
+  // `initializeForTesting` bir kip değil, sadece testingDevices'ın okunup
+  // okunmayacağını belirleyen kapı (aynı dosya, satır 200-203). Liste boşsa
+  // açmanın anlamı yok, o yüzden listeye bağlı.
   _ensureInit(ad) {
     if (!this._initPromise) {
-      this._initPromise = ad.initialize({ initializeForTesting: true })
+      this._initPromise = ad.initialize({
+        initializeForTesting: AD_TEST_DEVICES.length > 0,
+        testingDevices: AD_TEST_DEVICES,
+      })
         .catch((e) => { this._initPromise = null; throw e; });
     }
     return this._initPromise;
@@ -1288,15 +1427,26 @@ const RewardedAd = {
     // Reklam gösterilemezse oyuncu ASILI KALMAZ; ödül de verilmez, bütçe de
     // düşmez. Simülasyona geri düşmek cazip ama yanlış olurdu: reklamsız
     // ödül dağıtmak, yayında bedava ödül açığı demek.
+    // Her iki çıkış yolu da _pending'i BIRAKMAK ve _ready'yi düşürmek
+    // zorunda: gösterilen (ya da gösterilemeyen) reklam tüketilmiştir,
+    // eldeki yükleme artık yok. Biri unutulursa oyuncu bir daha reklam
+    // izleyemez — sessiz ve teşhisi zor bir kilit olurdu.
+    // Panel açıkken düğmeleri de tazele: "Yükleniyor…" durumundan çıksın.
+    // Başarısızlık yolunda kimse refreshGameOverOffers'ı çağırmıyordu, o
+    // yüzden düğme sonsuza kadar yüklüyor gibi kalırdı.
+    const release = () => {
+      this._pending = false; this._ready = false;
+      if (typeof refreshGameOverOffers === 'function') refreshGameOverOffers();
+    };
     const fail = (why, msg) => {
       if (settled) return;
-      settled = true; cleanup();
+      settled = true; cleanup(); release();
       showToast(msg || '📺 Reklam şu an yüklenemedi, sonra tekrar dene');
       if (typeof console !== 'undefined') console.warn('[AdMob] ' + why);
     };
     const finish = () => {
       if (settled) return;
-      settled = true; cleanup();
+      settled = true; cleanup(); release();
       if (earned && onComplete) onComplete();
       else if (!earned) showToast('📺 Ödül için reklamı sonuna kadar izlemelisin');
     };
@@ -1311,6 +1461,10 @@ const RewardedAd = {
         return null;
       }
       return this._ensureInit(ad)
+        // Uçuşta bir ÖN YÜKLEME varsa onu bekle. Gerçekçi yarış bu:
+        // oyuncu teklif ekranı açılır açılmaz basıyor. Beklemezsek aynı
+        // anda ikinci bir prepare gider ve ön yükleme boşa harcanır.
+        .then(() => this._loading || null)
         .then(() => Promise.all([
           ad.addListener(AD_EV.rewarded, () => { earned = true; }),
           ad.addListener(AD_EV.dismissed, () => finish()),
@@ -1319,19 +1473,44 @@ const RewardedAd = {
         ]))
         .then((handles) => {
           subs = handles;
+          // isTesting YAYINDA KAPALI OLMAK ZORUNDA — ve bu, göründüğünden
+          // farklı çalışan bir bayrak. Eklentinin AdViewIdHelper.getFinalAdId'i
+          // isTesting true iken, cihaz test cihazı DEĞİLSE bizim adId'mizi
+          // atıp Google'ın demo birimini kullanıyor. Yani açık bırakmak
+          // "ekstra emniyet" değil, gerçek oyuncuya demo reklam göstermek,
+          // yani sıfır gelir olurdu.
+          // Kendi cihazımızın korunması bu bayrağa değil, AD_TEST_DEVICES'a
+          // bağlı — o liste gerçek birim kimliğiyle test reklamı sunuyor.
+          // Reklam ÖNCEDEN yüklendiyse prepare atlanıyor — gecikmenin
+          // tamamı burada, ~4 saniye. Hazır reklamı göstermek ~125 ms.
+          if (this._ready) return null;
           return ad.prepareRewardVideoAd({
             adId: AD_IDS.rewardedAndroid,
-            isTesting: true,        // demo birimiyle birlikte ikinci emniyet
+            isTesting: false,
           });
         })
         .then(() => ad.showRewardVideoAd());
     }).catch((e) => fail(e && e.message ? e.message : String(e)));
   },
 
+  // ÇİFT DOKUNUŞ KALKANI BURADA, tek kapıda. runRewardedAction'a
+  // konulmadı çünkü asenkron pencerenin sahibi burası; ayrıca kapı
+  // Plus yolunda hiç buraya uğramıyor (onReward senkron çağrılıyor) ve
+  // orada kalkana gerek yok.
+  //
+  // Reddedilen çağrı bütçeye DOKUNMUYOR: consume() zaten onComplete'in
+  // içinde, o da yalnızca ödül hak edilince çalışıyor. Yani ikinci dokunuş
+  // ne reklam açıyor ne de oyuncuya bir şey kaybettiriyor.
   show(reward, onComplete) {
+    if (this._pending) return false;
+    this._pending = true;
+    // release() ile simetrik: durumu kurar kurmaz düğmeler tazeleniyor,
+    // yani "Yükleniyor…" dokunuşun HEMEN ardından görünüyor.
+    if (typeof refreshGameOverOffers === 'function') refreshGameOverOffers();
     const ad = adMobPlugin();
-    if (ad) { this._showNative(ad, reward, onComplete); return; }
-    this._showSimulated(reward, onComplete);
+    if (ad) this._showNative(ad, reward, onComplete);
+    else this._showSimulated(reward, onComplete);
+    return true;
   },
 
   // ───────── SİMÜLASYON (web/PWA) ─────────
@@ -1365,6 +1544,10 @@ const RewardedAd = {
       skipBtn.style.display = 'block';
       skipBtn.addEventListener('click', () => {
         overlay.remove();
+        // _pending BURADA da bırakılmak zorunda. Native yolun release()'i
+        // buraya uğramıyor; unutulursa web'de ilk reklamdan sonra bir daha
+        // hiç reklam açılmaz ve web birincil geliştirme yüzeyi (§1).
+        this._pending = false;
         if (onComplete) onComplete();
       });
     }, 3000);
@@ -1592,9 +1775,10 @@ const InterstitialAds = {
         ]))
         .then((handles) => {
           subs = handles;
+          // isTesting kapalı — gerekçe ödüllü reklamdaki notta.
           return ad.prepareInterstitial({
             adId: AD_IDS.interstitialAndroid,
-            isTesting: true,        // demo birimiyle birlikte ikinci emniyet
+            isTesting: false,
           });
         })
         .then(() => ad.showInterstitial());
@@ -1768,7 +1952,16 @@ const Billing = {
       this._ready = Promise.resolve(false);
       return this._ready;
     }
-    this._ready = p.configure({ apiKey: key })
+    // Promise.resolve SARMALAYICISI ZORUNLU — süs değil. Eklentiye ham
+    // köprüden erişiyoruz (Capacitor.Plugins.Purchases, §1: paketleyici yok),
+    // ve orada configure() paketin .d.ts'inin söylediği Promise'i DÖNDÜRMÜYOR:
+    // cihazda ölçüldü (2026-08-07, Galaxy A51), dönen şey bir string.
+    // Çıplak `.then` bu yüzden senkron bir TypeError atıyordu ve hata
+    // init() → loadOfferings() → refreshPrices() → renderShop() zincirini
+    // yukarı tırmanıp ELMAS MAĞAZASINI TAMAMEN AÇILMAZ hâle getiriyordu.
+    // Promise.resolve her iki durumu da yutuyor: gelecekte paket gerçekten
+    // Promise döndürürse davranış değişmiyor.
+    this._ready = Promise.resolve(p.configure({ apiKey: key }))
       .then(() => {
         // Dinleyici İYİLEŞTİRME, doğruluk şartı DEĞİL: abonelik durumu
         // ayrıca açılışta, satın almada ve geri yüklemede senkronlanıyor.
@@ -1941,6 +2134,14 @@ function refreshPrices() {
       el.textContent = note;
       el.style.display = note ? '' : 'none';
     });
+  })
+  // Mağaza ulaşılamazsa fiyat alanları PRICE_PLACEHOLDER ('—') olarak
+  // kalıyor — zaten doğru davranış (eski bir fiyatı göstermek, ödenecek
+  // tutar hakkında yalan söylemek olurdu). Buradaki catch o davranışı
+  // değiştirmiyor, yalnızca yakalanmamış bir promise reddini engelliyor:
+  // iki çağıran da (openShop, showPlusPage) sonucu beklemiyor.
+  .catch((e) => {
+    if (typeof console !== 'undefined') console.warn('[Billing] fiyatlar alınamadı:', e);
   });
 }
 
@@ -2221,10 +2422,19 @@ const FREE_DIAMOND_SOURCES = [
   { icon: '🏆', title: 'Başarımlar', desc: '', reward: '', action: 'showAchievements', dynamic: 'badges' },
 ];
 
+// SIRA YÜK TAŞIYOR: ekran ÖNCE açılır, içerik sonra dolar — showPlusPage()
+// ile birebir aynı desen. Ters sırada (render → göster) renderShop()'taki
+// herhangi bir istisna showScreen'e hiç ulaşmadan yolu kesiyor ve mağaza
+// SESSİZCE açılmıyor: dokunma bir şey yapmıyor, hata da görünmüyor.
+// Tam olarak bu yaşandı (2026-08-07, Billing.init'teki configure() hatası)
+// ve teşhisi ancak cihazda CDP ile mümkün oldu. Ekran önce açılırsa aynı
+// hata en fazla boş bir mağaza gösterir — kıyaslanamayacak kadar iyi.
 function openShop() {
   document.getElementById('bottom-tabs').style.display = 'none';
-  renderShop();
   showScreen('screen-shop');
+  renderShop();
+  // "Reklam İzle" satırı burada görünüyor — oyun-sonu paneliyle aynı gerekçe.
+  RewardedAd.preload();
 }
 
 function closeShop() {
@@ -2830,6 +3040,22 @@ function playGame(name, opts) {
   _currentGameOpts = opts || null;
   _beforeGameScreen = currentScreen;
 
+  // ÖN YÜKLEME BURADA BAŞLAR — oyun-sonu panelinde değil.
+  //
+  // Ölçüm (2026-08-07, A51, soğuk açılış): ilk reklamın yüklenmesi 6580 ms,
+  // sonrakiler 3.4-4.5 sn. Paneli açıldığında başlatmak yetmiyor, çünkü
+  // oyuncu kaybettiği anda düğmeye basıyor — o pencere saniyeler değil,
+  // milisaniyeler. Cihazda tekrar yaşandı ve bildirildi.
+  //
+  // Oyunun BAŞI doğru an: aradaki süre bir oyun turu kadar, yani yüklemenin
+  // kat kat üstü. Hedefli strateji de bozulmuyor — istek yalnızca gerçekten
+  // oyun oynayan, yani ödüllü reklam teklifi görebilecek oyuncu için gidiyor
+  // (devam, ipucu, geri al, 2x skor hepsi oyun içinde).
+  //
+  // preload() kendi içinde Plus ve bütçe kontrolü yapıyor; hazırsa hemen
+  // dönüyor, yani her oyun açılışında yeni istek anlamına gelmiyor.
+  RewardedAd.preload();
+
   // Discover'dan oyuna geçince reels demolarını DURDUR. playGame switchTab'ı
   // çağırmadığı için buraya gelene kadar ReelsEngine.cleanup() hiç tetiklenmiyordu:
   // bir demo rAF döngüsü arka planda çalışmaya devam edip (cihazda ölçüldü:
@@ -2965,6 +3191,13 @@ function showGameOver(win, title, message, opts) {
 
   refreshGameOverOffers();
   document.getElementById('game-over').style.display = 'flex';
+
+  // ÖN YÜKLEME tam BURADA, refreshGameOverOffers'ta değil. O fonksiyon
+  // AdBudget.updateUI()'dan da çağrılıyor ve updateUI açılışta çalışıyor —
+  // oraya konulunca ön yükleme HER AÇILIŞTA tetikleniyordu, yani hedefli
+  // strateji sessizce "sürekli sıcak tut"a dönüşüyordu. Ölçülerek bulundu.
+  // Buradaki çağrı "panel gerçekten göründü" demek, tek doğru an bu.
+  RewardedAd.preload();
 }
 
 // Game-over'daki reklam/elmas düğmelerinin metni ve etkinliği. Hem
@@ -2992,6 +3225,13 @@ function refreshGameOverOffers() {
   const contAd = document.getElementById('go-continue-ad');
   if (plus) {
     setBtn(contAd, '👑', 'Devam Et (Plus)', true);
+  } else if (RewardedAd._pending) {
+    // Reklam yolda. Bunu SÖYLEMEK zorundayız: ölçülen yükleme süresi ilk
+    // seferde ~6.5 saniye ve o boyunca düğme hiçbir şey yapmıyormuş gibi
+    // görünüyordu — oyuncunun üst üste basmasının sebebi buydu. Kalkan
+    // artık fazladan reklam açılmasını engelliyor, ama sessiz kalmak
+    // "bozuk" hissini tek başına ortadan kaldırmıyor.
+    setBtn(contAd, '⏳', 'Reklam yükleniyor…', false);
   } else if (adOk) {
     setBtn(contAd, '📺', 'Reklam İzle → Devam Et  (' + AdBudget.remaining() + '/' + AdBudget.limit() + ')', true);
   } else {
@@ -3206,6 +3446,14 @@ function showToast(msg) {
   AdConsent.ensure().then(() => {
     // Gizlilik satırı yalnızca gerekiyorsa çıkıyor (bkz. renderSettings).
     if (AdConsent.privacyOptionsRequired()) renderSettings();
+
+    // SDK'yı burada ISITIYORUZ — ama reklam İSTEMİYORUZ. initialize()
+    // ölçülen 393 ms'lik bir kerelik maliyet ve ilk reklamın gecikmesine
+    // birebir ekleniyordu; burada ödenirse oyuncu hiç görmüyor.
+    // Bu bir ağ reklam isteği DEĞİL, yani "hedefli ön yükleme" kararını
+    // bozmuyor: hiç reklam izlemeyen oyuncu için de bedeli yok.
+    const ad = adMobPlugin();
+    if (ad && AdConsent.canRequestAds()) RewardedAd._ensureInit(ad).catch(() => {});
   });
 
   // Satın alma katmanı: rıza akışıyla aynı desen — açılışta tetiklenir,

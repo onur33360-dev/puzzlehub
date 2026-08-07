@@ -30,17 +30,20 @@
         </provider>
 
         <!--
-            AdMob uygulama kimligi. SU AN GOOGLE'IN RESMI TEST KIMLIGI.
-            Gercek kimlik YAYINA CIKARKEN, ayri ve son bir adimda girilir;
-            gelistirme boyunca hicbir committe gercek kimlik gecmez.
-            Gercek birimlerle gelistirmek gecersiz trafik sayilir ve hesabi
-            askiya aldirabilir; test kimliklerinin varlik sebebi budur.
-            Kaynak: developers.google.com/admob/android/quick-start
+            AdMob uygulama kimligi (GERCEK, 2026-08-07).
+            Yayinci kismi core/app.js'teki AD_IDS ile AYNI olmak zorunda:
+            pub-5960894143182893. Bir yayincinin birim kimligi baska bir
+            yayincinin uygulama kimligi altinda SESSIZCE basarisiz olur;
+            uygulama calisir, hata vermez, reklamlar hic dolmaz.
+            tools/ad-release-test.js bu tutarliligi denetliyor.
+
+            Kendi cihazimizin gercek reklam gormemesini saglayan sey bu
+            dosya degil, core/app.js'teki AD_TEST_DEVICES listesi.
             Not: XML yorumu icinde cift tire KULLANILAMAZ (colors.xml dersi).
         -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-5960894143182893~1883487916" />
     </application>
 
     <!-- Permissions -->
