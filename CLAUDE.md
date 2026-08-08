@@ -614,15 +614,29 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   triangles spill into neighbouring valleys. Two earlier approaches were tried and rejected
   on device: midpoint-displacement noise (read as a stock chart at every roughness setting)
   and a plain filled triangle envelope (flat, weightless).
-  **The procedural mountains are still a FALLBACK, not the intended art.** Reproducing the design's
-  painted landscape (volumetric cumulus, lit valley, textured spires) with canvas polygons was
+  **The background is now an IMAGE ASSET (`assets/flappy/bg.jpg`, 1080×1935 JPEG q84, 100 KB),
+  and the procedural mountains are the fallback behind it.** Reproducing the design's painted
+  landscape (volumetric cumulus, lit valley, textured spires) with canvas polygons was
   attempted across several iterations — midpoint-displacement ridges read as a stock chart,
-  triangle-envelope ridges got closer but never matched. The decision (owner, 2026-08-08) is to
-  ship the artwork as an asset at `assets/flappy/bg.jpg`; `paintBackdrop()` uses it full-bleed
-  and bottom-anchored when present, drops the scrolling tile and the DOM stars (the image
-  carries them), and falls back to the procedural scene only when the file is missing.
-  `assets/flappy` is in `build-www.js`'s SHIP list but deliberately **not** in `SHELL_ASSETS` —
-  same reasoning as the Jigsaw pool: precaching re-downloads it on every `APP_VERSION` bump.
+  triangle-envelope ridges were flat, faceted ridges finally read as terrain but still were
+  not the same class of artwork. That is the general lesson: **a painted backdrop is an asset
+  problem, not a rendering problem.**
+  Four things are load-bearing:
+  1. **When the image loads, `paintBackdrop()` returns early** after drawing it cover/
+     bottom-anchored, sets `mtnCv = null` (killing the scrolling tile) and removes the
+     `phAtmosphere` star layer — the illustration carries its own stars, moon and clouds.
+     The whole scenery is therefore one static piece, which is *structurally* why the
+     "bottom moves, top doesn't" complaint cannot recur.
+  2. **`buildSprites()` skips `buildMountains()` unless `bgFailed`.** Drawing the procedural
+     scene while the image is still loading would show the wrong landscape for a frame and
+     then swap it; showing nothing is better.
+  3. **`assets/flappy` is in `build-www.js`'s SHIP list but deliberately NOT in
+     `SHELL_ASSETS`** — same reasoning as the Jigsaw pool: precaching re-downloads it on
+     every `APP_VERSION` bump. Same-origin image requests already fall into `MEDIA_CACHE`.
+  4. **The shipped file is a generated stand-in matched to the owner's design direction, not
+     the owner's own export.** Swapping it is a file replace and nothing else — no code
+     change — so treat it as art that is expected to be replaced, and keep the fallback
+     path alive for exactly that reason.
   **Testing trap, cost an hour: an occluded/headless desktop browser suspends `requestAnimationFrame`,
   and the symptom is indistinguishable from a dead game loop** — the game accepts input, the
   start overlay hides, and then nothing moves, no error, no `game_ended`. Headless Edge reports

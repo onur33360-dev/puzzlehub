@@ -12306,9 +12306,13 @@ PuzzleGames.flappyUfo = (() => {
         border-top:17px solid transparent; border-bottom:17px solid transparent;
         margin-left:7px;
       }
+      /* Gölge ŞART: arka plan illüstrasyonunun alt yarısı parlak (karlı
+         zirveler + aydınlık vadi) ve ipucu metni orada tamamen kayboluyor.
+         Cihazda görüldü. Skor/EN İYİ zaten gölgeliydi, bu satır atlanmıştı. */
       .fufo-hint{
         font:600 12px/1 var(--ph-font-display); letter-spacing:.08em;
-        color:rgba(200,218,255,.72);
+        color:rgba(226,236,255,.92);
+        text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.6);
       }
 
       /* Duraklat düğmesi — tasarımdaki sol üst kare. Yalnızca oyun
