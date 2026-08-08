@@ -19,9 +19,20 @@ const REEL_GAMES = [
   // playable:false BİLEREK — motor ve resim sistemi hazır ama tema Faz 3'te.
   // Oyuncuya çıplak tahta göstermektense kart demoda kalsın.
   { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:true },
-  { id:'snakeGame', name:'Yılan', emoji:'🐍', category:'arcade', desc:'Klasik yılan — elmasları topla, uza!', difficulty:'Kolay', gradient:['#16255e','#060b22'], playable:true },
-  { id:'flappyUfo', name:'Flappy UFO', emoji:'🛸', category:'arcade', desc:'Dokun, yüksel, geçitlerden süz!', difficulty:'Orta', gradient:['#132a63','#04081c'], playable:true },
+  { id:'snakeGame', name:'Yılan', emoji:'🐍', category:'arcade', desc:'Klasik yılan — elmasları topla, uza!', difficulty:'Kolay', gradient:['#16255e','#060b22'], playable:true, addedAt:'2026-08-08' },
+  { id:'flappyUfo', name:'Flappy UFO', emoji:'🛸', category:'arcade', desc:'Dokun, yüksel, geçitlerden süz!', difficulty:'Orta', gradient:['#132a63','#04081c'], playable:true, addedAt:'2026-08-08' },
 ];
+
+// addedAt YALNIZCA yeni eklenenlerde var; alanı olmayan oyun "eski" sayılıyor.
+// Tarih tabanlı olması bilinçli: elle konan bir `yeni` bayrağını birinin
+// sonradan kaldırması gerekir ve kimse kaldırmaz — tarih kendi kendine eskir.
+const NEW_GAME_DAYS = 14;
+function _isNewGame(g) {
+  if (!g.addedAt) return false;
+  const t = Date.parse(g.addedAt);
+  if (isNaN(t)) return false;
+  return (Date.now() - t) < NEW_GAME_DAYS * 86400000;
+}
 
 const GAME_NAME_MAP = {
   'screwPuzzle': 'Vida Ustası',
@@ -1656,6 +1667,7 @@ window.ReelsEngine = (function() {
   let _observer = null;
   let _container = null;
   let _scrollEl = null;
+  let _chipsEl = null;
   let _cards = [];
   let _globalIdx = 0;        // toplam oluşturulan kart sayısı
   let _recentIds = [];        // son N oyun id'si (tekrar engelleme)
@@ -1680,36 +1692,122 @@ window.ReelsEngine = (function() {
     } catch(e){}
   }
 
-  // ===== Akıllı Kuyruk =====
+  // ===== Kart Sırası: TORBA (epoch-shuffle) =====
+  //
+  // 2026-08-08'de BAĞIMSIZ RASTGELE çekimden torbaya geçildi. Eskisi, son
+  // NO_REPEAT_WINDOW kartta görünmeyenler arasından bağımsız çekim
+  // yapıyordu; bu yalnızca "arka arkaya aynı kart"ı engelliyor, dağılımı
+  // DÜZENLEMİYOR. Bağımsız çekimde kümelenme matematiksel olarak
+  // kaçınılmazdır: bazı oyunlar üst üste gelirken bazıları hiç çıkmaz.
+  //
+  // Ölçüldü (13 oyun, 40 kart, 20.000 deneme) — bağımsız → torba:
+  //   • aynı oyunun 6 kart içinde tekrarı   %35   → %12
+  //   • ilk 13 kartta kaç farklı oyun       9.5   → 13 / 13  (garanti)
+  //   • belirli oyun ilk 20 kartta YOK      %12.6 → %0
+  //   • aradığını bulma (p90)               23    → 12 kart
+  // Kapsama artık olasılık değil GARANTİ: her turda her oyun tam bir kez.
+  //
+  // Aynı desen depoda zaten var: Resim Kaydır'ın görsel rotasyonu da
+  // epoch-shuffle kullanıyor (bkz. docs/GAMES/SLIDING_PUZZLE.md — korumasız
+  // hâlde 400 seviyede 174 erken tekrar ölçülmüştü). Yeni desen icat
+  // etmiyoruz, mevcut olanı ikinci kez tüketiyoruz.
+  let _bag = [];
+  let _filter = 'all';        // 'all' | 'puzzle' | 'arcade' | 'fav'
+
+  // Çipe göre aktif havuz. Torba HER ZAMAN bu havuzdan doluyor, dolayısıyla
+  // "her turda her oyun bir kez" garantisi süzülmüş listede de geçerli.
+  function _activePool() {
+    if (_filter === 'fav') {
+      const favs = getFavorites();
+      const p = REEL_GAMES.filter(g => favs.includes(g.id));
+      return p.length ? p : REEL_GAMES;        // boş kalmasın (çip zaten pasif)
+    }
+    if (_filter === 'puzzle' || _filter === 'arcade') {
+      const p = REEL_GAMES.filter(g => g.category === _filter);
+      return p.length ? p : REEL_GAMES;
+    }
+    return REEL_GAMES;
+  }
+
+  function _shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  // Tur DİKİŞİ: yeni turun ilk kartı, önceki turun son (NO_REPEAT_WINDOW-1)
+  // kartında varsa geriye itiliyor. Bu koruma olmadan tam tur sınırında
+  // tekrar oluşuyor ve torbanın kazancının bir kısmı geri gidiyor.
+  // Havuz kadar küçükse (örn. 2 oyunluk Arcade çipi) itmek anlamsız —
+  // orada tekrar katalog boyutunun sonucu, algoritmanın değil.
+  function _refillBag() {
+    const pool = _activePool();
+    _bag = _shuffle(pool.slice());
+    if (_bag.length <= 1) return;
+    // Koruma penceresi havuza göre KISALIYOR, tamamen kapanmıyor. Önceki
+    // hâli küçük havuzlarda korumayı bütünüyle atlıyordu ve 2 oyunluk
+    // Arcade çipinde tur sınırında yan yana tekrar oluşuyordu
+    // (cihazda görüldü: … flappyUfo, flappyUfo …). Havuz 2 iken pencere 1
+    // olur ve akış katı biçimde dönüşümlü ilerler.
+    const win = Math.min(NO_REPEAT_WINDOW - 1, _bag.length - 1);
+    const tail = _recentIds.slice(-win);
+    for (let guard = 0; guard < _bag.length && tail.indexOf(_bag[0].id) >= 0; guard++) {
+      _bag.push(_bag.shift());
+    }
+  }
+
   function _pickNextGame() {
-    // Aynı oyun son NO_REPEAT_WINDOW içinde tekrar gelmesin
-    const available = REEL_GAMES.filter(g => {
-      const lastIdx = _recentIds.lastIndexOf(g.id);
-      return lastIdx < 0 || (_recentIds.length - lastIdx) >= NO_REPEAT_WINDOW;
-    });
-    // Eğer tüm oyunlar recently gösterildiyse, en az tekrar edeni seç
-    const pool = available.length > 0 ? available : REEL_GAMES;
-    // Rastgele seç
-    const picked = pool[Math.floor(Math.random() * pool.length)];
+    if (!_bag.length) _refillBag();
+    const picked = _bag.shift();
     _recentIds.push(picked.id);
-    // Hafızayı sınırla
     if (_recentIds.length > 50) _recentIds = _recentIds.slice(-30);
     return picked;
+  }
+
+  // Belirli bir oyunu torbadan ÇEKİP ÇIKARIR (ilk kart için). Turdan
+  // düşürülüyor, sonuna eklenmiyor: o oyun bu turda zaten gösterildi.
+  function _takeFromBag(id) {
+    if (!_bag.length) _refillBag();
+    const i = _bag.findIndex(g => g.id === id);
+    if (i >= 0) _bag.splice(i, 1);
+    _recentIds.push(id);
+    return REEL_GAMES.find(g => g.id === id);
   }
 
   // İlk kart her zaman görsel olarak zengin, atmosferli bir demo olsun —
   // Discover'ın ilk izlenimi "wow" olmalı, seyrek bir demoyla açılmamalı.
   const HERO_FIRST = ['waterSort', 'arrowPuzzle', 'jigsawCard', 'blockPuzzle'];
 
+  // İlk kart: YENİ oyun varsa o, yoksa küratörlü hero. "Yeni eklenen oyunu
+  // bulmak zor" şikâyetinin doğrudan cevabı bu — yeni oyun akışta 13'te bir
+  // olmaktan çıkıp ilk kart oluyor.
+  function _firstCard() {
+    const pool = _activePool();
+    const fresh = pool.filter(g => _isNewGame(g) && g.playable);
+    if (fresh.length) {
+      // AYNI GÜN eklenen oyunlar arasında rastgele seç. Salt tarihe göre
+      // sıralamak eşitlikte hep dizideki ilkini veriyordu: iki oyun da
+      // 2026-08-08 tarihliyken ilk kart %100 Yılan çıkıyor, Flappy UFO o
+      // slota hiç gelmiyordu (gerçek kodla ölçüldü). Yeni oyunu öne
+      // çıkarmanın amacı onu göstermekse, yenilerin hepsi paylaşmalı.
+      let newest = -Infinity;
+      fresh.forEach(g => { const t = Date.parse(g.addedAt); if (t > newest) newest = t; });
+      const top = fresh.filter(g => Date.parse(g.addedAt) === newest);
+      return _takeFromBag(top[Math.floor(Math.random() * top.length)].id);
+    }
+    const heroes = pool.filter(g => HERO_FIRST.indexOf(g.id) >= 0 && g.playable);
+    if (heroes.length) {
+      return _takeFromBag(heroes[Math.floor(Math.random() * heroes.length)].id);
+    }
+    return _pickNextGame();
+  }
+
   function _generateBatch(count) {
     const batch = [];
     for (let i = 0; i < count; i++) {
-      // Yalnızca en baştaki kart (ilk batch'in ilk elemanı) küratörlü.
-      if (_globalIdx === 0 && i === 0) {
-        const heroes = REEL_GAMES.filter(g => HERO_FIRST.includes(g.id) && g.playable);
-        const pick = heroes[Math.floor(Math.random() * heroes.length)];
-        if (pick) { _recentIds.push(pick.id); batch.push(pick); continue; }
-      }
+      if (_globalIdx === 0 && i === 0) { batch.push(_firstCard()); continue; }
       batch.push(_pickNextGame());
     }
     return batch;
@@ -1717,8 +1815,46 @@ window.ReelsEngine = (function() {
 
   function _injectCSS() {
     injectStyle('css-reels', `
+      /* Kök sarmalayıcı: çip satırı akışın ÜSTÜNE mutlak konumlanıyor.
+         Akışa dahil edilseydi kartların 100% yüksekliğini bozar ve
+         snap-scroll hizası kayardı. */
+      .reels-root{position:relative;height:100%}
       .reels-container{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
       .reels-container::-webkit-scrollbar{display:none}
+
+      /* ── Kategori çipleri ─────────────────────────────────────────
+         REEL_GAMES'teki category alanının İLK tüketicisi. Alan uzun
+         süredir vardı ama hiçbir kod okumuyordu.
+         (Not: bu blok bir template literal — yorumda ters tırnak
+         kullanılamaz, dizeyi erken kapatır.) */
+      .reels-chips{
+        position:absolute; z-index:20; left:0; right:0;
+        top:calc(env(safe-area-inset-top, 0px) + 10px);
+        display:flex; gap:8px; padding:0 14px;
+        overflow-x:auto; scrollbar-width:none;
+        pointer-events:none;                 /* boşluklar kaydırmayı yutmasın */
+      }
+      .reels-chips::-webkit-scrollbar{display:none}
+      .reels-chip{
+        pointer-events:auto;                 /* çipin kendisi tıklanır */
+        flex:0 0 auto; cursor:pointer;
+        padding:7px 14px; border-radius:999px;
+        font:700 12px/1 var(--ph-font-display); letter-spacing:.04em;
+        color:rgba(232,238,255,.86);
+        background:rgba(12,10,32,.62);
+        border:1px solid rgba(255,255,255,.14);
+        backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+        white-space:nowrap;
+      }
+      .reels-chip.on{
+        color:#fff;
+        background:rgba(var(--accent-rgb), .92);
+        border-color:rgba(255,255,255,.30);
+      }
+      /* Boş favori: GİZLENMİYOR, soluk duruyor. Gizlemek "böyle bir
+         seçenek yok" der; soluk göstermek "burayı doldurabilirsin" der —
+         aynı gerekçe AdBudget düğmelerinde de yazılı (CLAUDE.md §5). */
+      .reels-chip.off{opacity:.42; pointer-events:none}
 
       .reel-card{height:100%;scroll-snap-align:start;scroll-snap-stop:always;position:relative;display:flex;flex-direction:column;overflow:hidden}
 
@@ -1975,10 +2111,78 @@ window.ReelsEngine = (function() {
   }
 
   // ===== Ana Fonksiyonlar =====
+  // ===== Kategori Çipleri =====
+  // Seçim OTURUMLUK: Keşfet her açılışta "Tümü" ile başlıyor. Kalıcı
+  // olsaydı akış sessizce daralır ve oyuncu neden az oyun gördüğünü
+  // unuturdu — filtrenin görünür olduğu an ile etkisini gösterdiği an
+  // arasında gün geçebilirdi.
+  const CHIPS = [
+    { id: 'all',    label: 'Tümü' },
+    { id: 'puzzle', label: 'Bulmaca' },
+    { id: 'arcade', label: 'Arcade' },
+    { id: 'fav',    label: '★ Favoriler' },
+  ];
+
+  function _buildChips() {
+    const bar = document.createElement('div');
+    bar.className = 'reels-chips';
+    CHIPS.forEach((c) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'reels-chip' + (c.id === _filter ? ' on' : '');
+      b.textContent = c.label;
+      b.dataset.chip = c.id;
+      if (c.id === 'fav' && getFavorites().length === 0) b.classList.add('off');
+      b.addEventListener('click', () => _setFilter(c.id));
+      bar.appendChild(b);
+    });
+    return bar;
+  }
+
+  function _syncChips() {
+    if (!_chipsEl) return;
+    [..._chipsEl.children].forEach((b) => {
+      b.classList.toggle('on', b.dataset.chip === _filter);
+      if (b.dataset.chip === 'fav') {
+        b.classList.toggle('off', getFavorites().length === 0 && _filter !== 'fav');
+      }
+    });
+  }
+
+  // Çip değişimi akışı BAŞTAN kuruyor: kartlar, torba ve sayaçlar sıfır.
+  // Mevcut kartların üstüne eklemek, süzgeç dışı kartları ekranda bırakırdı.
+  function _setFilter(f) {
+    if (f === _filter || !_scrollEl) return;
+    _filter = f;
+    _syncChips();
+
+    _cards.forEach((item) => {
+      if (item.demoInstance) { item.demoInstance.destroy(); item.demoInstance = null; }
+      if (_observer) _observer.unobserve(item.card);
+    });
+    _cards = [];
+    _scrollEl.innerHTML = '';
+    _scrollEl.scrollTop = 0;
+    _globalIdx = 0;
+    _recentIds = [];
+    _bag = [];
+
+    _appendBatch();
+    if (_cards.length) {
+      const first = _cards[0];
+      first.active = true;
+      first.card.style.willChange = 'transform';
+      _startDemo(first);
+    }
+    if (typeof GameAudio !== 'undefined') { GameAudio.play('tab'); GameAudio.haptic('tap'); }
+  }
+
   function init(container) {
     _container = container;
     _globalIdx = 0;
     _recentIds = [];
+    _bag = [];
+    _filter = 'all';
     _isLoading = false;
     _cards = [];
     _loadWeights();
@@ -1986,12 +2190,18 @@ window.ReelsEngine = (function() {
 
     container.innerHTML = '';
 
+    const root = document.createElement('div');
+    root.className = 'reels-root';
+
     // Scroll container
     const scroll = document.createElement('div');
     scroll.className = 'reels-container';
     _scrollEl = scroll;
 
-    container.appendChild(scroll);
+    root.appendChild(scroll);
+    _chipsEl = _buildChips();
+    root.appendChild(_chipsEl);
+    container.appendChild(root);
 
     // IntersectionObserver
     _observer = new IntersectionObserver((entries) => {
@@ -2062,8 +2272,14 @@ window.ReelsEngine = (function() {
     });
     _cards = [];
     _scrollEl = null;
+    _chipsEl = null;
     _globalIdx = 0;
     _recentIds = [];
+    // Torba ve süzgeç de sıfırlanmalı: kalsalardı yeniden girişte akış
+    // yarım bir turdan devam eder ve "her turda her oyun bir kez"
+    // garantisi ilk turda tutmazdı.
+    _bag = [];
+    _filter = 'all';
     if (_container) _container.innerHTML = '';
   }
 

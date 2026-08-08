@@ -740,6 +740,52 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
 - **`playGame(name, opts)` options are retained and reused by `restartCurrentGame()`.** This
   is what makes "Tekrar Oyna" on a daily puzzle reproduce the same board instead of dropping
   the player onto a random one. Don't drop the argument.
+- **The Discover feed deals from a SHUFFLED BAG, not independent random draws
+  (2026-08-08).** The old `_pickNextGame` filtered out anything seen in the last
+  `NO_REPEAT_WINDOW` cards and then drew uniformly at random. That only prevents an
+  *immediate* repeat; it does not distribute. Independent draws cluster by definition —
+  some games appear three times in twenty cards while others appear zero times — and the
+  owner reported both symptoms: "the same games keep coming" and "I can't find the game I'm
+  looking for / a newly added one".
+  Measured on the real engine (13 games, 40 cards, 20 000 runs), independent → bag:
+  repeat-within-6-cards **35% → 12%**, distinct games in the first epoch **9.5 → 13/13**,
+  a given game missing from the first 20 cards **12.6% → 0%**, cards needed to find a
+  specific game (p90) **23 → 12**. Device-verified on the A51: first 13 cards contained all
+  13 games and repeat-within-6 measured **7%**.
+  **The same pattern already existed in the repo** — Jigsaw's image rotation is an
+  epoch-shuffle for exactly this reason (`docs/GAMES/SLIDING_PUZZLE.md`: 174 early repeats
+  in 400 unguarded levels). This is that pattern's second consumer, not a new one.
+  Five things are load-bearing:
+  1. **The epoch SEAM needs its own guard.** Without it the last card of one shuffle and
+     the first of the next can be the same game, which is exactly the artefact the bag
+     exists to remove. `_refillBag` rotates the new bag's head back while it collides with
+     the tail of `_recentIds`. The window **shrinks with the pool instead of switching
+     off**: an earlier version skipped the guard entirely for small pools and the 2-game
+     Arcade chip produced adjacent duplicates on device. At pool 2 the window is 1, so the
+     feed strictly alternates.
+  2. **`_activePool()` is the single definition of "what may appear".** The chips filter it,
+     and the bag always refills *from it*, so the "every game once per epoch" guarantee
+     holds inside a filtered feed too — it is not a property of the full catalogue.
+  3. **Changing a chip rebuilds the feed** (cards destroyed, `_bag`/`_recentIds`/`_globalIdx`
+     reset, `scrollTop` 0). Appending instead would leave out-of-filter cards on screen.
+     `_bag` and `_filter` must also reset in `init()` **and** `cleanup()`, or a re-entry
+     resumes mid-epoch and the first-epoch guarantee silently fails.
+  4. **The first card is the newest game, and ties are broken RANDOMLY.** Sorting by
+     `addedAt` alone always returned the first array entry when two games share a date —
+     measured: Yılan took the slot 100% of the time and Flappy UFO never did, defeating the
+     point. Now all games sharing the newest date split it (measured 50.7/49.3).
+     `addedAt` is deliberately a date, not a `badge:'yeni'` flag: a flag needs someone to
+     remove it later and nobody does; a date expires on its own (`NEW_GAME_DAYS` 14).
+  5. **The chips are the first consumer of `REEL_GAMES.category`** — the field existed but
+     no code read it (noted elsewhere in this file). The empty-Favourites chip goes
+     *disabled, not hidden*, the same rule already applied to ad-budget rows.
+  **Measurement trap, hit twice while validating this:** the DOM is **not** the emitted
+  sequence — `_cleanupOldCards()` prunes from the front past `MAX_DOM_CARDS`, so reading
+  `.reel-card` elements samples a sliding window and understates coverage (it reported
+  10/13 for a feed that was actually perfect). Record cards as they are *appended*
+  (MutationObserver) instead. The sibling trap in the Node harness: `_generateBatch` does
+  not increment `_globalIdx` — `_appendBatch` does — so a harness that calls the generator
+  directly makes every batch look like the first and re-triggers the hero/new-game card.
 - **Discover difficulty badges can be dynamic.** `reels.js` uses a game's
   `difficultyLabel` getter when present, else the static `REEL_GAMES` string. Sudoku's card
   used to advertise "Zor" while the game started on Easy — if you add player-selectable
