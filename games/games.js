@@ -11157,11 +11157,17 @@ PuzzleGames.flappyUfo = (() => {
     // kaldı — cihazda borsa grafiği gibi ince çizgiler olarak göründü.
     // Sis kaldırıldığı için (sahibin isteği) okunurluğu sağlayan tek şey
     // artık dağın KENDİ tonu; o yüzden dolgu gökyüzünün belirgin üstünde.
-    mtnFar:   ['#7d9dd2', '#3f5688'],
-    mtnMid:   ['#5b7ab4', '#28375e'],
-    mtnNear:  ['#3a5183', '#151f3a'],
+    mtnFar:   ['#7089c0', '#37496f'],
+    mtnMid:   ['#4d6699', '#212d4c'],
+    mtnNear:  ['#2c3d66', '#0c1220'],
     // Zirve sırtındaki ince ışık (kar/ay ışığı).
     mtnLit:   ['rgba(186,214,255,.42)', 'rgba(206,230,255,.55)', 'rgba(226,242,255,.72)'],
+    // Her zirvenin AY IŞIĞI ALAN yüzü. Işık hep soldan geliyor; sağ yüz
+    // kütlenin kendi gradyanında kalıyor ve fark hacmi üretiyor. Alfa
+    // düşük: yüz ayrı bir renk değil, aynı kayanın aydınlanmış hâli.
+    mtnFace:  ['rgba(196,220,255,.20)', 'rgba(186,214,255,.20)', 'rgba(176,206,255,.19)'],
+    // Zirve karı — arkada daha soluk (atmosfer), önde daha parlak.
+    mtnSnow:  ['rgba(226,240,255,.46)', 'rgba(234,246,255,.60)', 'rgba(244,251,255,.78)'],
     // SİS KALDIRILDI (2026-08-08, sahibin isteği). Bandın tamamını kaplayan
     // açık bir levhaydı ve iki ayrı hataya birden sebep oluyordu: üstteki
     // gece tonundan kopup ekranı "alt/üst iki ayrı ekran" gibi bölüyor,
@@ -11516,6 +11522,11 @@ PuzzleGames.flappyUfo = (() => {
   // arasında tabana kadar inen derin V'ler oluşuyor ve sıradağ "ayrık
   // üçgenler" gibi duruyor; tasarımda ise zirveler kesintisiz bir kütleden
   // yükseliyor.
+  // Zirveleri de GERİ DÖNDÜRÜYOR: siluet tek başına yetmiyor. Düz doldurulan
+  // bir siluet, ne kadar iyi şekillendirilirse şekillendirilsin, "dağ" değil
+  // "grafik" gibi okunuyor (cihazda görüldü) — çünkü hacim gölgeden gelir.
+  // Zirvelerin listesi elde olunca her birinin AYDINLIK yüzü ayrıca
+  // boyanabiliyor (bkz. layer).
   function peakRidge(nPeaks, minH, maxH, minW, maxW, floor, samples, rnd) {
     const P = [];
     for (let i = 0; i < nPeaks; i++) {
@@ -11525,7 +11536,7 @@ PuzzleGames.flappyUfo = (() => {
         w: minW + rnd() * (maxW - minW),
       });
     }
-    const out = new Array(samples + 1);
+    const env = new Array(samples + 1);
     for (let s = 0; s <= samples; s++) {
       const x = s / samples;
       let h = 0;
@@ -11539,9 +11550,9 @@ PuzzleGames.flappyUfo = (() => {
           }
         }
       }
-      out[s] = h < floor ? floor : h;
+      env[s] = h < floor ? floor : h;
     }
-    return out;
+    return { env, peaks: P };
   }
 
   // Dağ şeridi — KUSURSUZ DÖNEN döşeme, ÜÇ KATMAN (görseldeki gibi geriye
@@ -11617,33 +11628,86 @@ PuzzleGames.flappyUfo = (() => {
         }
       }
 
-      const layer = (nPeaks, minH, maxH, minW, maxW, floor, colors, seed, lit, litW) => {
+      // Bir sıradağ katmanı. ÜÇ GEÇİŞ:
+      //   1) siluet dolgusu — kütleyi kurar,
+      //   2) her zirvenin AYDINLIK yüzü — hacmi kuran şey bu,
+      //   3) zirvelerdeki kar + sırt ışığı — malzemeyi kurar.
+      // Yalnızca (1) yapıldığında dağlar düz bir siluet, yani "grafik" gibi
+      // okunuyordu; ışık hep TEK yönden (soldan) geldiği için her zirvenin
+      // sol yüzü açık, sağ yüzü gradyanın kendi tonunda kalıyor ve göz bunu
+      // hacim olarak çözüyor.
+      const layer = (nPeaks, minH, maxH, minW, maxW, floor, colors, seed, litIdx) => {
         const rnd = lcg(seed);
-        const a = peakRidge(nPeaks, minH, maxH, minW, maxW, floor, 240, rnd);
-        const n = a.length;
-        // Zarf zaten 0..maxH aralığında; normalize etmeye gerek yok — tam
-        // tersi, normalize etmek katmanların yükseklik farkını yok eder ve
-        // derinliği öldürürdü.
-        const hAt = (i) => a[i];
+        const { env, peaks } = peakRidge(nPeaks, minH, maxH, minW, maxW, floor, 240, rnd);
+        const n = env.length;
+        // Yükseklikler DAĞ PAYINA göre (peakBand), döşemenin tamamına değil:
+        // döşeme artık bulutlar için çok daha yüksek. Zarf normalize
+        // EDİLMİYOR — etmek katmanların yükseklik farkını, yani derinliği
+        // yok ederdi.
+        const yOf = (i) => band - peakBand * env[i];
+        const silhouette = () => {
+          x.beginPath();
+          x.moveTo(0, band);
+          for (let i = 0; i < n; i++) x.lineTo((i * mtnTileW) / (n - 1), yOf(i));
+          x.lineTo(mtnTileW, band);
+          x.closePath();
+        };
 
-        // Yükseklikler DAĞ PAYINA göre (peakBand), döşemenin tamamına
-        // değil: döşeme artık bulutlar için çok daha yüksek.
-        const yOf = (i) => band - peakBand * hAt(i);
-
+        // 1) Kütle.
         const g = x.createLinearGradient(0, band - peakBand * maxH, 0, band);
         g.addColorStop(0, colors[0]);
         g.addColorStop(1, colors[1]);
         x.fillStyle = g;
-        x.beginPath();
-        x.moveTo(0, band);
-        for (let i = 0; i < n; i++) x.lineTo((i * mtnTileW) / (n - 1), yOf(i));
-        x.lineTo(mtnTileW, band);
-        x.closePath();
+        silhouette();
         x.fill();
 
-        // Sırt hattındaki ince ışık.
-        x.strokeStyle = lit;
-        x.lineWidth = Math.max(0.8, peakBand * litW);
+        // 2) + 3) Siluetin İÇİNE kırpılmış olarak. Kırpma şart: yüz üçgenleri
+        // ve kar başlıkları tabana kadar uzanıyor, kırpılmazsa komşu
+        // vadilerin üstüne taşarlar.
+        x.save();
+        silhouette();
+        x.clip();
+
+        peaks.forEach((p) => {
+          // ±1 kopyalar: kenardan taşan zirvenin yüzü öbür kenarda da olsun.
+          [-1, 0, 1].forEach((k) => {
+            const px = (p.x + k) * mtnTileW;
+            const hw = p.w * mtnTileW;
+            if (px + hw < 0 || px - hw > mtnTileW) return;
+            const apexY = band - peakBand * p.h;
+
+            // Aydınlık yüz: tepe → sol taban.
+            x.fillStyle = C.mtnFace[litIdx];
+            x.beginPath();
+            x.moveTo(px, apexY);
+            x.lineTo(px - hw, band);
+            x.lineTo(px, band);
+            x.closePath();
+            x.fill();
+
+            // Kar başlığı: yalnızca yeterince yüksek zirvelerde, yoksa
+            // tepeler "beneklenmiş" görünüyor.
+            if (p.h > minH + (maxH - minH) * 0.42) {
+              const capH = peakBand * p.h * 0.24;
+              const r = capH / (peakBand * p.h);      // tepeden aşağı oran
+              x.fillStyle = C.mtnSnow[litIdx];
+              x.beginPath();
+              x.moveTo(px, apexY);
+              x.lineTo(px - hw * r, apexY + capH);
+              // Kar hattı düz değil, hafif kırık: doğal görünsün.
+              x.lineTo(px - hw * r * 0.35, apexY + capH * 0.72);
+              x.lineTo(px + hw * r * 0.30, apexY + capH * 0.92);
+              x.lineTo(px + hw * r, apexY + capH);
+              x.closePath();
+              x.fill();
+            }
+          });
+        });
+        x.restore();
+
+        // Sırt hattındaki ince ışık — siluetin dış kenarını ayırır.
+        x.strokeStyle = C.mtnLit[litIdx];
+        x.lineWidth = Math.max(0.8, peakBand * 0.009);
         x.beginPath();
         for (let i = 0; i < n; i++) {
           const px = (i * mtnTileW) / (n - 1);
@@ -11653,11 +11717,13 @@ PuzzleGames.flappyUfo = (() => {
       };
 
       // Arkadan öne: açık + alçak + geniş tabanlı → koyu + yüksek + sivri.
-      // Derinlik artık pustan değil TON ve SİLÜET farkından geliyor (sis
-      // kaldırıldı, bkz. palet notu).
-      layer(15, 0.30, 0.56, 0.048, 0.095, 0.22, C.mtnFar,  20260808, C.mtnLit[0], 0.010);
-      layer(12, 0.36, 0.70, 0.042, 0.085, 0.17, C.mtnMid,  915231,   C.mtnLit[1], 0.011);
-      layer(10, 0.42, 0.86, 0.038, 0.075, 0.13, C.mtnNear, 77123,    C.mtnLit[2], 0.012);
+      // Derinlik pustan değil TON, SİLÜET ve KONTRAST farkından geliyor
+      // (sis kaldırıldı, bkz. palet notu).
+      // Zirve yükseklikleri bilerek ölçülü: daha yükseği oyun alanına
+      // giriyor ve başlangıç kartının arkasını kalabalıklaştırıyordu.
+      layer(15, 0.26, 0.50, 0.048, 0.095, 0.19, C.mtnFar,  20260808, 0);
+      layer(12, 0.30, 0.62, 0.042, 0.085, 0.15, C.mtnMid,  915231,   1);
+      layer(10, 0.34, 0.74, 0.038, 0.075, 0.11, C.mtnNear, 77123,    2);
     });
   }
 

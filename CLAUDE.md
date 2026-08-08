@@ -604,7 +604,17 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   looked at a device left in that state and reported uniform pipes. Restore it from a fresh
   realm (`document.createElement('iframe').contentWindow.Math.random`) — `delete Math.random`
   does **not** restore the native function, it removes it outright.
-  **The procedural mountains are a FALLBACK, not the intended art.** Reproducing the design's
+  **The procedural mountains are FACETED, and that is what made them read as mountains.**
+  A filled silhouette — however well its outline is shaped — reads as a *chart*, not terrain,
+  because volume comes from shading, not from outline. So `peakRidge` returns the peak list
+  as well as the envelope, and each layer paints in three passes: silhouette fill (mass),
+  then per-peak **lit left face** (volume; the light is always from the left, so the right
+  face keeps the base gradient and the eye resolves the difference as form), then snow caps
+  and a ridge rim (material). Passes 2-3 are **clipped to the silhouette** or the face
+  triangles spill into neighbouring valleys. Two earlier approaches were tried and rejected
+  on device: midpoint-displacement noise (read as a stock chart at every roughness setting)
+  and a plain filled triangle envelope (flat, weightless).
+  **The procedural mountains are still a FALLBACK, not the intended art.** Reproducing the design's
   painted landscape (volumetric cumulus, lit valley, textured spires) with canvas polygons was
   attempted across several iterations — midpoint-displacement ridges read as a stock chart,
   triangle-envelope ridges got closer but never matched. The decision (owner, 2026-08-08) is to
