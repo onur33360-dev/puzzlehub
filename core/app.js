@@ -87,6 +87,7 @@ const PUZZLE_GAMES = [
   { name:'Sudoku', emoji:'#️⃣', rating:4.7, badge:null, desc:'9x9 tabloyu doldur', bg:'linear-gradient(135deg,#1d4ed8,#1e3a8a)' },
   { name:'Labirent', emoji:'🌀', rating:4.2, badge:null, desc:'Çıkışı bul', bg:'linear-gradient(135deg,#059669,#065f46)' },
   { name:'Resim Kaydır', emoji:'🖼️', rating:4.9, badge:'yeni', desc:'Fotoğrafı kaydır, tamamla', bg:'linear-gradient(135deg,#123a4a,#06121c)' },
+  { name:'Yılan', emoji:'🐍', rating:4.8, badge:'yeni', desc:'Klasik yılan — elmasları topla', bg:'linear-gradient(135deg,#16255e,#060b22)' },
 ];
 
 // Mockup panel 1 "Bugünün Görevleri" ile birebir üç görev.
@@ -3086,6 +3087,7 @@ const GAME_MAP = {
   'Ok Bulmaca': 'arrowPuzzle',
   // Faz 3 bitti: tema hazır, oyun Keşfet ve ana ekranda AÇIK.
   'Resim Kaydır': 'jigsawCard',
+  'Yılan': 'snakeGame',
 };
 
 let _currentGameId = null;

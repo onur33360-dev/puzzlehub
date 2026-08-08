@@ -6,7 +6,7 @@ Permanent instruction manual for everyone working on SlySwipe — human or AI. R
 
 ## 1. Project Snapshot
 
-SlySwipe is a Turkish-language, mobile-first casual puzzle hub: a tab-based shell (Home / Discover / Progress / Profile) around 7 playable puzzle games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top.
+SlySwipe is a Turkish-language, mobile-first casual game hub: a tab-based shell (Home / Discover / Progress / Profile) around 11 playable games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top. Ten of the eleven are puzzles; **Yılan (Snake) is the first arcade title** (2026-08-08) and its `REEL_GAMES` entry is the first to carry `category:'arcade'`. That field is currently unread by any code, so the word is a description, not a switch.
 
 **The app is SlySwipe, package id `com.skyroonlabs.slyswipe`, since 2026-08-03.** It was
 called PuzzleHub (`com.puzzlehub.app`) from the start of the project until then, so anything
@@ -422,6 +422,94 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   (polish) and 5 (content/scale) are not. Pool policy and the review page live in
   `docs/GAMES/SLIDING_PUZZLE.md` — **no image ships without being approved by eye**: of the
   first 49 candidates every one returned HTTP 200 and 7 still had to be cut.
+- **`snakeGame` (Yılan, 2026-08-08) is CLASSIC snake with a SlySwipe skin, and "classic" is
+  the specification, not a style note.** The owner's brief was explicit: reference gameplay
+  from a retro snake, visuals from a supplied design image, and **no mechanics added** — no
+  power-ups, obstacles, special food, combos, lives or modes. So the rules are the plain
+  ones: food = +1 length, one food at a time, 180° turns refused. If a future change looks
+  like "improving" the gameplay, it is out of scope by definition.
+  **The edges WRAP — a wall never kills (owner decision, 2026-08-08, after playing the
+  reference).** It shipped as wall-death for a few hours first; the correction came from the
+  reference game, so treat "walls are solid" as a *bug*, not a variant to restore. Two
+  consequences worth stating: the only lose condition is self-collision, so **every death
+  comes from the player's own trail**, and the neon frame in the design image is a portal,
+  not a barrier. Implementation is one line — `(head.x + dir.x + COLS) % COLS` — but the
+  greedy pathing in any future helper must measure distance on a **torus**, or it will
+  compute the long way round (this exact bug was caught in the test harness driver).
+  Nine things are load-bearing:
+  1. **Canvas was chosen BEFORE implementation** (`docs/04_CANVAS_POLICY.md`'s core rule),
+     on two of the policy's own criteria: the board repaints as a whole and there is
+     continuous motion. DOM would mean re-rendering a 300-cell grid 7-12×/second.
+  2. **There is NO rAF loop, and that is the performance design.** Classic snake moves in
+     discrete cell steps, so drawing happens once per tick inside the `setTimeout` chain —
+     never per frame. Interpolating between cells would cost 60fps of painting *and* break
+     the classic feel. "Idle costs zero" therefore falls out for free; do not add a rAF
+     loop to animate the food or the frame.
+  3. **Glow is baked into six sprites, never `shadowBlur` per frame** — the same rule already
+     documented for Block Puzzle's particles. The cell size is fixed between resizes, so one
+     body + four head rotations + one gem cover the whole game. The head is described once
+     facing right and **rotated at sprite-build time**, not per paint.
+  4. **The grid is a fixed 15×26, deliberately not derived from the screen.** Deriving
+     cols/rows from the viewport would make the same score mean different things on
+     different devices and make the high score incomparable. Only the *pixel* size of a cell
+     varies (integer, capped at 34 so a tablet doesn't get an absurd board).
+     **It was 15×20 until 2026-08-08**; the owner asked for a bigger play area ("too much
+     empty space top and bottom"). The cell size is set by *width* (15 cols in ~348 px → 23 px)
+     while height had ~685 px available and 20 rows used only 460 — so adding rows grows the
+     board **without shrinking the pieces**. 26 rows = 598 px. The ceiling is 29: at 23×29 =
+     667 px height starts binding instead and the cells shrink.
+  5. **The tail's last cell is enterable when not growing.** `step()` computes collision
+     *without mutating*, then pops the tail **before** writing the new head — reverse that
+     order and the tail-chase case erases the head's own occupancy mark. This is the classic
+     rule (following your own tail tip is legal), not a leniency bonus.
+  6. **The input queue is 2 deep and reverse-checks against the QUEUE's last entry**, not the
+     currently applied direction. Without the queue "up then left" inside one tick loses the
+     first turn; without the queue-relative reverse check, a fast up+down pair would sit
+     side by side in the queue and drive the snake into its own neck.
+  7. **"Devam et" revives in place and then FREEZES until the next direction input.**
+     `step()` leaves the state untouched when it detects a collision, so the snake is still
+     one frame short of dying — reviving is just `alive = true`. It must not resume in the
+     same direction or the next tick kills the player again for their money. This is the
+     only reason a `waiting` state exists; the game itself starts moving immediately
+     (classic), it does not wait for a first input.
+  8. **The speed ramp is classic, not a difficulty system.** `150 → 85 ms`, `-2.5 ms` per
+     food, floor reached at ~26 food. Retro snake speeds up as it grows; unbounded speed-up
+     would make it unplayable, which is why there is a floor.
+  9. **The game owns its score display (`ownsScoreDisplay: true`)** because the design puts
+     the score inside the arena, top-left. The hidden shell `#game-score` is still kept in
+     sync — `doubleScoreWithAd()` reads that element.
+  **The art went through THREE owner-supplied design images in one day (2026-08-08); the
+  third is current.** Anything violet in a Snake context is from image #1 and is stale.
+   - #1 violet: magenta neon frame, purple sky, violet gem-cube body, **serrated 3-tooth head**,
+     magenta diamond food.
+   - #2 green/navy: **navy** sky, pale lavender-white frame, blue dot lattice, pale-cyan hollow
+     score digit, **neon-green outlined "glass crystal"** body (bright stroke + dark translucent
+     fill + 4 corner facet cuts — a different *material*, not just a hue swap), and a **two-tone**
+     gem, cyan on top fading to magenta at the point.
+   - #3 head only: the serrated tip was **deleted** and replaced by a real snake head — a solid,
+     opaque, rounder head **1.28× the cell** (it overlaps the segment behind it, which is why
+     paint order is tail→head), two white eyes with dark pupils, and a small red forked tongue.
+  Three head rules are load-bearing:
+   - **The head is a different material from the body on purpose** — opaque and brighter, where
+     the body is translucent. At 23 px cells a translucent head with a face on it is mud.
+   - **Direction is NOT applied by rotating the sprite.** Rotation was built first and rejected:
+     at 90° the eyes slide to the side of the head and it reads as a fish in profile, at 180°
+     the face is upside down. The design's face looks at the *viewer*, so `drawHead(ctx, dir)`
+     keeps the eyes a horizontal pair always and only swings the tongue forward. The single
+     exception is **up**, where the tongue exits the top, so the eyes move to the lower half —
+     otherwise the tongue crosses them.
+   - **Pupils must stay well under half the white.** Bigger pupils turn both eyes into one dark
+     smudge at cell size and the face disappears.
+  The supplied images are landscape and the app is orientation-locked to portrait, so the
+  *arena proportions* are the one thing that could not be copied. The frame and dot lattice are
+  **CSS, not canvas** (both static — the lattice is locked to `--snk-cell` so it stays aligned
+  with the game grid), and the score is a DOM node written only when it changes.
+  **The Discover card demo carries the same palette and must be updated with it** (`demo_snake`
+  in `reels.js`, plus the `REEL_GAMES` gradient and the `PUZZLE_GAMES` home tile) — the owner
+  asked for that explicitly, and a card that advertises the old colours is a card that lies.
+  **There is no D-pad**: the owner chose swipe-only so the screen matches the design image
+  exactly; input is the shared `phSwipe` plus arrow/WASD keys for desktop. Adding on-screen
+  controls later is a design decision, not a bug fix.
 - **`.slp-board-wrap` uses `::after` for its neon frame, never `::before`.** That div is also
   a `.ph-dais`, and `.ph-dais::before` is the platform's top key light. Writing the frame to
   `::before` collides with it and the frame renders along the top edge only — this happened
@@ -686,7 +774,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   Arrow's hint now costs **10💎 or one ad** (it used to be ad-only, which meant an exhausted
   budget also killed hints). Score-2x is the **one deliberate exception with no diamond
   path**: score is earned, not bought.
-- **All 10 games report through ONE event gate: `GameEvents` (`core/app.js`, 2026-07-31).**
+- **All 11 games report through ONE event gate: `GameEvents` (`core/app.js`, 2026-07-31).**
   This is the foundation the mission and achievement systems will sit on; phase 1 emits
   events and keeps counters, and deliberately contains **no mission logic, no badge logic
   and no reward payout**. Games call it through the `gameEvent(name, payload)` helper in
@@ -779,7 +867,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   the GameEvents contract; a **source scan** of every `gameEvent(...)` call in games.js that
   proves each call's `gameId` matches the game it sits inside (the realistic failure is
   copy-paste, e.g. Block Puzzle emitting `'waterSort'`); a **live** pass that actually calls
-  all 10 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
+  all 11 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
   simulation. `--table` prints the file:line injection table. Run it after touching any
   game's start/end path.
 - **`Badges` (`core/app.js`, 2026-08-01) is GameEvents' second subscriber and the same
@@ -846,7 +934,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   the GameEvents contract; a **source scan** of every `gameEvent(...)` call in games.js that
   proves each call's `gameId` matches the game it sits inside (the realistic failure is
   copy-paste, e.g. Block Puzzle emitting `'waterSort'`); a **live** pass that actually calls
-  all 10 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
+  all 11 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
   simulation. `--table` prints the file:line injection table. Run it after touching any
   game's start/end path.
 - **The broken JPEG-named-`.png` icons are FIXED (2026-07-29).** `assets/icons/` now holds

@@ -10338,3 +10338,710 @@ PuzzleGames.jigsawCard = (() => {
               IMAGE_POOL, sizeFor, orderFor, planFor },
   };
 })();
+
+// ╔══════════════════════════════════════╗
+// ║          11. YILAN (SNAKE)           ║
+// ╚══════════════════════════════════════╝
+// KLASİK yılan. Kural setine hiçbir şey EKLENMEDİ: güç artırıcı yok,
+// engel yok, özel yem yok, kombo yok, can yok. Değişen tek şey oyunun
+// GİYSİSİ — SlySwipe'ın neon menekşe evreni.
+//
+// KENARLAR SARMALIYOR (referans oyunun davranışı, sahibin kararı
+// 2026-08-08): bir kenardan çıkan yılan karşı kenardan girer. Bu yüzden
+// oyunun TEK kaybetme durumu kendine çarpmaktır — ölüm hep oyuncunun
+// kendi izinden gelir, tahtanın sınırından değil.
+//
+// RENDERER KARARI (docs/04_CANVAS_POLICY.md, uygulamadan ÖNCE alınır):
+// CANVAS. Gerekçe politikanın iki maddesini birden karşılıyor — tahta her
+// tikte BÜTÜN olarak yeniden çiziliyor ve sürekli hareket var. DOM'da bu
+// 300 hücrelik bir ızgarayı saniyede ~7-12 kez güncellemek demekti; oysa
+// canvas'ta aynı iş birkaç drawImage.
+//
+// PERFORMANS DURUŞU (§11: akıcılık > görsel karmaşa):
+//  • rAF DÖNGÜSÜ YOK. Klasik yılan hücre hücre, kesikli ilerler — ara kare
+//    interpolasyonu hem klasik hissi bozar hem de boşuna 60fps çizim
+//    demektir. Çizim yalnızca durum değiştiğinde (tik başına bir kez).
+//    Bu yüzden "boşta maliyet sıfır" kuralı kendiliğinden sağlanıyor.
+//  • Parlama (glow) HER KAREDE shadowBlur ile DEĞİL, önceden pişirilmiş
+//    sprite'larla geliyor (bkz. CLAUDE.md §5 Block Puzzle kuralı). Hücre
+//    boyutu sabit olduğu için 6 sprite tüm oyunu karşılıyor.
+//  • Izgara noktaları ve neon çerçeve CANVAS'TA DEĞİL, CSS'te: ikisi de
+//    statik, her tikte yeniden çizmenin hiçbir karşılığı yok.
+//  • Skor DOM'da ve yalnızca DEĞİŞTİĞİNDE yazılıyor (yem başına bir kez).
+PuzzleGames.snakeGame = (() => {
+  // Yalnızca skor/rekor anahtarı için. gameEvent() çağrılarında BİLEREK
+  // kullanılmıyor: tools/game-events-test.js kaynağı tarayıp her çağrının
+  // id'sini içinde bulunduğu oyunla karşılaştırıyor (kopyala-yapıştır
+  // hatasını yakalayan denetim bu) ve bir değişkeni çözemez. On oyunun
+  // hepsi orada düz metin yazıyor; bu da yazıyor.
+  const GID = 'snakeGame';
+
+  // ═══════════ OYNANIŞ SABİTLERİ ═══════════
+  // Izgara SABİT ve cihazdan bağımsız. Ekrana göre sütun/satır türetmek
+  // oynanışı cihaza göre değiştirirdi: aynı skor farklı tahtalarda farklı
+  // şey ifade ederdi ve rekor karşılaştırması anlamını yitirirdi. Değişen
+  // yalnızca hücrenin KAÇ PİKSEL olduğu.
+  // ROWS 20 → 26 (2026-08-08, sahibin isteği: "alt ve üst kısımlarda çok
+  // fazla boşluk var"). Hücre boyutunu GENİŞLİK belirliyor (15 sütun,
+  // ~348px kullanılabilir → 23px), yükseklik ise artıyordu: 20 satır
+  // yalnızca 460px kaplıyor, oysa dikeyde ~685px var. 26 satır 598px
+  // demek — boşluk kenar payına iner, hücre boyutu ise DEĞİŞMEZ, yani
+  // tahta büyür ama parçalar aynı kalır. 29'un üstünde yükseklik hücreyi
+  // küçültmeye başlar (23*29 = 667), o yüzden tavan orası.
+  const COLS = 15, ROWS = 26;
+  const START_LEN = 3;               // klasik başlangıç uzunluğu
+  const FOOD_SCORE = 10;             // yem başına puan
+  // Hız: klasik yılan uzadıkça hızlanır (Nokia/retro davranışı). Yeni bir
+  // mekanik değil, oyunun kendi zorluk eğrisi. Tabandan tavana ~26 yemde
+  // iniliyor ve orada sabitleniyor — sonsuza kadar hızlanmak oyunu
+  // oynanamaz kılar.
+  const TICK_START = 150, TICK_STEP = 2.5, TICK_MIN = 85;
+  // Girdi kuyruğu: bir tik içinde "yukarı sonra sola" basmak iki ayrı
+  // hamledir. Kuyruk olmasaydı ikincisi birincisini ezerdi ve oyuncu
+  // "döndüm ama dönmedi" hissini yaşardı — klasik yılan uygulamalarının
+  // standart çözümü, ek bir yetenek değil.
+  const MAX_QUEUE = 2;
+  const CELL_MAX = 34;               // masaüstünde tahta absürt büyümesin
+
+  const DIRS = [ {x:1,y:0}, {x:0,y:1}, {x:-1,y:0}, {x:0,y:-1} ]; // sağ,aşağı,sol,yukarı
+  const KEYS = {
+    ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0],
+    w:[0,-1], s:[0,1], a:[-1,0], d:[1,0],
+    W:[0,-1], S:[0,1], A:[-1,0], D:[1,0],
+  };
+
+  // ═══════════ PALET ═══════════
+  // 2. tasarım görselinin renkleri (2026-08-08). Canvas renk sabitleri CSS
+  // token'ıyla okunamaz (bkz. CLAUDE.md §5 palet notu), bu yüzden burada
+  // yazılı. Menekşe kristalden NEON YEŞİL tel-kafes kristale geçildi;
+  // gökyüzü de mordan lacivere döndü (CSS tarafında).
+  //
+  // MALZEME değişti, yalnızca ton değil: eski küp OPAK ve gradyan doluydu,
+  // yenisi parlak konturlu + KOYU YARI SAYDAM içli, yani "cam kristal".
+  // Bu yüzden dolgu/kontur/pah ayrı ayrı tanımlı.
+  const C = {
+    edge:    '#5cff85',                 // parlak dış kontur
+    facet:   'rgba(200,255,215,.85)',   // köşe pahları
+    fillTop: 'rgba(46,214,96,.42)',
+    fillBot: 'rgba(14,120,52,.42)',
+    glow:    'rgba(60,255,120,.50)',
+    // Baş gövdeden AYRI bir malzeme: opak, daha parlak (bkz. drawHead).
+    headHi:  '#4bf07f',
+    headLo:  '#16a341',
+    tongue:  '#ff3131',
+    pupil:   '#0a2412',
+  };
+  // Yem artık ÇİFT TONLU: üstü camgöbeği, altı macenta. Tek gradyan hem
+  // dolguya hem KONTURA veriliyor (strokeStyle de gradyan kabul eder);
+  // iki ayrı yol çizip birleştirmek geçiş yerinde dikiş bırakırdı.
+  const F = {
+    top:'#8df3ff', topMid:'#57d8ff', botMid:'#b06bff', bot:'#e79bff',
+    fillTop:'rgba(90,220,255,.30)', fillBot:'rgba(190,90,255,.30)',
+    glow:'rgba(130,220,255,.55)',
+  };
+
+  // ═══════════ DURUM ═══════════
+  let container, wrapEl, arenaEl, cv, ctx, scoreEl, atmoEl;
+  let cell = 0, dpr = 1, PAD = 0, SP = 0;
+  let sprBody = null, sprHead = [], sprFood = null;
+  let snake = [], occ = null, food = null, dir = DIRS[0];
+  const queue = [];
+  let score = 0, best = 0, alive = false, waiting = false, over = false;
+  let timer = 0, deathT = 0, layoutRaf = 0, layoutTries = 0, startedAt = 0;
+
+  // ═══════════ ÇİZİM YARDIMCILARI ═══════════
+  function rr(x, px, py, w, h, r) {
+    x.beginPath();
+    x.moveTo(px + r, py);
+    x.arcTo(px + w, py, px + w, py + h, r);
+    x.arcTo(px + w, py + h, px, py + h, r);
+    x.arcTo(px, py + h, px, py, r);
+    x.arcTo(px, py, px + w, py, r);
+    x.closePath();
+  }
+
+  // Sprite: hücreden PAD kadar taşan kare tuval. Taşma payı hem parlamayı
+  // hem de başın dışarı çıkan dişlerini içeriyor.
+  function makeSprite(size, draw) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(size * dpr));
+    c.height = Math.max(1, Math.round(size * dpr));
+    const x = c.getContext('2d');
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw(x);
+    return { cv: c, size };
+  }
+
+  // Kristal küp — tasarımdaki gövde parçası.
+  // Reçete: KOYU YARI SAYDAM iç + PARLAK kontur + dört köşede pah çizgisi.
+  // Hacim artık dolgu gradyanından değil, konturun parlaklığı ile köşe
+  // pahlarından geliyor — tasarımdaki "neon cam" malzemesi bu.
+  function drawCube(x, ox, oy, s) {
+    const inset = Math.max(1, s * 0.07);
+    const px = ox + inset, py = oy + inset, sz = s - inset * 2;
+    const r = sz * 0.18;
+
+    x.save();
+    x.shadowColor = C.glow;
+    x.shadowBlur = s * 0.40;
+    const g = x.createLinearGradient(px, py, px, py + sz);
+    g.addColorStop(0, C.fillTop);
+    g.addColorStop(1, C.fillBot);
+    x.fillStyle = g;
+    rr(x, px, py, sz, sz, r);
+    x.fill();
+    // Kontur parlamanın İÇİNDE çiziliyor: parlayan şey kenarın kendisi,
+    // dolgunun silueti değil.
+    x.lineWidth = Math.max(1.2, s * 0.075);
+    x.strokeStyle = C.edge;
+    rr(x, px, py, sz, sz, r);
+    x.stroke();
+    x.restore();
+
+    // Köşe pahları — kesme taş izlenimi. Parlamanın DIŞINDA: dört kısa
+    // çizgiyi de gölgelendirmek küpün içini sisli gösteriyordu.
+    const f = sz * 0.30, e = r * 0.55;
+    x.lineWidth = Math.max(1, s * 0.042);
+    x.strokeStyle = C.facet;
+    x.beginPath();
+    x.moveTo(px + e, py + f);                x.lineTo(px + f, py + e);
+    x.moveTo(px + sz - f, py + e);           x.lineTo(px + sz - e, py + f);
+    x.moveTo(px + e, py + sz - f);           x.lineTo(px + f, py + sz - e);
+    x.moveTo(px + sz - f, py + sz - e);      x.lineTo(px + sz - e, py + sz - f);
+    x.stroke();
+  }
+
+  // Baş — 3. tasarım görselindeki YILAN kafası (2026-08-08): yuvarlak,
+  // DOLU yeşil kafa + iki beyaz göz (koyu bebekli) + öne uzanan kırmızı
+  // çatal dil. Önceki testere dişli uç tamamen kaldırıldı.
+  //
+  // Gövdeden üç farkı bilinçli ve hepsi okunabilirlik için:
+  //  • OPAK (gövde yarı saydam kristal) — kafa arkasındaki ızgara görünmez,
+  //  • daha BÜYÜK (hücreyi ~%18 taşar) ve komşu gövde parçasının üstüne
+  //    biner, tıpkı görselde olduğu gibi — bu yüzden çizim sırası kuyruk→baş,
+  //  • yüz detayları var; oyuncunun "nereye bakıyorum" sorusu tek bakışta
+  //    cevaplanmalı, çünkü yön hatası bu oyunda ölüm demek.
+  // Taşma ve dil sprite'ın PAD payına sığıyor (bkz. buildSprites).
+  //
+  // YÖN, sprite'ı DÖNDÜREREK değil, dil ve gözler yeniden konumlandırılarak
+  // veriliyor. Blok döndürme denendi ve elendi: 90°'de gözler kafanın yanına
+  // kayıp yüz "profilden balık" gibi okunuyor, 180°'de ise baş aşağı geliyor.
+  // Görseldeki yüz KARŞIDAN bakan bir çizgi-film yüzü; o kimliği korumanın
+  // yolu gözleri hep yatay çift tutmak, yalnızca dili ileriye çevirmek.
+  // Tek istisna YUKARI: dil tepeden çıktığı için gözler alt yarıya iniyor,
+  // yoksa dil gözlerin üstünden geçerdi.
+  // d: 0 sağ · 1 aşağı · 2 sol · 3 yukarı
+  function drawHead(x, d) {
+    const cx = SP / 2, cy = SP / 2;
+    const DV = [[1, 0], [0, 1], [-1, 0], [0, -1]][d];
+    // 1.28 ve yarıçap .42: görseldeki kafa gövdeden belirgin BÜYÜK ve
+    // neredeyse dairesel. Daha küçük/köşeli bir kafa gövde küplerinden
+    // ayrışmıyor, yılanın yönü de tek bakışta okunmuyordu.
+    const hs = cell * 1.28;
+    const hx = cx - hs / 2, hy = cy - hs / 2;
+    const r = hs * 0.42;
+
+    x.save();
+    x.shadowColor = C.glow;
+    x.shadowBlur = cell * 0.45;
+    const g = x.createLinearGradient(cx, hy, cx, hy + hs);
+    g.addColorStop(0, C.headHi);
+    g.addColorStop(1, C.headLo);
+    x.fillStyle = g;
+    rr(x, hx, hy, hs, hs, r);
+    x.fill();
+    x.lineWidth = Math.max(1, cell * 0.055);
+    x.strokeStyle = C.edge;
+    rr(x, hx, hy, hs, hs, r);
+    x.stroke();
+    x.restore();
+
+    // Dil: ağızdan (kafanın ön-alt kenarı) çıkıp dışarı uzanır, uçta çatal.
+    // Kafadan SONRA çiziliyor ki kökü ağzın üstünde görünsün.
+    // Dil AĞIZDAN çıkar: yön boyunca dışa. Yatay yönlerde ayrıca aşağı
+    // kaydırılıyor (bias) — görselde dil gözlerin altından, ağız hizasından
+    // çıkıyor; tam ortadan çıkan dil "burun" gibi duruyordu.
+    // Görselde küçük ve ince; kalın/uzun bir dil kafayı bastırıp yüzü ikinci
+    // plana atıyordu.
+    const L = cell * 0.42;
+    const ux = DV[0], uy = DV[1];              // ileri
+    const vx = -DV[1], vy = DV[0];             // ileriye dik (çatal ekseni)
+    const bias = (d === 0 || d === 2) ? hs * 0.17 : 0;
+    const bx = cx + ux * hs * 0.28;
+    const by = cy + uy * hs * 0.28 + bias;
+    x.save();
+    x.strokeStyle = C.tongue;
+    x.lineWidth = Math.max(1.3, cell * 0.072);
+    x.lineCap = 'round';
+    x.lineJoin = 'round';
+    x.beginPath();
+    x.moveTo(bx, by);
+    x.lineTo(bx + ux * L * 0.55, by + uy * L * 0.55);
+    x.moveTo(bx + ux * L * 0.55, by + uy * L * 0.55);
+    x.lineTo(bx + ux * L - vx * L * 0.30, by + uy * L - vy * L * 0.30);
+    x.moveTo(bx + ux * L * 0.55, by + uy * L * 0.55);
+    x.lineTo(bx + ux * L + vx * L * 0.30, by + uy * L + vy * L * 0.30);
+    x.stroke();
+    x.restore();
+
+    // Gözler: HER ZAMAN yatay çift (karşıdan bakan yüz). Bebek AŞAĞI kaçık —
+    // görseldeki ifade bundan geliyor. Bebek beyazın yarısından KÜÇÜK
+    // kalmalı; büyütünce gözler uzaktan koyu bir lekeye dönüşüyor ve yüz
+    // kayboluyor (23px hücrede sınav bu).
+    const ew = hs * 0.29, eh = hs * 0.33;
+    const ey = cy + (d === 3 ? hs * 0.15 : -hs * 0.13);
+    [cx - hs * 0.185, cx + hs * 0.185].forEach((ex2) => {
+      x.fillStyle = '#ffffff';
+      rr(x, ex2 - ew / 2, ey - eh / 2, ew, eh, Math.min(ew, eh) * 0.36);
+      x.fill();
+      const pw = ew * 0.44, ph = eh * 0.38;
+      x.fillStyle = C.pupil;
+      rr(x, ex2 - pw / 2, ey + eh * 0.02, pw, ph, pw * 0.30);
+      x.fill();
+    });
+  }
+
+  // Yem: elmas kesim (taç + kuşak + sivri uç). Uygulamanın elmas diliyle
+  // aynı siluet — tasarım görselindeki mücevher bu.
+  function drawGem(x) {
+    const cx = SP / 2, cy = SP / 2;
+    const w = cell * 0.66, h = cell * 0.68;
+    const tw = w * 0.30;
+    const ty = cy - h * 0.44, gy = cy - h * 0.06, by = cy + h * 0.50;
+
+    x.save();
+    x.shadowColor = F.glow;
+    x.shadowBlur = cell * 0.42;
+    x.beginPath();
+    x.moveTo(cx - tw, ty);
+    x.lineTo(cx + tw, ty);
+    x.lineTo(cx + w / 2, gy);
+    x.lineTo(cx, by);
+    x.lineTo(cx - w / 2, gy);
+    x.closePath();
+    // İç dolgu KOYU/yarı saydam, kontur parlak — gövde küpleriyle aynı
+    // "neon cam" malzemesi. Renk üstte camgöbeği, altta macenta.
+    const fg = x.createLinearGradient(cx, ty, cx, by);
+    fg.addColorStop(0, F.fillTop);
+    fg.addColorStop(1, F.fillBot);
+    x.fillStyle = fg;
+    x.fill();
+    // Kontur da GRADYAN: iki ayrı yol çizip birleştirmek geçiş noktasında
+    // görünür bir dikiş bırakırdı. strokeStyle gradyan kabul ediyor.
+    const eg = x.createLinearGradient(cx, ty, cx, by);
+    eg.addColorStop(0, F.top);
+    eg.addColorStop(0.42, F.topMid);
+    eg.addColorStop(0.58, F.botMid);
+    eg.addColorStop(1, F.bot);
+    x.lineWidth = Math.max(1.2, cell * 0.075);
+    x.strokeStyle = eg;
+    x.stroke();
+    x.restore();
+
+    // Faseta çizgileri aynı gradyanı taşıyor, beyaz değil: beyaz çizgi iki
+    // tonlu taşta ortadan bölünmüş gibi duruyordu.
+    x.strokeStyle = eg;
+    x.globalAlpha = 0.75;
+    x.lineWidth = Math.max(1, cell * 0.038);
+    x.beginPath();
+    x.moveTo(cx - w / 2, gy); x.lineTo(cx + w / 2, gy);
+    x.moveTo(cx - tw, ty);    x.lineTo(cx, by);
+    x.moveTo(cx + tw, ty);    x.lineTo(cx, by);
+    x.stroke();
+    x.globalAlpha = 1;
+  }
+
+  // PAD, sprite'ın hücreden taşma payı. Baş hücreyi %18 aşıyor ve dil
+  // merkezden ~0.74 hücre uzağa gidiyor, yani pay en az 0.24 hücre olmalı;
+  // 0.62 hem bunu hem parlamayı rahat karşılıyor.
+  function buildSprites() {
+    PAD = Math.max(5, Math.round(cell * 0.62));
+    SP = cell + PAD * 2;
+    sprBody = makeSprite(SP, (x) => drawCube(x, PAD, PAD, cell));
+
+    // Dört yön ÜRETİM ANINDA pişiriliyor, her karede değil. Canvas
+    // dönüşümü yok: drawHead yönü kendisi yerleştiriyor (bkz. oradaki not).
+    sprHead = [];
+    for (let d = 0; d < 4; d++) {
+      sprHead.push(makeSprite(SP, (x) => drawHead(x, d)));
+    }
+    sprFood = makeSprite(SP, drawGem);
+  }
+
+  function blit(spr, px, py) {
+    ctx.drawImage(spr.cv, px - PAD, py - PAD, spr.size, spr.size);
+  }
+
+  function dirIndex() {
+    if (dir.x === 1) return 0;
+    if (dir.y === 1) return 1;
+    if (dir.x === -1) return 2;
+    return 3;
+  }
+
+  function paint() {
+    if (!ctx || !cell || !sprBody) return;
+    ctx.clearRect(0, 0, cell * COLS, cell * ROWS);
+    if (food && sprFood) blit(sprFood, food.x * cell, food.y * cell);
+    // Kuyruktan başa doğru: baş her zaman üstte kalsın.
+    for (let i = snake.length - 1; i >= 1; i--) {
+      blit(sprBody, snake[i].x * cell, snake[i].y * cell);
+    }
+    if (snake.length) blit(sprHead[dirIndex()], snake[0].x * cell, snake[0].y * cell);
+  }
+
+  // ═══════════ YERLEŞİM ═══════════
+  // Hücre boyutu tam sayı: ızgara noktaları (CSS arka planı) ve sprite
+  // blit'leri piksel hizasında kalsın.
+  function layout() {
+    if (!wrapEl || !cv) return false;
+    const availW = wrapEl.clientWidth, availH = wrapEl.clientHeight;
+    if (!availW || !availH) return false;
+    const c = Math.min(
+      Math.floor((availW - 12) / COLS),
+      Math.floor((availH - 12) / ROWS),
+      CELL_MAX
+    );
+    if (c < 6) return false;
+    cell = c;
+    const W = cell * COLS, H = cell * ROWS;
+    arenaEl.style.width = W + 'px';
+    arenaEl.style.height = H + 'px';
+    arenaEl.style.setProperty('--snk-cell', cell + 'px');
+    arenaEl.style.setProperty('--snk-digit', Math.round(cell * 1.5) + 'px');
+    // DPR 2'de sınırlı: tahta tikte bir kez çiziliyor, 3x buffer'ın
+    // görünür bir karşılığı yok ama zayıf cihazda fill-rate'i üçe katlar.
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.style.width = W + 'px';
+    cv.style.height = H + 'px';
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return true;
+  }
+
+  function ensureLayout() {
+    layoutRaf = 0;
+    if (layout()) { buildSprites(); paint(); return; }
+    // Tuval ölçüsü layout'a bağlı; hazır olana kadar bekle. Üst sınır,
+    // ekran hiç görünür olmazsa sonsuz döngüye girmemek için.
+    if (++layoutTries > 60) return;
+    layoutRaf = requestAnimationFrame(ensureLayout);
+  }
+
+  // ═══════════ OYUN DÖNGÜSÜ ═══════════
+  function tickMs() {
+    return Math.max(TICK_MIN, TICK_START - (snake.length - START_LEN) * TICK_STEP);
+  }
+  function stopTimer() { if (timer) { clearTimeout(timer); timer = 0; } }
+  function startTimer() { stopTimer(); timer = setTimeout(loop, tickMs()); }
+  function loop() {
+    timer = 0;
+    step();
+    if (alive && !waiting) timer = setTimeout(loop, tickMs());
+  }
+
+  function step() {
+    if (!alive || waiting) return;
+    if (queue.length) dir = queue.shift();
+
+    const head = snake[0];
+    // SARMALAMA (wrap): bir kenardan çıkan yılan karşı kenardan girer.
+    // Referans oyunun davranışı bu (sahibin kararı, 2026-08-08) — duvar
+    // ÖLDÜRMEZ. Sonuç: oyunun tek kaybetme durumu kendine çarpmak, yani
+    // ölüm her zaman oyuncunun kendi izinden gelir. Neon çerçeve bir duvar
+    // değil, bir geçit.
+    const nx = (head.x + dir.x + COLS) % COLS;
+    const ny = (head.y + dir.y + ROWS) % ROWS;
+
+    const grow = !!food && nx === food.x && ny === food.y;
+    const tail = snake[snake.length - 1];
+    let blocked = occ[ny * COLS + nx] === 1;
+    // Kuyruğun SON hücresi bu tikte boşalıyor (büyümüyorsak): kuyruğun
+    // ucunu takip etmek klasik yılanda geçerli bir hamledir.
+    if (blocked && !grow && nx === tail.x && ny === tail.y) blocked = false;
+    if (blocked) { die(); return; }
+
+    // Sıra ÖNEMLİ: önce kuyruk boşalır, sonra baş yazılır. Tersi olsaydı
+    // kuyruk-takibi durumunda pop, başın az önce işaretlediği hücreyi
+    // temizlerdi (yılan kendi başını "yok" sanardı).
+    if (!grow) {
+      const t = snake.pop();
+      occ[t.y * COLS + t.x] = 0;
+    }
+    snake.unshift({ x: nx, y: ny });
+    occ[ny * COLS + nx] = 1;
+
+    if (grow) eat();
+    paint();
+  }
+
+  function eat() {
+    score += FOOD_SCORE;
+    syncScore();
+    GameAudio.play('diamond');
+    GameAudio.haptic(12);
+    spawnFood();
+  }
+
+  // Yem asla yılanın üstüne düşmez: seçim yalnızca BOŞ hücreler arasından.
+  function spawnFood() {
+    const free = [];
+    for (let i = 0; i < occ.length; i++) if (!occ[i]) free.push(i);
+    if (!free.length) { food = null; boardFilled(); return; }
+    const k = free[(Math.random() * free.length) | 0];
+    food = { x: k % COLS, y: (k / COLS) | 0 };
+  }
+
+  function syncScore() {
+    if (scoreEl) scoreEl.textContent = String(score);
+    // Kabuğun skor kapsülü bu oyunda gizli (ownsScoreDisplay) ama değeri
+    // güncel tutuluyor: "Skor 2x" düğmesi o elemanı okuyor.
+    if (typeof updateGameScore === 'function') updateGameScore(score);
+  }
+
+  // ═══════════ BİTİŞ ═══════════
+  // Tek kaybetme yolu: kendine çarpmak (duvarlar sarmalıyor, bkz. step).
+  function die() {
+    if (!alive) return;
+    alive = false; over = true;
+    stopTimer();
+    if (arenaEl) {
+      arenaEl.classList.remove('hit');
+      void arenaEl.offsetWidth;
+      arenaEl.classList.add('hit');
+    }
+    GameAudio.play('crystalOver');
+    GameAudio.haptic([90, 40, 90]);
+    best = phHighScore(GID, score);
+    gameEvent('game_ended', {
+      gameId: 'snakeGame', result: 'lost', score, durationMs: Date.now() - startedAt,
+    });
+    deathT = setTimeout(() => {
+      deathT = 0;
+      showGameOver(false, 'Yılan Öldü', 'Kendine çarptın. Uzunluk: ' + snake.length, {
+        accent: '#16a341', accentLight: '#8dffa8', accentGlow: 'rgba(60,255,120,.65)',
+        mark: '✧',
+        stats: [
+          { label: 'Skor', value: score.toLocaleString() },
+          { label: 'En İyi', value: best.toLocaleString(), record: score >= best && score > 0 },
+        ],
+        onContinue: revive,
+        onRestart: newGame,
+      });
+    }, 340);
+  }
+
+  // Tahtanın tamamen dolması: teorik "mükemmel oyun". Yılanın tek kazanma
+  // durumu bu; uydurma bir bitiş değil, kuralların doğal sınırı.
+  function boardFilled() {
+    alive = false; over = true;
+    stopTimer();
+    best = phHighScore(GID, score);
+    gameEvent('game_ended', {
+      gameId: 'snakeGame', result: 'won', score, durationMs: Date.now() - startedAt,
+    });
+    GameAudio.play('win');
+    GameAudio.haptic('win');
+    deathT = setTimeout(() => {
+      deathT = 0;
+      showGameOver(true, 'Tahta Doldu!', 'Yılan bütün tahtayı kapladı.', {
+        accent: '#16a341', accentLight: '#8dffa8', accentGlow: 'rgba(60,255,120,.65)',
+        mark: '✦',
+        stats: [
+          { label: 'Skor', value: score.toLocaleString() },
+          { label: 'Uzunluk', value: snake.length },
+        ],
+        onRestart: newGame,
+      });
+    }, 340);
+  }
+
+  // "Devam et" (reklam/elmas/Plus). step() çarpışmada durumu DEĞİŞTİRMEDEN
+  // çıktığı için yılan hâlâ ölümden bir kare öncesinde duruyor — devam
+  // etmek onu diriltip KONTROLÜ oyuncuya bırakmak demek. Aynı yönde
+  // sürseydi bir sonraki tikte yine ölürdü, o yüzden ilk yön girdisine
+  // kadar bekliyor. Yeni bir mekanik değil: turu kabuk yeniden açıyor
+  // (bkz. app.js _runGameOverContinuation), skor ve uzunluk korunuyor.
+  function revive() {
+    alive = true; over = false; waiting = true;
+    queue.length = 0;
+    stopTimer();
+    if (arenaEl) arenaEl.classList.remove('hit');
+    paint();
+    if (typeof showToast === 'function') showToast('🐍 Yön seç ve devam et');
+  }
+
+  function newGame() {
+    stopTimer();
+    if (deathT) { clearTimeout(deathT); deathT = 0; }
+    if (arenaEl) arenaEl.classList.remove('hit');
+    snake = [];
+    occ = new Array(COLS * ROWS).fill(0);
+    const hx = (COLS / 2) | 0, hy = (ROWS / 2) | 0;
+    for (let i = 0; i < START_LEN; i++) {
+      const c = { x: hx - i, y: hy };
+      snake.push(c);
+      occ[c.y * COLS + c.x] = 1;
+    }
+    dir = DIRS[0];                 // klasik: sağa doğru, hemen hareketle başlar
+    queue.length = 0;
+    score = 0; alive = true; waiting = false; over = false;
+    startedAt = Date.now();
+    spawnFood();
+    syncScore();
+    // Bir tur = bir yılan canı. Yeniden başlatma yeni bir tur açar;
+    // "devam et" AÇMAZ (turu kabuk reopen ediyor).
+    gameEvent('game_started', { gameId: 'snakeGame' });
+    paint();
+    startTimer();
+  }
+
+  // ═══════════ GİRDİ ═══════════
+  // 180° dönüş, KUYRUĞUN SONUNA göre reddediliyor — o an uygulanan yöne
+  // göre değil. Aksi hâlde "yukarı + aşağı" hızlı ikilisi kuyrukta yan
+  // yana durur ve yılan kendi boynuna girerdi.
+  function turn(nx, ny) {
+    if (!alive) return;
+    const ref = queue.length ? queue[queue.length - 1] : dir;
+    if (nx === -ref.x && ny === -ref.y) return;
+    if (waiting) {
+      dir = { x: nx, y: ny };
+      waiting = false;
+      paint();
+      startTimer();
+      return;
+    }
+    if (nx === ref.x && ny === ref.y) return;        // aynı yön — kuyruğu doldurma
+    if (queue.length >= MAX_QUEUE) return;
+    queue.push({ x: nx, y: ny });
+  }
+
+  function onKey(e) {
+    const m = KEYS[e.key];
+    if (!m) return;
+    e.preventDefault();
+    turn(m[0], m[1]);
+  }
+
+  // ═══════════ SAHNE ═══════════
+  function css() {
+    return `
+      /* Tasarımdaki gece LACİVERT (2026-08-08 görseli), mor değil. Ortak
+         .ph-scene gökyüzünün üstüne oyunun kendi mekânı geliyor — kabuk
+         menekşe kalıyor, yalnızca bu oyunun sahnesi maviye dönüyor. */
+      .snk-scene{
+        background:
+          radial-gradient(ellipse 82% 58% at 50% 44%, rgba(40,80,180,.26) 0%, transparent 72%),
+          radial-gradient(ellipse 130% 92% at 50% 50%, #101c47 0%, #05091f 78%);
+      }
+      .snk-wrap{
+        flex:1; align-self:stretch; min-height:0;
+        display:flex; align-items:center; justify-content:center;
+        position:relative; z-index:1;
+      }
+      /* Neon çerçeve + ızgara noktaları: ikisi de STATİK, bu yüzden
+         canvas'ta değil CSS'te. Nokta kafesi hücre boyutuna kilitli
+         (--snk-cell), böylece oyun ızgarasıyla birebir hizalı. */
+      .snk-arena{
+        position:relative;
+        /* Çerçeve artık soluk lavanta-beyaz (görselde macenta değil). */
+        border:1.5px solid rgba(206,214,255,.82);
+        border-radius:18px;
+        background-color:rgba(6,11,34,.55);
+        background-image:radial-gradient(circle at center, rgba(150,175,255,.26) 1px, transparent 1.6px);
+        background-size:var(--snk-cell) var(--snk-cell);
+        background-position:calc(var(--snk-cell) / 2) calc(var(--snk-cell) / 2);
+        box-shadow:
+          0 0 16px rgba(150,175,255,.26),
+          0 0 54px rgba(70,110,230,.12),
+          inset 0 0 44px rgba(24,44,110,.28);
+        overflow:hidden;
+      }
+      .snk-cv{display:block}
+      /* Skor: tasarımdaki içi boş neon rakam. Dolgu şeffaf, kontur parlak;
+         text-shadow gövdeyi değil siluetin çevresini aydınlatıyor. */
+      .snk-score{
+        position:absolute; z-index:2; pointer-events:none;
+        left:calc(var(--snk-cell) * .5); top:calc(var(--snk-cell) * .3);
+        font:900 var(--snk-digit)/1 var(--ph-font-display);
+        letter-spacing:.04em;
+        color:transparent;
+        -webkit-text-stroke:calc(var(--snk-digit) * .075) #d8e6ff;
+        text-shadow:0 0 10px rgba(150,200,255,.65), 0 0 26px rgba(80,140,255,.32);
+      }
+      /* Ölüm: TEK, kısa çerçeve darbesi. Sürekli çalışan hiçbir efekt yok. */
+      @keyframes snkHit{
+        0%,100%{border-color:rgba(206,214,255,.82)}
+        35%{border-color:rgba(255,120,140,1);
+            box-shadow:0 0 26px rgba(255,80,110,.60), inset 0 0 60px rgba(170,30,60,.28)}
+      }
+      .snk-arena.hit{animation:snkHit 320ms ease-out}
+    `;
+  }
+
+  function init(c) {
+    container = c;
+    layoutTries = 0;
+    container.classList.add('ph-scene', 'snk-scene');
+    injectStyle('css-snk', css());
+    // Tasarımda yalnızca yıldızlar var — huzme ve zerre yok, hem sadık
+    // kalmak hem de bedava olmayan katmanları taşımamak için.
+    atmoEl = phAtmosphere(container, { stars: 30, beams: 0, motes: 0, skyPct: 96 });
+
+    wrapEl = document.createElement('div');
+    wrapEl.className = 'snk-wrap';
+    wrapEl.innerHTML =
+      '<div class="snk-arena">' +
+        '<span class="snk-score">0</span>' +
+        '<canvas class="snk-cv"></canvas>' +
+      '</div>';
+    container.appendChild(wrapEl);
+
+    arenaEl = wrapEl.querySelector('.snk-arena');
+    scoreEl = wrapEl.querySelector('.snk-score');
+    cv = wrapEl.querySelector('.snk-cv');
+    ctx = cv.getContext('2d');
+
+    best = phHighScore(GID);
+    newGame();
+    ensureLayout();
+
+    // Kaydırma: paylaşımlı phSwipe (2048 ve Labirent'in de kullandığı).
+    // Ayrı bir dokunuş matematiği yazmak, eksen kilidi ve fiske eşiği gibi
+    // çözülmüş sorunları yeniden çözmek olurdu.
+    phSwipe(container, (d) => {
+      const m = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[d];
+      if (m) turn(m[0], m[1]);
+    }, { minDist: 18 });
+    addEv(document, 'keydown', onKey);
+    addEv(window, 'resize', () => { if (layout()) { buildSprites(); paint(); } });
+    // Uygulama arka plana giderse döngü DURUR. Durmasaydı yılan görünmeyen
+    // bir tahtada ilerleyip oyuncu ekrana bakmazken ölürdü.
+    addEv(document, 'visibilitychange', () => {
+      if (document.hidden) stopTimer();
+      else if (alive && !waiting) startTimer();
+    });
+  }
+
+  function cleanup() {
+    stopTimer();
+    if (deathT) { clearTimeout(deathT); deathT = 0; }
+    if (layoutRaf) { cancelAnimationFrame(layoutRaf); layoutRaf = 0; }
+    clearEvs();
+    if (atmoEl) { atmoEl.remove(); atmoEl = null; }
+    if (container) {
+      container.innerHTML = '';
+      container.classList.remove('ph-scene', 'snk-scene');
+    }
+    container = wrapEl = arenaEl = cv = scoreEl = null;
+    ctx = null;
+    sprBody = sprFood = null; sprHead = [];
+    snake = []; occ = null; food = null; queue.length = 0;
+    cell = 0; alive = false; waiting = false; over = false;
+  }
+
+  // Skor sahnenin kendi içinde (tasarımda arenanın sol üstünde), bu yüzden
+  // kabuğun SKOR kapsülü gizleniyor — aynı sayı iki yerde durmamalı.
+  return { init, cleanup, ownsScoreDisplay: true };
+})();

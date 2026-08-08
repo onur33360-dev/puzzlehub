@@ -19,6 +19,7 @@ const REEL_GAMES = [
   // playable:false BİLEREK — motor ve resim sistemi hazır ama tema Faz 3'te.
   // Oyuncuya çıplak tahta göstermektense kart demoda kalsın.
   { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:true },
+  { id:'snakeGame', name:'Yılan', emoji:'🐍', category:'arcade', desc:'Klasik yılan — elmasları topla, uza!', difficulty:'Kolay', gradient:['#16255e','#060b22'], playable:true },
 ];
 
 const GAME_NAME_MAP = {
@@ -32,7 +33,8 @@ const GAME_NAME_MAP = {
   'waterSort': 'İksir Sıralama',
   'arrowPuzzle': 'Ok Bulmaca',
   'flowConnect': 'Akış Bağlantı',
-  'jigsawCard': 'Resim Kaydır'
+  'jigsawCard': 'Resim Kaydır',
+  'snakeGame': 'Yılan'
 };
 
 
@@ -1308,6 +1310,119 @@ MiniDemos.demo_jigsawCard = function(gradient) {
   return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
+// ———————— 12. Yılan Demo ————————
+// Kendi kendine oynayan klasik yılan. Diğer demolar gibi DOM ızgarası:
+// 117 hücre, kare başına yalnızca değişen hücreler boyanıyor.
+// Renkler oyunun kendi paletinden (games.js snakeGame) — kart ile oyunun
+// aynı şey olduğu ilk bakışta anlaşılmalı.
+MiniDemos.demo_snake = function(gradient) {
+  const el = document.createElement('div');
+  el.className = 'reel-demo-inner';
+  const state = { paused:false, raf:0 };
+  const CO = 13, RO = 9;
+  const EMPTY = 'rgba(255,255,255,0.04)';
+  // Oyunun 3. tasarımıyla aynı dil: neon yeşil cam gövde, DOLU parlak baş,
+  // çift tonlu (camgöbeği→macenta) elmas, lacivert arena, soluk çerçeve.
+  const BODY = 'linear-gradient(180deg,rgba(46,214,96,.42),rgba(14,120,52,.42))';
+  const HEAD = 'linear-gradient(180deg,#4bf07f,#16a341)';
+  const FOOD = 'linear-gradient(180deg,#8df3ff,#57d8ff 42%,#b06bff 58%,#e79bff)';
+
+  const gridEl = document.createElement('div');
+  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+CO+',1fr);gap:2px;width:92%;max-width:300px;aspect-ratio:'+CO+'/'+RO+';padding:6px;border-radius:12px;border:1.5px solid rgba(206,214,255,.7);box-shadow:0 0 16px rgba(150,175,255,.22);background:rgba(6,11,34,.5);';
+  const cells = [];
+  for (let i=0;i<CO*RO;i++) {
+    const c = document.createElement('div');
+    c.style.cssText = 'border-radius:3px;background:'+EMPTY+';transition:background .12s;';
+    gridEl.appendChild(c);
+    cells.push(c);
+  }
+  el.appendChild(gridEl);
+
+  let snake, food, dir;
+  function paint() {
+    for (let i=0;i<cells.length;i++) {
+      const c = cells[i];
+      c.style.background = EMPTY;
+      c.style.boxShadow = 'none';
+      c.style.clipPath = 'none';
+      c.style.border = 'none';
+      c.style.borderRadius = '3px';
+    }
+    snake.forEach((p, i) => {
+      const c = cells[p.y*CO+p.x];
+      // i===0 baş: oyundaki gibi opak, daha parlak ve YUVARLAK.
+      c.style.background = i === 0 ? HEAD : BODY;
+      c.style.boxShadow = '0 0 6px rgba(60,255,120,.5)';
+      if (i === 0) c.style.borderRadius = '40%';
+      else c.style.border = '1px solid rgba(92,255,133,.75)';
+    });
+    if (food) {
+      const c = cells[food.y*CO+food.x];
+      c.style.background = FOOD;
+      c.style.boxShadow = '0 0 8px rgba(130,220,255,.65)';
+      c.style.clipPath = 'polygon(50% 0,100% 38%,50% 100%,0 38%)';   // elmas silueti
+    }
+  }
+  function occupied(x,y) { return snake.some(p => p.x===x && p.y===y); }
+  function newFood() {
+    const free = [];
+    for (let y=0;y<RO;y++) for (let x=0;x<CO;x++) if(!occupied(x,y)) free.push({x,y});
+    food = free.length ? free[Math.floor(Math.random()*free.length)] : null;
+  }
+  function reset() {
+    snake = [{x:4,y:4},{x:3,y:4},{x:2,y:4}];
+    dir = {x:1,y:0};
+    newFood();
+    paint();
+  }
+  // Açgözlü yön seçimi: yeme yaklaştıran, duvara/kendine çarpmayan hamle.
+  // Demoda mükemmel oynamak gerekmiyor, "yılan gibi davranması" yeterli.
+  function chooseDir() {
+    const h = snake[0];
+    const opts = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]
+      .filter(d => !(d.x===-dir.x && d.y===-dir.y))
+      .filter(d => {
+        const nx=h.x+d.x, ny=h.y+d.y;
+        if (nx<0||nx>=CO||ny<0||ny>=RO) return false;
+        const tail = snake[snake.length-1];
+        if (occupied(nx,ny) && !(nx===tail.x && ny===tail.y)) return false;
+        return true;
+      });
+    if (!opts.length) return null;
+    if (!food) return opts[0];
+    opts.sort((a,b) =>
+      (Math.abs(h.x+a.x-food.x)+Math.abs(h.y+a.y-food.y)) -
+      (Math.abs(h.x+b.x-food.x)+Math.abs(h.y+b.y-food.y)));
+    return opts[0];
+  }
+  reset();
+
+  let step = 0;
+  function drawFn() {
+    step++;
+    if (step % 9 !== 0) return;              // ~3.3 hamle/sn
+    const nd = chooseDir();
+    if (!nd) { reset(); return; }
+    dir = nd;
+    const h = snake[0];
+    const nx = h.x+dir.x, ny = h.y+dir.y;
+    const grow = food && nx===food.x && ny===food.y;
+    if (!grow) snake.pop();
+    snake.unshift({x:nx,y:ny});
+    if (grow) newFood();
+    if (snake.length > 15) { reset(); return; }
+    paint();
+  }
+  _demoLoop(state, drawFn);
+
+  return {
+    el,
+    pause() { state.paused=true; },
+    resume() { if(state.paused){ state.paused=false; _demoLoop(state,drawFn); } },
+    destroy() { state.paused=true; cancelAnimationFrame(state.raf); el.innerHTML=''; }
+  };
+};
+
 // ===== DEMO EŞLEME =====
 
 function getDemoFactory(game) {
@@ -1323,6 +1438,7 @@ function getDemoFactory(game) {
     case 'arrowPuzzle': return MiniDemos.demo_arrowPuzzle;
     case 'flowConnect': return MiniDemos.demo_flowConnect;
     case 'jigsawCard':  return MiniDemos.demo_jigsawCard;
+    case 'snakeGame':   return MiniDemos.demo_snake;
     default:            return MiniDemos.demo_blockPuzzle; // fallback
   }
 }

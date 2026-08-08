@@ -2,7 +2,7 @@
 // ═══════════════════════════════════════════════════════════════
 //  SlySwipe — Evrensel Oyun-Olayı Sistemi Doğrulama Aracı
 // ═══════════════════════════════════════════════════════════════
-// GameEvents'in (core/app.js) sözleşmesini ve 10 oyunun BAĞLANTISINI
+// GameEvents'in (core/app.js) sözleşmesini ve kayıtlı oyunların BAĞLANTISINI
 // doğrular. Sıfır bağımlılık, yalnızca Node çekirdeği — proje build'siz
 // kalır (bkz. CLAUDE.md §6). level-metrics.js'in kardeşi: aynı vm+stub
 // deseni, ama burada games.js'in YANINDA app.js de yükleniyor, çünkü
@@ -19,7 +19,7 @@
 //                  result değeri geçerli mi. Kopyala-yapıştır hatasının
 //                  (Blok Puzzle'ın 'waterSort' yayınlaması) tek gerçekçi
 //                  savunması budur ve dosya:satır tablosunu da bu üretir.
-//   3. CANLI     — 10 oyunun init()'i gerçekten çağrılıyor ve tam olarak
+//   3. CANLI     — her oyunun init()'i gerçekten çağrılıyor ve tam olarak
 //                  bir game_started çıktığı doğrulanıyor. Kaynak taraması
 //                  "çağrı yazılmış" der, bu katman "çağrı ÇALIŞIYOR" der.
 
@@ -36,7 +36,9 @@ const SRC = fs.readFileSync(path.join(ROOT, 'games/games.js'), 'utf8');
 const GAMES = [
   'game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',
   'mazeGame', 'screwPuzzle', 'waterSort', 'arrowPuzzle', 'jigsawCard',
+  'snakeGame',
 ];
+const N = GAMES.length;
 
 let failures = 0;
 function ok(name)        { console.log('  ✓ ' + name); }
@@ -388,7 +390,7 @@ function testSource(calls) {
   }
   if (GAMES.every(g => calls.some(c => c.owner === g && c.event === 'game_started') &&
                        calls.some(c => c.owner === g && c.event === 'game_ended'))) {
-    ok('10 oyunun hepsinde hem başlangıç hem bitiş çağrısı var');
+    ok(N + ' oyunun hepsinde hem başlangıç hem bitiş çağrısı var');
   }
 
   // Bilerek tek taraflı oyunlar — dokümanla kodun aynı şeyi söylediğini
@@ -411,7 +413,7 @@ function testSource(calls) {
 //  3. CANLI — init() gerçekten game_started yayınlıyor mu
 // ───────────────────────────────────────────────────────────────
 function testLive() {
-  console.log('\n3. CANLI — 10 oyunun init() çağrısı');
+  console.log('\n3. CANLI — ' + N + ' oyunun init() çağrısı');
   for (const id of GAMES) {
     const { GameEvents: GE, PuzzleGames: PG } = makeSandbox();
     const seen = [];
@@ -430,7 +432,7 @@ function testLive() {
 }
 
 // ───────────────────────────────────────────────────────────────
-//  4. SİMÜLASYON — 10 oyunun tam yaşam döngüsü
+//  4. SİMÜLASYON — kayıtlı her oyunun tam yaşam döngüsü
 // ───────────────────────────────────────────────────────────────
 // Her oyunun kaynakta BULUNAN yükleriyle bir tur oynatılıyor; amaç
 // sayaçların uçtan uca doğru birikmesi. Seviyeli oyunlar (tur = seviye)
@@ -469,7 +471,7 @@ function testSimulation(calls) {
       allOk = false;
     }
   }
-  if (allOk) ok('10 oyunun per-game sayacı beklenen değerde');
+  if (allOk) ok(N + ' oyunun per-game sayacı beklenen değerde');
 
   const total = Object.values(expect).reduce(
     (a, e) => ({ s: a.s + e.started, w: a.w + e.won }), { s: 0, w: 0 });
