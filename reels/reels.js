@@ -20,6 +20,7 @@ const REEL_GAMES = [
   // Oyuncuya çıplak tahta göstermektense kart demoda kalsın.
   { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:true },
   { id:'snakeGame', name:'Yılan', emoji:'🐍', category:'arcade', desc:'Klasik yılan — elmasları topla, uza!', difficulty:'Kolay', gradient:['#16255e','#060b22'], playable:true },
+  { id:'flappyUfo', name:'Flappy UFO', emoji:'🛸', category:'arcade', desc:'Dokun, yüksel, geçitlerden süz!', difficulty:'Orta', gradient:['#132a63','#04081c'], playable:true },
 ];
 
 const GAME_NAME_MAP = {
@@ -34,7 +35,8 @@ const GAME_NAME_MAP = {
   'arrowPuzzle': 'Ok Bulmaca',
   'flowConnect': 'Akış Bağlantı',
   'jigsawCard': 'Resim Kaydır',
-  'snakeGame': 'Yılan'
+  'snakeGame': 'Yılan',
+  'flappyUfo': 'Flappy UFO'
 };
 
 
@@ -1423,6 +1425,203 @@ MiniDemos.demo_snake = function(gradient) {
   };
 };
 
+// ———————— 13. Flappy UFO Demo ————————
+// 2026-08-08'de BAŞTAN yazıldı. Öncesi DOM'du ve sahibin bildirdiği hata
+// oradaydı: "UFO sanki engellerin içinden geçiyor". İki sebebi vardı ve
+// ikisi de DOM yaklaşımının doğrudan sonucuydu —
+//   1) konumlar yüzde tabanlı `transform: translate(%)` ile yazılıyordu ve
+//      yüzde, elemanın KENDİ boyutuna göre çözülür; sütun ile UFO farklı
+//      genişlikte olduğu için ikisi aynı koordinat sisteminde değildi,
+//   2) otomatik pilot yalnızca "yeme yaklaş" mantığıyla sürüyordu, boşluğun
+//      kenarlarını hiç hesaba katmıyordu.
+// Kart oyunun ne olduğunu anlatmak zorunda; içinden geçilen bir engel
+// oyuncuya yalan söylüyordu.
+//
+// Çözüm CANVAS: oyunun kendisi de canvas (games.js flappyUfo) ve tek bir
+// piksel koordinat sistemi olunca "içinden geçme" sınıfı hata mümkün
+// değil — çarpışma ile çizim aynı sayılardan besleniyor. Ayrıca kart
+// oyunla aynı görsel dili taşıyor: aynı palet, aynı neon sütun, aynı
+// kubbeli UFO, UFO'nun yolunu takip eden aynı iz.
+//
+// MALİYET: 240×192'lik tek tuval, kare başına ~10 çizim çağrısı. Diğer
+// demoların DOM ızgaralarından pahalı değil.
+MiniDemos.demo_flappyUfo = function(gradient) {
+  const el = document.createElement('div');
+  el.className = 'reel-demo-inner';
+  const state = { paused:false, raf:0 };
+
+  const CW = 240, CH = 192;                 // tuval (mantıksal piksel)
+  const cv = document.createElement('canvas');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = CW * dpr; cv.height = CH * dpr;
+  cv.style.cssText = 'width:92%;max-width:300px;aspect-ratio:'+CW+'/'+CH+';'
+    + 'display:block;border-radius:12px;border:1px solid rgba(126,110,220,.34);'
+    + 'background:linear-gradient(180deg,#060b22,#0a1436 46%,#101d46);';
+  el.appendChild(cv);
+  const x = cv.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Oyunun oranlarının küçültülmüş hâli (games.js W bloğu). Birebir aynı
+  // sayılar değil — kart bir vitrin, oyun değil — ama aynı ORAN: boşluk
+  // yüksekliğin ~%25'i, sütun genişliğin ~%13'ü.
+  const GROUND = CH * 0.20;                 // dağ şeridi
+  const SKY = CH - GROUND;
+  const PW = 30, GAP = 62, SPACING = 132, SPEED = 0.62;
+  const GRAV = 0.052, FLAP = -1.45, UX = 74, UR = 9;
+  const UW = 30, UH = 18;                   // UFO çizim ölçüsü (≠ UR)
+
+  let uy, vy, pipes, trail;
+  function reset() {
+    uy = SKY * 0.45; vy = 0; trail = [];
+    pipes = [
+      { x: CW + 30,           gap: SKY * 0.45 },
+      { x: CW + 30 + SPACING, gap: SKY * 0.60 },
+    ];
+  }
+  reset();
+
+  // Dağ silueti — bir kez üretilip saklanıyor (kare başına yeniden
+  // hesaplamak anlamsız). Oyunla aynı fikir: kırık çizgi + karlı sırt.
+  const ridge = (() => {
+    let s = 20260808;
+    const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    const pts = [];
+    for (let i = 0; i <= 26; i++) pts.push(i % 2 === 0 ? 0.45 + rnd() * 0.55 : 0.10 + rnd() * 0.25);
+    pts[26] = pts[0];
+    return pts;
+  })();
+
+  function drawMountains() {
+    const base = CH, top = CH - GROUND;
+    const g = x.createLinearGradient(0, top, 0, base);
+    g.addColorStop(0, 'rgba(206,228,255,.85)');
+    g.addColorStop(0.5, 'rgba(58,88,152,.9)');
+    g.addColorStop(1, 'rgba(8,14,40,.98)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.moveTo(0, base);
+    for (let i = 0; i < ridge.length; i++) {
+      x.lineTo((i * CW) / (ridge.length - 1), base - GROUND * ridge[i]);
+    }
+    x.lineTo(CW, base);
+    x.closePath();
+    x.fill();
+  }
+
+  function drawPipe(px, gapY) {
+    const gt = gapY - GAP / 2, gb = gapY + GAP / 2;
+    const g = x.createLinearGradient(px - PW / 2, 0, px + PW / 2, 0);
+    g.addColorStop(0, '#7fe3ff'); g.addColorStop(0.07, '#2b7fd4');
+    g.addColorStop(0.20, '#101a46'); g.addColorStop(0.5, '#070c26');
+    g.addColorStop(0.80, '#101a46'); g.addColorStop(0.93, '#2b7fd4');
+    g.addColorStop(1, '#7fe3ff');
+    x.fillStyle = g;
+    x.fillRect(px - PW / 2, 0, PW, gt);
+    x.fillRect(px - PW / 2, gb, PW, CH - gb);
+    // Bilezikler
+    x.fillStyle = '#141d44';
+    x.strokeStyle = '#9b8cff';
+    x.lineWidth = 1;
+    const cw = PW * 1.26, ch = 8;
+    [gt - ch, gb].forEach((cy) => {
+      x.fillRect(px - cw / 2, cy, cw, ch);
+      x.strokeRect(px - cw / 2 + 0.5, cy + 0.5, cw - 1, ch - 1);
+    });
+  }
+
+  function drawUfo() {
+    // İz — oyundaki gibi UFO'nun GERÇEK yolunu takip ediyor.
+    if (trail.length > 1) {
+      const len = 62;
+      const hw = (p) => 3.4 * Math.max(0, 1 - (UX - p.x) / len);
+      x.beginPath();
+      x.moveTo(UX, uy - 3.4);
+      for (let i = trail.length - 1; i >= 0; i--) x.lineTo(trail[i].x, trail[i].y - hw(trail[i]));
+      for (let i = 0; i < trail.length; i++) x.lineTo(trail[i].x, trail[i].y + hw(trail[i]));
+      x.closePath();
+      const tg = x.createLinearGradient(UX - len, 0, UX, 0);
+      tg.addColorStop(0, 'rgba(120,220,255,0)');
+      tg.addColorStop(0.7, 'rgba(120,220,255,.45)');
+      tg.addColorStop(1, 'rgba(200,246,255,.92)');
+      x.fillStyle = tg;
+      x.fill();
+    }
+    // Gövde + kubbe + lambalar (oyunun sadeleştirilmiş hâli).
+    const hg = x.createLinearGradient(0, uy - UH * 0.3, 0, uy + UH * 0.3);
+    hg.addColorStop(0, '#33477f'); hg.addColorStop(1, '#0b1230');
+    x.fillStyle = hg;
+    x.beginPath(); x.ellipse(UX, uy, UW / 2, UH * 0.24, 0, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#9ed8ff'; x.lineWidth = 1; x.stroke();
+    const dg = x.createLinearGradient(0, uy - UH * 0.62, 0, uy);
+    dg.addColorStop(0, '#4a6ba8'); dg.addColorStop(1, '#0a1026');
+    x.fillStyle = dg;
+    x.beginPath(); x.ellipse(UX, uy - UH * 0.10, UW * 0.28, UH * 0.42, 0, Math.PI, 0); x.fill();
+    x.strokeStyle = 'rgba(158,216,255,.75)'; x.stroke();
+    x.fillStyle = '#7ff0ff';
+    [-0.28, 0, 0.28].forEach((f) => {
+      x.beginPath(); x.arc(UX + UW * f, uy + UH * 0.16, 1.5, 0, Math.PI * 2); x.fill();
+    });
+  }
+
+  // Otomatik pilot: bir SONRAKİ engelin boşluk merkezini hedefler ve
+  // yalnızca hedefin ALTINA düşerken çırpar. Eski sürümün hatası bu
+  // hedefin hiç hesaplanmamasıydı.
+  function autopilot() {
+    let next = null;
+    for (const p of pipes) {
+      if (p.x + PW / 2 >= UX - 4 && (!next || p.x < next.x)) next = p;
+    }
+    const target = next ? next.gap : SKY * 0.5;
+    // Öngörü: mevcut hızla 9 kare sonra nerede olacağım? Yalnızca anlık
+    // konuma bakmak, ağır düşerken çok geç çırpmaya yol açıyordu.
+    const ahead = uy + vy * 9 + 0.5 * GRAV * 81;
+    if (ahead > target && vy > -0.9) vy = FLAP;
+  }
+
+  let step = 0;
+  function drawFn() {
+    step++;
+    autopilot();
+    vy += GRAV;
+    if (vy > 3.2) vy = 3.2;
+    uy += vy;
+    // Kart hiç "ölmez": vitrin, meydan okuma değil. Sınırlarda yumuşak
+    // yakalama — ama engellerin İÇİNDEN asla geçmez, otomatik pilot
+    // boşluğu hedeflediği için.
+    if (uy < UR + 2) { uy = UR + 2; vy = 0; }
+    if (uy > SKY - UR) { uy = SKY - UR; vy = 0; }
+
+    for (const p of pipes) {
+      p.x -= SPEED;
+      if (p.x < -PW) {
+        p.x += SPACING * pipes.length;
+        p.gap = SKY * (0.28 + Math.random() * 0.46);
+      }
+    }
+
+    // İz geçmişi — oyundakiyle aynı mantık: noktalar engellerle aynı
+    // hızda geriye kayıyor.
+    for (const t of trail) t.x -= SPEED;
+    const last = trail.length ? trail[trail.length - 1] : null;
+    if (!last || UX - last.x >= 3) trail.push({ x: UX, y: uy });
+    while (trail.length && UX - trail[0].x > 62) trail.shift();
+
+    x.clearRect(0, 0, CW, CH);
+    drawMountains();
+    for (const p of pipes) drawPipe(p.x, p.gap);
+    drawUfo();
+  }
+
+  drawFn();
+  _demoLoop(state, drawFn);
+
+  return {
+    el,
+    pause() { state.paused = true; },
+    resume() { if (state.paused) { state.paused = false; _demoLoop(state, drawFn); } },
+    destroy() { state.paused = true; cancelAnimationFrame(state.raf); el.innerHTML = ''; }
+  };
+};
 // ===== DEMO EŞLEME =====
 
 function getDemoFactory(game) {
@@ -1439,6 +1638,7 @@ function getDemoFactory(game) {
     case 'flowConnect': return MiniDemos.demo_flowConnect;
     case 'jigsawCard':  return MiniDemos.demo_jigsawCard;
     case 'snakeGame':   return MiniDemos.demo_snake;
+    case 'flappyUfo':   return MiniDemos.demo_flappyUfo;
     default:            return MiniDemos.demo_blockPuzzle; // fallback
   }
 }

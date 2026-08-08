@@ -6,7 +6,7 @@ Permanent instruction manual for everyone working on SlySwipe — human or AI. R
 
 ## 1. Project Snapshot
 
-SlySwipe is a Turkish-language, mobile-first casual game hub: a tab-based shell (Home / Discover / Progress / Profile) around 11 playable games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top. Ten of the eleven are puzzles; **Yılan (Snake) is the first arcade title** (2026-08-08) and its `REEL_GAMES` entry is the first to carry `category:'arcade'`. That field is currently unread by any code, so the word is a description, not a switch.
+SlySwipe is a Turkish-language, mobile-first casual game hub: a tab-based shell (Home / Discover / Progress / Profile) around 12 playable games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top. Ten of the twelve are puzzles; **Yılan (Snake) is the first arcade title** (2026-08-08) and its `REEL_GAMES` entry is the first to carry `category:'arcade'`. **Flappy UFO is the second** (same day). That field is currently unread by any code, so the word is a description, not a switch.
 
 **The app is SlySwipe, package id `com.skyroonlabs.slyswipe`, since 2026-08-03.** It was
 called PuzzleHub (`com.puzzlehub.app`) from the start of the project until then, so anything
@@ -510,6 +510,116 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   **There is no D-pad**: the owner chose swipe-only so the screen matches the design image
   exactly; input is the shared `phSwipe` plus arrow/WASD keys for desktop. Adding on-screen
   controls later is a design decision, not a bug fix.
+- **`flappyUfo` (Flappy UFO, 2026-08-08) splits its two sources on purpose: GAMEPLAY from the
+  reference game (flappybird.io), VISUALS from the owner's design image.** That split is the
+  spec, not a style note — when the two disagree, gameplay wins, because the owner said so in
+  the brief. Practical consequence: the design's in-play diamond is **not** a collectible (see
+  the deliberate omissions below).
+  The physics constants in the `W` block are **measured from the reference, not invented** —
+  gravity 5, flap 1.4, fall cap 2.2, scroll 0.6, gap 0.47, spacing 1.0, pipe width 0.26,
+  collision radius 0.068, gap centre uniform in [-0.2, 0.8], floor at -0.975, sky 2.03 +
+  ground 0.53. Treat them the way Water Sort's move limit is treated: changing one is a
+  gameplay change, not a tune.
+  Nine things are load-bearing:
+  1. **The unit is a WORLD UNIT, never a pixel, and it is ISOTROPIC.** `U = arenaH / 2.56`
+     converts once at layout. Pixel constants would make the same score mean different things
+     on different screens — the same reason Yılan's grid is a fixed 15×26, reached by a
+     different mechanism. It also makes resize free: `layout()` rebuilds `U` and the sprites
+     while `y`/`vy`/`pipes` survive untouched, so rotating the device does not kill the run.
+  2. **Physics runs on a FIXED 120 Hz accumulator, drawing on rAF.** Per-frame physics would
+     literally be a different game at 60 fps and at 120 fps. `MAX_CATCHUP` (0.25 s) caps the
+     backlog: without it, returning from 30 s in the background would execute 3600 steps in
+     one frame and the player would come back already dead.
+  3. **`W.radius` (collision) and `UFO_W` (art) are SEPARATE NUMBERS.** The brief asked for
+     this explicitly. Binding them would let an art tweak silently change difficulty.
+  4. **There is NO ceiling.** Flying above the top edge is legal and classic; the only two
+     ways to die are a pipe and the ground. Adding a ceiling would be a gameplay change.
+  5. **The first five gaps are wider (0.62 → 0.50) and this is the REFERENCE'S own warm-up**,
+     not an invented easing. From the sixth pipe on it is a flat 0.47 forever — there is no
+     other difficulty ramp, and inventing one would be redesigning the game.
+  6. **Nothing draws with a live shadow/filter/blur.** Every neon edge is baked into a sprite
+     once (`buildBody`/`buildCap`/`drawUfo`/`drawTrail`/`buildMountains`); the frame loop is
+     ~15 `drawImage` calls. Same rule already documented for Block Puzzle's particles and
+     Yılan's glow. The pipe body is a 24 px slice **stretched** vertically — legal only
+     because it is vertically uniform.
+  7. **Static art is not on the game canvas.** Stars are DOM (`phAtmosphere`, inside the arena
+     so they show through), and moon/clouds/horizon glow live on a second canvas painted
+     **once** per layout. Only the scrolling mountain tile, the pipes and the UFO repaint.
+     The mountain tile is seamless because the last peak height is forced equal to the first,
+     and its silhouette comes from a **seeded** LCG — `Math.random` would reshuffle the
+     landscape on every resize and read as breakage.
+  8. **"Devam et" must CLEAR THE CORRIDOR and then freeze.** Reviving in place wakes the
+     player inside the pipe that just killed them, so `revive()` drops nearby pipes, recentres
+     the UFO and waits for the next tap. Resuming immediately would kill them again for their
+     money — the same reasoning as Yılan's `waiting` state.
+  9. **The start overlay is `pointer-events:none` and the play button is not a button.** One
+     tap path (`pointerdown` on the arena) handles start, flap and resume, so "did I hit the
+     button or the screen?" cannot arise and the first tap is also the first flap. No
+     `setPointerCapture` — see the `phCamera` landmine above.
+  **Deliberately NOT built, all three owner calls rather than oversights:** the floating
+  diamond in the design's play panel is **not** a pickup (a collectible is a mechanic the
+  reference does not have, and paying game diamonds would be an economy change — §7); there
+  is **no pause button** (the reference has no pause, and the shell header already owns
+  exit); and there is **no diamond HUD pill** (the balance was deliberately moved out of
+  headers into Profile — see the header bullet above). Any of the three is a small, additive
+  change if the owner wants it.
+  **REVISED 2026-08-08 (same day) after owner feedback — five changes, each fixing a real
+  defect rather than a preference:**
+  1. **The trail is a PATH HISTORY, not a sprite.** It was one baked sprite pasted
+     horizontally behind the UFO every frame, so when the UFO climbed or dived the trail
+     stayed flat — the owner read it as "someone holding the UFO with a stick". Now `trail[]`
+     stores recent screen positions and every point scrolls left at **exactly the pipe
+     speed**, i.e. the trail is left behind in world space. The undulation is therefore a
+     consequence of the motion, not an animation; there is no wobble effect to tune. Cost is
+     one path fill + 4 dots per frame — still not a particle system (particles would own
+     lifetimes and velocities; these points only translate).
+  2. **The mist was DELETED and the sky is one continuous gradient.** The mist was a
+     full-width light slab across the scenery band; it read as a different surface from the
+     night sky above and split the screen into "two separate screens" (owner's words). The
+     arena's CSS gradient also used to lighten toward the bottom — that is gone too. Nothing
+     in the band paints a background any more; only silhouettes and clouds are drawn, so the
+     sky shows through unbroken.
+  3. **Clouds moved INTO the scrolling tile.** They were on the static backdrop canvas while
+     the mountains scrolled, so the lower scenery moved and the upper did not. One tile now
+     carries clouds *and* mountains, so the landscape moves as a single piece. Two traps
+     found on device: a puff that overruns the tile's top edge is **clipped** and leaves a
+     razor-straight horizontal line across the screen (hence the `py - pr < 1` skip and the
+     taller tile), and every puff must also be drawn at ±tileW or the tile seam shows.
+  4. **Consecutive gaps may not be near-identical — `MIN_GAP_DELTA` (0.22).** The reference
+     draws each gap independently and uniformly, which is correct in the abstract and
+     misleading in play: in a 1.0-unit range two consecutive draws land within 0.15 about
+     **28%** of the time, and players read that as "the pipes are all at the same height".
+     Resampling (bounded retries) drops it to **0.1%** measured over 20,000 samples while
+     leaving the distribution and its full range intact. This is a deliberate, small
+     deviation from the reference, requested by the owner.
+  5. **A pause button exists, and the reference has none.** Owner-approved addition. It
+     changes no gameplay: time stops completely, nothing resets. Two rules — the button
+     **must** `stopPropagation()` (it is a child of the arena, so the same tap would
+     otherwise also flap), and resuming from a tap on the arena **must not flap**, or the
+     player's "continue" gesture launches the UFO. `startLoop()` resets the accumulator, so
+     the paused wall-clock time is never replayed as physics.
+  **Testing trap that caused a false bug report — read before diagnosing "the pipes are all
+  at the same height".** The fixed-gap autopilot used for testing overrides `Math.random` in
+  the *live page*, and the override survives until the app is restarted. Twice the owner
+  looked at a device left in that state and reported uniform pipes. Restore it from a fresh
+  realm (`document.createElement('iframe').contentWindow.Math.random`) — `delete Math.random`
+  does **not** restore the native function, it removes it outright.
+  **The procedural mountains are a FALLBACK, not the intended art.** Reproducing the design's
+  painted landscape (volumetric cumulus, lit valley, textured spires) with canvas polygons was
+  attempted across several iterations — midpoint-displacement ridges read as a stock chart,
+  triangle-envelope ridges got closer but never matched. The decision (owner, 2026-08-08) is to
+  ship the artwork as an asset at `assets/flappy/bg.jpg`; `paintBackdrop()` uses it full-bleed
+  and bottom-anchored when present, drops the scrolling tile and the DOM stars (the image
+  carries them), and falls back to the procedural scene only when the file is missing.
+  `assets/flappy` is in `build-www.js`'s SHIP list but deliberately **not** in `SHELL_ASSETS` —
+  same reasoning as the Jigsaw pool: precaching re-downloads it on every `APP_VERSION` bump.
+  **Testing trap, cost an hour: an occluded/headless desktop browser suspends `requestAnimationFrame`,
+  and the symptom is indistinguishable from a dead game loop** — the game accepts input, the
+  start overlay hides, and then nothing moves, no error, no `game_ended`. Headless Edge reports
+  `document.visibilityState === 'hidden'` and never fires a single frame; a headed window that
+  loses focus stops firing mid-run. Verify rAF is actually ticking (`rAF/sn`) **before**
+  concluding anything about physics, or test on device. This is the same trap already recorded
+  in the browser-verify notes for Discover demos.
 - **`.slp-board-wrap` uses `::after` for its neon frame, never `::before`.** That div is also
   a `.ph-dais`, and `.ph-dais::before` is the platform's top key light. Writing the frame to
   `::before` collides with it and the frame renders along the top edge only — this happened
@@ -774,7 +884,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   Arrow's hint now costs **10💎 or one ad** (it used to be ad-only, which meant an exhausted
   budget also killed hints). Score-2x is the **one deliberate exception with no diamond
   path**: score is earned, not bought.
-- **All 11 games report through ONE event gate: `GameEvents` (`core/app.js`, 2026-07-31).**
+- **All 12 games report through ONE event gate: `GameEvents` (`core/app.js`, 2026-07-31).**
   This is the foundation the mission and achievement systems will sit on; phase 1 emits
   events and keeps counters, and deliberately contains **no mission logic, no badge logic
   and no reward payout**. Games call it through the `gameEvent(name, payload)` helper in
@@ -867,7 +977,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   the GameEvents contract; a **source scan** of every `gameEvent(...)` call in games.js that
   proves each call's `gameId` matches the game it sits inside (the realistic failure is
   copy-paste, e.g. Block Puzzle emitting `'waterSort'`); a **live** pass that actually calls
-  all 11 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
+  all 12 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
   simulation. `--table` prints the file:line injection table. Run it after touching any
   game's start/end path.
 - **`Badges` (`core/app.js`, 2026-08-01) is GameEvents' second subscriber and the same
@@ -934,7 +1044,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   the GameEvents contract; a **source scan** of every `gameEvent(...)` call in games.js that
   proves each call's `gameId` matches the game it sits inside (the realistic failure is
   copy-paste, e.g. Block Puzzle emitting `'waterSort'`); a **live** pass that actually calls
-  all 11 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
+  all 12 `init()`s and asserts exactly one `game_started`; and an end-to-end counter
   simulation. `--table` prints the file:line injection table. Run it after touching any
   game's start/end path.
 - **The broken JPEG-named-`.png` icons are FIXED (2026-07-29).** `assets/icons/` now holds

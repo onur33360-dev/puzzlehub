@@ -36,7 +36,7 @@ const SRC = fs.readFileSync(path.join(ROOT, 'games/games.js'), 'utf8');
 const GAMES = [
   'game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',
   'mazeGame', 'screwPuzzle', 'waterSort', 'arrowPuzzle', 'jigsawCard',
-  'snakeGame',
+  'snakeGame', 'flappyUfo',
 ];
 const N = GAMES.length;
 

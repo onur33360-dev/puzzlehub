@@ -11045,3 +11045,1360 @@ PuzzleGames.snakeGame = (() => {
   // kabuğun SKOR kapsülü gizleniyor — aynı sayı iki yerde durmamalı.
   return { init, cleanup, ownsScoreDisplay: true };
 })();
+
+// ═══════════════════════════════════════════════════════════════════════
+//  FLAPPY UFO — Arcade (2026-08-08)
+// ═══════════════════════════════════════════════════════════════════════
+// OYNANIŞ referans oyundan (flappybird.io) ALINDI, GÖRSEL tasarım sahibin
+// verdiği SlySwipe görselinden. İki kaynak birbirine karışmıyor: aşağıdaki
+// W bloğundaki her sayı referansın davranışını tarif eder, çizim
+// bölümündeki her renk tasarım görselini.
+//
+// PERFORMANS DURUŞU (§4 "hafif arcade" + docs/03):
+//  • Simülasyon SABİT 120 Hz adımlarla, çizim rAF'ta. Fizik kare hızına
+//    bağlı olsaydı 60 fps'te ve 120 fps'te farklı bir oyun olurdu; skor da
+//    cihaza göre değişirdi. Biriktirici (accumulator) bunu keser.
+//  • Her şey ÖNCEDEN PİŞMİŞ sprite. Kare başına yalnızca drawImage
+//    çağrılıyor (~15 adet); tek bir shadowBlur/filter oyun döngüsünde
+//    ÇALIŞMIYOR — hepsi sprite üretiminde bir kez ödendi. (Blok Puzzle ve
+//    Yılan'da yerleşmiş kural.)
+//  • STATİK olan hiçbir şey oyun tuvalinde değil: yıldızlar DOM'da
+//    (phAtmosphere), ay/bulut/ufuk parıltısı ayrı ve BİR KEZ boyanan arka
+//    plan tuvalinde. Oyun tuvali yalnızca hareket edeni taşıyor.
+//  • Skor DOM'da ve yalnızca DEĞİŞTİĞİNDE yazılıyor.
+//  • Parçacık sistemi, blur, filter, canlı gölge, dekoratif animasyon YOK.
+PuzzleGames.flappyUfo = (() => {
+  // Yalnızca rekor anahtarı için. gameEvent() çağrılarında bilerek
+  // kullanılmıyor — tools/game-events-test.js kaynağı tarayıp her çağrının
+  // id'sini içinde bulunduğu oyunla karşılaştırıyor ve bir değişkeni
+  // çözemez (bkz. snakeGame'deki aynı not).
+  const GID = 'flappyUfo';
+
+  // ═══════════ OYNANIŞ SABİTLERİ — REFERANS OYUNDAN ═══════════
+  // Birim sistemi referansın kendi "dünya birimi"dir ve İZOTROPTUR (yatay
+  // ve dikey aynı ölçek). Piksel değil dünya birimi tutmanın sebebi: aynı
+  // sayılar her ekran boyutunda AYNI oyunu üretir — 380px'lik telefonda da
+  // 900px'lik tablette de boşluk, gökyüzü yüksekliğinin aynı oranıdır.
+  // Piksel sabitleri yazsaydık zorluk cihaza göre değişirdi ve rekor
+  // karşılaştırması anlamını yitirirdi (Yılan'ın sabit ızgarasıyla aynı
+  // gerekçe, başka bir araçla).
+  //
+  // Dikey referans: gökyüzü (zemin üstünden tavana) 2.03 birim, altındaki
+  // zemin şeridi 0.53 birim, toplam sahne 2.56 birim. y ekseni YUKARI artar
+  // ve y=0 UFO'nun başlangıç yüksekliğidir.
+  const W = {
+    gravity:  5.0,     // birim/sn² — aşağı çeken
+    flap:     1.4,     // birim/sn — dokunuşta ANINDA atanan yukarı hız
+    fallCap:  2.2,     // birim/sn — düşüş hızı tavanı
+    speed:    0.6,     // birim/sn — engellerin sola akış hızı
+    gap:      0.47,    // standart boşluk
+    // İlk beş engel daha geniş açılıyor. Bu referansın kendi ısınma
+    // eğrisi — uydurulmuş bir "kolaylık" değil, oyunun ilk saniyelerinin
+    // tasarımı. Altıncıdan sonra sabit 0.47.
+    openingGaps: [0.62, 0.59, 0.56, 0.53, 0.50],
+    spacing:  1.0,     // engeller arası YATAY mesafe
+    pipeW:    0.26,    // engel genişliği
+    // ÇARPIŞMA yarıçapı. Görselden BAĞIMSIZ (§3): UFO çizimini
+    // büyütmek/küçültmek (UFO_W) fiziği DEĞİŞTİRMEZ. İkisini tek sayıya
+    // bağlamak, bir sanat güncellemesinin sessizce zorluk değiştirmesi
+    // demekti.
+    radius:   0.068,
+    gapMin:  -0.20,    // boşluk merkezinin düzgün dağıldığı aralık
+    gapMax:   0.80,
+    floor:   -0.975,   // UFO'nun ALT kenarı bunun altına inerse çarpma
+    skyH:     2.03,    // zemin üstü ← → tavan
+    groundH:  0.53,    // dağ/zemin şeridi
+    // Eğim: yukarı giderken sabit burun-yukarı, düşerken hıza orantılı.
+    // rotMin bir EMNİYET sınırı; düşüş tavanı (2.2) yüzünden pratikte
+    // ~-40°'de duruluyor — referansta da öyle, dik burun-aşağı yalnızca
+    // tavansız eski sürümlerde görülüyor.
+    rotUp:    Math.PI / 8,
+    rotMin:  -Math.PI / 2,
+    rotK:     0.5,
+    bobAmp:   0.05,    // başlangıç ekranındaki süzülme genliği
+    bobW:     5.0,     // ve açısal hızı (rad/sn)
+  };
+
+  const SCENE_H = W.skyH + W.groundH;      // 2.56 — sahnenin tam yüksekliği
+  const TICK = 1 / 120;                    // sabit simülasyon adımı
+  // Sekmeden/uygulamadan dönüşte biriken zamanın tavanı. Olmasaydı 30 sn
+  // arka planda kalan oyun dönüşte 3600 adımı tek karede işler ve oyuncu
+  // geri geldiğinde çoktan ölmüş olurdu.
+  const MAX_CATCHUP = 0.25;
+
+  // ═══════════ GÖRSEL SABİTLER — TASARIM GÖRSELİNDEN ═══════════
+  const UFO_W = 0.185;                     // UFO'nun ÇİZİM genişliği (≠ radius)
+  const TRAIL_L = 0.52;                    // iz uzunluğu (dünya birimi)
+  const BIRD_X_FRAC = 0.32;                // UFO'nun sabit ekran x'i
+  // Dağlar UFO'dan YAVAŞ akıyor: uzaktalar. Aynı hızda aksalardı
+  // engellerle aynı düzlemdeymiş gibi görünürlerdi.
+  const MTN_PARALLAX = 0.28;
+
+  const C = {
+    hull:     ['#33477f', '#0b1230'],      // gövde gradyanı (üst→alt)
+    hullEdge: '#9ed8ff',                   // gövde neon konturu
+    dome:     ['#4a6ba8', '#0a1026'],      // kubbe
+    domeLite: 'rgba(210,236,255,.85)',     // kubbedeki parlama
+    lamp:     '#7ff0ff',                   // alt lambalar
+    lampGlow: 'rgba(90,220,255,.55)',
+    trail:    'rgba(120,220,255,',         // alfa çağrı yerinde ekleniyor
+    pillar:   ['#7fe3ff', '#2b7fd4', '#101a46', '#070c26'],
+    capFill:  ['#1a2350', '#080d24'],
+    capEdge:  '#9b8cff',                   // tasarımdaki menekşe-mavi kontur
+    capLite:  '#8fd4ff',
+    // Üç sıradağ katmanı. TASARIMIN İLİŞKİSİ: sis PARLAK, zirveler KOYU —
+    // ilk denemede tersi yapılmıştı (açık zirve + açık zemin) ve cihazda
+    // her şey solup düz bir mavi levhaya dönüştü. Derinlik, uzaktaki
+    // sırtların sise KARIŞMASINDAN geliyor: arka katman açık ve düşük
+    // kontrast, ön katman neredeyse siyah.
+    // Dağlar gökyüzünden BELİRGİN AÇIK olmak zorunda. İlk denemede
+    // "koyu siluet" mantığıyla neredeyse siyah yapılmıştı; gökyüzü de koyu
+    // olduğu için dolgu tamamen kayboldu ve geriye yalnızca sırt konturu
+    // kaldı — cihazda borsa grafiği gibi ince çizgiler olarak göründü.
+    // Sis kaldırıldığı için (sahibin isteği) okunurluğu sağlayan tek şey
+    // artık dağın KENDİ tonu; o yüzden dolgu gökyüzünün belirgin üstünde.
+    mtnFar:   ['#7d9dd2', '#3f5688'],
+    mtnMid:   ['#5b7ab4', '#28375e'],
+    mtnNear:  ['#3a5183', '#151f3a'],
+    // Zirve sırtındaki ince ışık (kar/ay ışığı).
+    mtnLit:   ['rgba(186,214,255,.42)', 'rgba(206,230,255,.55)', 'rgba(226,242,255,.72)'],
+    // SİS KALDIRILDI (2026-08-08, sahibin isteği). Bandın tamamını kaplayan
+    // açık bir levhaydı ve iki ayrı hataya birden sebep oluyordu: üstteki
+    // gece tonundan kopup ekranı "alt/üst iki ayrı ekran" gibi bölüyor,
+    // ayrıca her şeyi soluklaştırıyordu. Artık bantta SADECE silüetler ve
+    // bulutlar çiziliyor; gökyüzü gradyanı kesintisiz görünüyor.
+    cloud:    'rgba(196,220,255,',
+    moon:     ['#c8d6ee', '#59688c'],
+  };
+
+  // ═══════════ ARKA PLAN GÖRSELİ ═══════════
+  // Tasarımın manzarası bir İLLÜSTRASYON: hacimli bulut kütleleri, ışıklı
+  // vadi, dokulu onlarca kayalık. Canvas'ta poligon+gradyanla yeniden
+  // çizmek denendi ve elendi (birden çok tur; en iyi hâli bile "benzer"
+  // kalıyordu, "aynı" olmuyordu). Doğru araç, tasarımın kendisini bir
+  // varlık olarak taşımak — depoda emsali var (Resim Kaydır'ın yerel
+  // havuzu, splash-hero.jpg).
+  //
+  // Görsel bulunamazsa oyun BOZULMAZ: prosedürel çizim yedek olarak
+  // duruyor (paintBackdrop'un else dalı). Aynı savunma Resim Kaydır'ın
+  // yerel görsel zincirinde de var.
+  const BG_SRC = 'assets/flappy/bg.jpg';
+  // Modül düzeyinde: oyun her açıldığında yeniden çözülmesin.
+  let bgImg = null, bgReady = false, bgFailed = false;
+
+  function ensureBg(onDone) {
+    if (bgReady || bgFailed) { onDone(); return; }
+    if (bgImg) { bgImg.addEventListener('load', onDone); return; }
+    bgImg = new Image();
+    bgImg.onload = () => { bgReady = true; onDone(); };
+    bgImg.onerror = () => { bgFailed = true; bgImg = null; onDone(); };
+    bgImg.src = BG_SRC;
+  }
+
+  // "cover" yerleşimi, ALTA yaslı: manzaranın dibi her zaman ekranın
+  // dibinde dursun — kırpma tepeden olsun, dağlardan değil.
+  function paintBgImage() {
+    const iw = bgImg.naturalWidth, ih = bgImg.naturalHeight;
+    if (!iw || !ih) return false;
+    const s = Math.max(AW / iw, AH / ih);
+    const w = iw * s, h = ih * s;
+    bgx.drawImage(bgImg, (AW - w) / 2, AH - h, w, h);
+    return true;
+  }
+
+  // ═══════════ DURUM ═══════════
+  let container, wrapEl, arenaEl, bgCv, bgx, cv, ctx;
+  let scoreEl, bestEl, startEl, startBestEl;
+  let atmoEl = null;
+
+  let AW = 0, AH = 0, U = 0, dpr = 1;
+  let originY = 0, groundTopPx = 0, birdPx = 0;
+  let sprUfo = null, sprBody = null, sprCapDown = null, sprCapUp = null;
+  let mtnCv = null, mtnTileW = 0, mtnTileH = 0, mtnTop = 0, bodyPad = 0;
+  // İzin geçmişi (ekran pikseli). Sprite DEĞİL: bkz. paintTrail.
+  let trail = [];
+  let paused = false;
+
+  // 'ready'  → başlangıç ekranı (UFO süzülür)   · 'play'   → oyun
+  // 'dying'  → çarptı, düşüyor                  · 'over'   → tur bitti, panel
+  // 'revive' → reklamla devam edildi, İLK DOKUNUŞA kadar donuk
+  let state = 'ready';
+  let y = 0, vy = 0, rot = 0, pipes = [], spawned = 0;
+  let score = 0, best = 0, startedAt = 0;
+  let mtnScroll = 0, elapsed = 0, acc = 0, lastT = 0;
+  let raf = 0, overT = 0, layoutRaf = 0, layoutTries = 0;
+
+  // ═══════════ ÇİZİM YARDIMCILARI ═══════════
+  function rr(x, px, py, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    x.beginPath();
+    x.moveTo(px + r, py);
+    x.arcTo(px + w, py, px + w, py + h, r);
+    x.arcTo(px + w, py + h, px, py + h, r);
+    x.arcTo(px, py + h, px, py, r);
+    x.arcTo(px, py, px + w, py, r);
+    x.closePath();
+  }
+
+  function makeSprite(w, h, draw) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * dpr));
+    c.height = Math.max(1, Math.round(h * dpr));
+    const x = c.getContext('2d');
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw(x);
+    return { cv: c, w: w, h: h };
+  }
+
+  // Küçük deterministik üreteç. Dağ siluetinin ekran döndürmede /
+  // yeniden boyutlandırmada AYNI kalması için: Math.random olsaydı her
+  // resize'da manzara değişir ve oyuncuya "bir şey bozuldu" hissi verirdi.
+  // core/rng.js günlük tohum içindir; buradaki ihtiyaç ayrı ve oynanışa
+  // dokunmuyor.
+  function lcg(seed) {
+    let s = seed >>> 0;
+    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  }
+
+  // ═══════════ SPRITE ÜRETİMİ ═══════════
+  // UFO — tasarımdaki uçan daire: koyu metalik gövde, üstte camsı kubbe,
+  // altta üç parlayan lamba. Tek sprite; yön EĞİMLE (canvas rotate)
+  // veriliyor, çünkü daire simetrik — Yılan'ın kafasındaki "döndürme yüzü
+  // bozar" sorunu burada YOK.
+  function drawUfo(x, w) {
+    const h = w * 0.62;
+    const cx = w / 2, cy = h * 0.62;
+    const rx = w / 2, ry = w * 0.135;
+
+    // Alt parıltı — tasarımdaki mavi huzme. Radyal gradyan, blur değil.
+    const gl = x.createRadialGradient(cx, cy + ry * 0.6, 0, cx, cy + ry * 0.6, w * 0.42);
+    gl.addColorStop(0, 'rgba(120,225,255,.42)');
+    gl.addColorStop(1, 'rgba(120,225,255,0)');
+    x.fillStyle = gl;
+    x.beginPath();
+    x.ellipse(cx, cy + ry * 0.9, w * 0.42, w * 0.26, 0, 0, Math.PI * 2);
+    x.fill();
+
+    // Kubbe — gövdenin ARKASINDA başlayıp üstüne biniyor.
+    const dr = w * 0.27;
+    const dg = x.createRadialGradient(cx - dr * 0.35, cy - dr * 0.9, dr * 0.1,
+                                      cx, cy - dr * 0.3, dr * 1.3);
+    dg.addColorStop(0, C.dome[0]);
+    dg.addColorStop(1, C.dome[1]);
+    x.fillStyle = dg;
+    x.beginPath();
+    x.ellipse(cx, cy - ry * 0.35, dr, dr * 0.95, 0, Math.PI, 0);
+    x.fill();
+    x.lineWidth = Math.max(1, w * 0.018);
+    x.strokeStyle = 'rgba(158,216,255,.75)';
+    x.stroke();
+    // Kubbedeki parlama ve birkaç benek — görseldeki camsı doku.
+    x.fillStyle = C.domeLite;
+    x.beginPath();
+    x.ellipse(cx - dr * 0.34, cy - dr * 0.72, dr * 0.24, dr * 0.14, -0.5, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = 'rgba(190,225,255,.34)';
+    [[0.30, -0.55, 0.075], [0.05, -0.82, 0.06], [0.48, -0.34, 0.055]].forEach((p) => {
+      x.beginPath();
+      x.ellipse(cx + dr * p[0], cy + dr * p[1], dr * p[2], dr * p[2], 0, 0, Math.PI * 2);
+      x.fill();
+    });
+
+    // Gövde (disk).
+    const hg = x.createLinearGradient(cx, cy - ry, cx, cy + ry);
+    hg.addColorStop(0, C.hull[0]);
+    hg.addColorStop(1, C.hull[1]);
+    x.fillStyle = hg;
+    x.beginPath();
+    x.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    x.fill();
+    x.lineWidth = Math.max(1, w * 0.022);
+    x.strokeStyle = C.hullEdge;
+    x.stroke();
+    // Üst kenardaki ince ışık şeridi — diskin hacmini veren şey bu.
+    x.strokeStyle = 'rgba(190,232,255,.55)';
+    x.lineWidth = Math.max(1, w * 0.016);
+    x.beginPath();
+    x.ellipse(cx, cy - ry * 0.22, rx * 0.82, ry * 0.5, 0, Math.PI, 0);
+    x.stroke();
+
+    // Üç alt lamba.
+    [-0.52, 0, 0.52].forEach((f) => {
+      const lx = cx + rx * f, ly = cy + ry * 0.62;
+      const lr = w * 0.055;
+      const lg = x.createRadialGradient(lx, ly, 0, lx, ly, lr * 2.6);
+      lg.addColorStop(0, C.lamp);
+      lg.addColorStop(0.35, C.lampGlow);
+      lg.addColorStop(1, 'rgba(90,220,255,0)');
+      x.fillStyle = lg;
+      x.beginPath();
+      x.arc(lx, ly, lr * 2.6, 0, Math.PI * 2);
+      x.fill();
+      x.fillStyle = C.lamp;
+      x.beginPath();
+      x.arc(lx, ly, lr * 0.72, 0, Math.PI * 2);
+      x.fill();
+    });
+  }
+
+  // İz — UFO'nun GERÇEK YOLUNU takip eden şerit (2026-08-08'de yeniden
+  // yazıldı, sahibin geri bildirimi: "sanki biri çubukla tutuyormuş gibi").
+  //
+  // Eskisi TEK BİR SPRITE'tı ve her karede UFO'nun soluna yatay olarak
+  // yapıştırılıyordu — yani UFO yükselip alçalırken iz olduğu gibi kalıyor,
+  // aracın arkasına saplanmış sabit bir çubuk gibi okunuyordu. Doğrusu izin
+  // aracın geçtiği yeri göstermesi: yukarı çıkıldığında iz aşağıda kalmalı,
+  // dalga gibi kıvrılmalı.
+  //
+  // Bu yüzden artık bir GEÇMİŞ TUTULUYOR: `trail` dizisi UFO'nun ekranda
+  // bulunduğu son noktaları saklıyor ve her tikte hepsi engellerle AYNI
+  // hızda sola kayıyor — yani iz dünyada sabit duruyor, geride bırakılıyor.
+  // Dalgalanma böyle kendiliğinden çıkıyor; ayrıca sallanma animasyonu
+  // eklemeye gerek yok, hareketin kendisi zaten dalgayı üretiyor.
+  //
+  // MALİYET: kare başına tek bir path fill + 4 küçük daire. Parçacık
+  // sistemi DEĞİL — parçacıkların kendi ömrü/hızı/fiziği olur, buradaysa
+  // nokta sayısı sabit ve tek yaptığı şey konumları kaydırmak.
+  const TRAIL_STEPS = 24;                  // şeridi tanımlayan nokta sayısı
+
+  function pushTrail(px, py) {
+    const step = (TRAIL_L * U) / TRAIL_STEPS;
+    const last = trail.length ? trail[trail.length - 1] : null;
+    // Nokta yalnızca yeterince yol alınınca ekleniyor: her tikte eklemek
+    // 120 nokta/sn demekti ve şeklin çözünürlüğüne hiçbir şey katmıyordu.
+    if (!last || px - last.x >= step) trail.push({ x: px, y: py });
+    const len = TRAIL_L * U;
+    while (trail.length && px - trail[0].x > len) trail.shift();
+  }
+
+  function paintTrail(uy) {
+    if (trail.length < 2) return;
+    const len = TRAIL_L * U;
+    const maxW = UFO_W * U * 0.20;
+    // En yeni nokta HER ZAMAN UFO'nun kendisi: şerit araca yapışık
+    // başlamalı, yoksa kuyrukla gövde arasında boşluk açılıyor.
+    const pts = [{ x: birdPx, y: uy }];
+    for (let i = trail.length - 1; i >= 0; i--) pts.push(trail[i]);
+
+    // Genişlik uçta sıfıra iniyor (sivri kuyruk), UFO'da en kalın.
+    const halfW = (p) => {
+      const t = Math.min(1, (birdPx - p.x) / len);
+      return maxW * (1 - t) * (1 - t * 0.45);
+    };
+
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const w = halfW(pts[i]);
+      i === 0 ? ctx.moveTo(pts[i].x, pts[i].y - w) : ctx.lineTo(pts[i].x, pts[i].y - w);
+    }
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const w = halfW(pts[i]);
+      ctx.lineTo(pts[i].x, pts[i].y + w);
+    }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(birdPx - len, 0, birdPx, 0);
+    g.addColorStop(0.00, C.trail + '0)');
+    g.addColorStop(0.45, C.trail + '.26)');
+    g.addColorStop(0.80, C.trail + '.62)');
+    g.addColorStop(1.00, 'rgba(200,246,255,.95)');
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    // Görseldeki kopuk zerreler — şeridin ÜSTÜNDE, yani onlar da yolu
+    // takip ediyor. Sabit oranlarda örneklendiği için sayıları hiç artmıyor.
+    [0.30, 0.48, 0.64, 0.80].forEach((f) => {
+      const i = Math.min(pts.length - 1, Math.round(f * (pts.length - 1)));
+      const p = pts[i];
+      const t = Math.min(1, (birdPx - p.x) / len);
+      ctx.fillStyle = C.trail + (0.55 * (1 - t)).toFixed(2) + ')';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, maxW * 0.55 * (1 - t) + 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Engel gövdesi — tasarımdaki neon sütun. DİKEYDE TEKDÜZE olduğu için tek
+  // bir kısa dilim üretilip istenen boya GERİLİYOR; gerilme dikeyde
+  // kusursuzdur çünkü değişen hiçbir şey yok. Her boy için ayrı sprite
+  // üretmek (ve her boşluk değişiminde yeniden üretmek) bedava değildi.
+  function buildBody(pw, pad) {
+    const w = pw + pad * 2, h = 24;
+    return makeSprite(w, h, (x) => {
+      const g = x.createLinearGradient(pad, 0, pad + pw, 0);
+      g.addColorStop(0.00, C.pillar[0]);
+      g.addColorStop(0.07, C.pillar[1]);
+      g.addColorStop(0.20, C.pillar[2]);
+      g.addColorStop(0.50, C.pillar[3]);
+      g.addColorStop(0.80, C.pillar[2]);
+      g.addColorStop(0.93, C.pillar[1]);
+      g.addColorStop(1.00, C.pillar[0]);
+      x.fillStyle = g;
+      x.fillRect(pad, 0, pw, h);
+      // Kenar neonu ve DIŞA taşan parıltısı. shadowBlur burada bir kez
+      // ödeniyor — oyun döngüsünde asla.
+      x.save();
+      x.shadowColor = 'rgba(130,225,255,.9)';
+      x.shadowBlur = pad * 1.5;
+      x.strokeStyle = C.pillar[0];
+      x.lineWidth = Math.max(1.2, pw * 0.055);
+      [pad, pad + pw].forEach((lx) => {
+        x.beginPath();
+        x.moveTo(lx, -2);
+        x.lineTo(lx, h + 2);
+        x.stroke();
+      });
+      x.restore();
+    });
+  }
+
+  // Boşluğa bakan uçtaki bilezik. Tasarımda gövdeden GENİŞ ve menekşe-mavi
+  // konturlu. up=true → bilezik yukarı bakıyor (alttaki engel).
+  function buildCap(pw, pad, up) {
+    const cw = pw * 1.26, ch = Math.max(6, pw * 0.34);
+    const w = cw + pad * 2, h = ch + pad * 2;
+    return makeSprite(w, h, (x) => {
+      const bx = pad, by = pad;
+      x.save();
+      x.shadowColor = 'rgba(150,130,255,.75)';
+      x.shadowBlur = pad * 1.4;
+      const g = x.createLinearGradient(0, by, 0, by + ch);
+      g.addColorStop(0, up ? C.capFill[0] : C.capFill[1]);
+      g.addColorStop(1, up ? C.capFill[1] : C.capFill[0]);
+      x.fillStyle = g;
+      rr(x, bx, by, cw, ch, ch * 0.26);
+      x.fill();
+      x.lineWidth = Math.max(1.2, pw * 0.05);
+      x.strokeStyle = C.capEdge;
+      rr(x, bx, by, cw, ch, ch * 0.26);
+      x.stroke();
+      x.restore();
+      // Boşluğa bakan kenardaki parlak çizgi — bileziği "ışıklı ağız"
+      // yapan detay.
+      const ly = up ? by + ch * 0.18 : by + ch * 0.82;
+      x.strokeStyle = C.capLite;
+      x.lineWidth = Math.max(1, pw * 0.035);
+      x.beginPath();
+      x.moveTo(bx + cw * 0.14, ly);
+      x.lineTo(bx + cw * 0.86, ly);
+      x.stroke();
+    });
+  }
+
+  // Dağ şeridi — KUSURSUZ DÖNEN bir döşeme. Son tepe noktası ilkiyle aynı
+  // yüksekliğe zorlanıyor (hs[n] = hs[0]), yoksa döşeme sınırında görünür
+  // bir dikiş kalırdı. Sis en üste PİŞİRİLİYOR (ayrı bir katman değil):
+  // şerit kayarken sis de kayar ama yatayda tekdüze olduğu için fark
+  // edilmez, buna karşılık dağların üstünü örttüğü için ölüm çizgisi keskin
+  // bir kenar değil bir sis bandı gibi okunur.
+  // ORTA-NOKTA YER DEĞİŞTİRME (midpoint displacement) ile sırt hattı.
+  // Eski hâli tepe/vadi diye ALTERNATİF noktalardan ibaretti, yani düzgün
+  // aralıklı testere dişi — sahibin "çok basit duruyor" dediği şey buydu.
+  // Bu algoritma her adımda aralığı ikiye bölüp orta noktayı rastgele
+  // kaydırıyor ve genliği yarılıyor; sonuç, büyük sırtların üstünde küçük
+  // sivrilerin olduğu ÖZBENZER bir silüet — gerçek dağ siluetinin kendisi.
+  //
+  // İki uç DEĞER OLARAK EŞİT tutuluyor (a[0] = a[n-1]); döşemenin dikişsiz
+  // dönmesinin tek şartı bu.
+  // ÜÇGEN ZİRVE ZARFI. Orta-nokta yer değiştirme (fraktal gürültü) burada
+  // DENENDİ ve ELENDİ: her ölçekte eşit dağılmış gürültü ürettiği için
+  // silüet, tasarımdaki sivri kayalıklara değil bir borsa grafiğine
+  // benziyordu (cihazda iki kez görüldü — sönüm katsayısını değiştirmek
+  // yalnızca gürültünün frekansını değiştirdi, karakterini değil).
+  //
+  // Doğru araç zarf: her tepe bir ÜÇGEN (konum, yükseklik, taban genişliği)
+  // ve silüet bunların üst zarfı. Farklı genişlikteki üçgenler üst üste
+  // binince büyük zirvelerin omuzlarında küçük tepeler kendiliğinden
+  // oluşuyor — tasarımdaki kompozisyon bu.
+  //
+  // Dikişsizlik yapıdan geliyor: her tepenin ±1 kaydırılmış kopyaları da
+  // hesaba katılıyor, yani kenardan taşan bir zirve öbür kenardan giriyor.
+  // floor: vadilerin inebileceği en alçak yükseklik. 0 bırakılırsa zirveler
+  // arasında tabana kadar inen derin V'ler oluşuyor ve sıradağ "ayrık
+  // üçgenler" gibi duruyor; tasarımda ise zirveler kesintisiz bir kütleden
+  // yükseliyor.
+  function peakRidge(nPeaks, minH, maxH, minW, maxW, floor, samples, rnd) {
+    const P = [];
+    for (let i = 0; i < nPeaks; i++) {
+      P.push({
+        x: (i + 0.5 + (rnd() - 0.5) * 0.72) / nPeaks,
+        h: minH + rnd() * (maxH - minH),
+        w: minW + rnd() * (maxW - minW),
+      });
+    }
+    const out = new Array(samples + 1);
+    for (let s = 0; s <= samples; s++) {
+      const x = s / samples;
+      let h = 0;
+      for (let i = 0; i < P.length; i++) {
+        const p = P[i];
+        for (let k = -1; k <= 1; k++) {
+          const d = Math.abs(x - (p.x + k));
+          if (d < p.w) {
+            const v = p.h * (1 - d / p.w);
+            if (v > h) h = v;
+          }
+        }
+      }
+      out[s] = h < floor ? floor : h;
+    }
+    return out;
+  }
+
+  // Dağ şeridi — KUSURSUZ DÖNEN döşeme, ÜÇ KATMAN (görseldeki gibi geriye
+  // doğru açılan sıradağlar). Arkadaki katman açık ve puslu, öndeki koyu ve
+  // yüksek; aradaki pus farkı derinliği veren şey. Sis en üste PİŞİRİLİYOR:
+  // şerit kayarken sis de kayar ama yatayda tekdüze olduğu için fark
+  // edilmez, buna karşılık tepeleri örttüğü için ölüm çizgisi keskin bir
+  // kenar değil bir sis bandı gibi okunur.
+  // Manzara şeridi — dağlar VE bulutlar TEK döşemede, çünkü ikisi de aynı
+  // hızda kaymak zorunda. Önceden bulutlar statik arka plan tuvalindeydi
+  // ve yalnızca dağlar kayıyordu; sahibin "ekranın alt tarafı hareket
+  // ederken üst tarafı etmiyor, bütün değil" dediği şey buydu. Manzara tek
+  // parça olarak hareket edince sorun kaynağında bitiyor.
+  //
+  // Bantta ARKA PLAN DOLGUSU YOK: yalnızca silüetler ve bulutlar
+  // çiziliyor, altındaki gökyüzü gradyanı kesintisiz görünüyor. Eskiden
+  // buraya boydan boya bir "sis denizi" boyanıyordu ve ekranı ikiye
+  // bölüyordu (bkz. palet notu).
+  function buildMountains() {
+    mtnTileW = Math.max(260, Math.round(AW * 1.6));
+    // Bulutlar zirvelerin üstüne çıktığı için şerit yüksek başlıyor.
+    // Zirvelerin kendisi ölüm çizgisinin biraz üstüne taşıyor: dağlar arka
+    // plandır, oyun alanının duvarı değil.
+    // Şerit, bulutların TAMAMINI içine alacak kadar yüksek başlamak
+    // zorunda: kabarcıklar döşemenin üst kenarını aşarsa orada KIRPILIYOR
+    // ve ekranı boydan boya kesen sert bir yatay çizgi bırakıyorlar
+    // (cihazda görüldü, "alt/üst iki ayrı ekran" hissinin ikinci sebebi).
+    mtnTop = Math.max(0, groundTopPx - Math.round(0.95 * U));
+    mtnTileH = Math.max(8, Math.round(AH - mtnTop));
+    const peakBand = Math.round(AH - (groundTopPx - 0.30 * U));   // dağların payı
+    mtnCv = makeSprite(mtnTileW, mtnTileH, (x) => {
+      const band = mtnTileH;
+      const mtnTopInTile = band - peakBand;      // dağ silüetlerinin tavanı
+
+      // ── Bulutlar — döşemenin ÜST kısmı, zirvelerin arkasında ──
+      // Dikişsizlik: kenara taşan her kabarcık bir de karşı kenarda
+      // çiziliyor (±mtnTileW).
+      const crnd = lcg(4242);
+      const clusters = 9;
+      for (let c = 0; c < clusters; c++) {
+        const t = c / (clusters - 1);
+        // Yoğunluk KENARLARDA: görselde iki yanda yükselen, ortada vadinin
+        // ışığına yer bırakan bir düzen var.
+        const edge = Math.abs(t - 0.5) * 2;
+        const cx = mtnTileW * (t + (crnd() - 0.5) * 0.07);
+        // Bulutlar zirvelerin dibinden başlayıp yukarı tırmanıyor; tırmanma
+        // payı döşemenin İÇİNDE kalacak şekilde sınırlı.
+        const rise = Math.max(0, mtnTopInTile - band * 0.10);
+        const cy = mtnTopInTile + peakBand * 0.04
+                 - rise * (edge * edge * 0.88 + crnd() * 0.10);
+        const scale = mtnTileW * (0.045 + crnd() * 0.03) * (0.7 + edge * 0.8);
+        const puffs = 8 + ((crnd() * 5) | 0);
+        for (let p = 0; p < puffs; p++) {
+          const a = crnd() * Math.PI * 2, d = Math.sqrt(crnd()) * scale;
+          const px = cx + Math.cos(a) * d * 1.55;
+          const py = cy + Math.abs(Math.sin(a)) * d * -0.50 + scale * 0.16;
+          const pr = scale * (0.30 + crnd() * 0.40);
+          const alpha = (0.20 + crnd() * 0.14).toFixed(2);
+          // Üst kenarı aşan kabarcık ÇİZİLMEZ. Kırpılmış bir kabarcık
+          // düz bir kesik bırakır; eksik bir kabarcık ise fark edilmez.
+          if (py - pr < 1) continue;
+          [px - mtnTileW, px, px + mtnTileW].forEach((qx) => {
+            if (qx + pr < 0 || qx - pr > mtnTileW) return;
+            const g = x.createRadialGradient(qx, py - pr * 0.30, pr * 0.10, qx, py, pr);
+            g.addColorStop(0, C.cloud + alpha + ')');
+            g.addColorStop(0.5, C.cloud + '.06)');
+            g.addColorStop(1, C.cloud + '0)');
+            x.fillStyle = g;
+            x.beginPath();
+            x.arc(qx, py, pr, 0, Math.PI * 2);
+            x.fill();
+          });
+        }
+      }
+
+      const layer = (nPeaks, minH, maxH, minW, maxW, floor, colors, seed, lit, litW) => {
+        const rnd = lcg(seed);
+        const a = peakRidge(nPeaks, minH, maxH, minW, maxW, floor, 240, rnd);
+        const n = a.length;
+        // Zarf zaten 0..maxH aralığında; normalize etmeye gerek yok — tam
+        // tersi, normalize etmek katmanların yükseklik farkını yok eder ve
+        // derinliği öldürürdü.
+        const hAt = (i) => a[i];
+
+        // Yükseklikler DAĞ PAYINA göre (peakBand), döşemenin tamamına
+        // değil: döşeme artık bulutlar için çok daha yüksek.
+        const yOf = (i) => band - peakBand * hAt(i);
+
+        const g = x.createLinearGradient(0, band - peakBand * maxH, 0, band);
+        g.addColorStop(0, colors[0]);
+        g.addColorStop(1, colors[1]);
+        x.fillStyle = g;
+        x.beginPath();
+        x.moveTo(0, band);
+        for (let i = 0; i < n; i++) x.lineTo((i * mtnTileW) / (n - 1), yOf(i));
+        x.lineTo(mtnTileW, band);
+        x.closePath();
+        x.fill();
+
+        // Sırt hattındaki ince ışık.
+        x.strokeStyle = lit;
+        x.lineWidth = Math.max(0.8, peakBand * litW);
+        x.beginPath();
+        for (let i = 0; i < n; i++) {
+          const px = (i * mtnTileW) / (n - 1);
+          i === 0 ? x.moveTo(px, yOf(i)) : x.lineTo(px, yOf(i));
+        }
+        x.stroke();
+      };
+
+      // Arkadan öne: açık + alçak + geniş tabanlı → koyu + yüksek + sivri.
+      // Derinlik artık pustan değil TON ve SİLÜET farkından geliyor (sis
+      // kaldırıldı, bkz. palet notu).
+      layer(15, 0.30, 0.56, 0.048, 0.095, 0.22, C.mtnFar,  20260808, C.mtnLit[0], 0.010);
+      layer(12, 0.36, 0.70, 0.042, 0.085, 0.17, C.mtnMid,  915231,   C.mtnLit[1], 0.011);
+      layer(10, 0.42, 0.86, 0.038, 0.075, 0.13, C.mtnNear, 77123,    C.mtnLit[2], 0.012);
+    });
+  }
+
+  // Statik arka plan: ay, ufuk parıltısı, bulutlar. BİR KEZ boyanıyor, oyun
+  // boyunca dokunulmuyor. Gökyüzü gradyanı CSS'te (.fufo-arena).
+  function paintBackdrop() {
+    bgx.clearRect(0, 0, AW, AH);
+
+    // Görsel varsa manzaranın TAMAMI ondan geliyor: ay, yıldızlar,
+    // bulutlar, dağlar. Prosedürel katmanların hiçbiri çalışmıyor ve
+    // kayan dağ şeridi de kapatılıyor (mtnCv = null) — böylece arka plan
+    // TEK PARÇA. Sahibin "alt taraf hareket ederken üst taraf etmiyor,
+    // bütün değil" şikâyeti yapısal olarak imkânsız hâle geliyor.
+    if (bgReady && bgImg && paintBgImage()) {
+      mtnCv = null;
+      if (atmoEl) { atmoEl.remove(); atmoEl = null; }   // yıldızlar görselde
+      return;
+    }
+
+    // Ufuktaki parıltı — tasarımda tepelerin arasından gelen aydınlık.
+    // ZAYIF ve manzara şeridinin üst kenarına oturuyor: güçlü/alçak bir
+    // parıltı ön planı yıkayıp gökyüzünden kopuk bir levha yaratıyordu.
+    const hy = groundTopPx - 0.30 * U;
+    const hg = bgx.createRadialGradient(AW * 0.5, hy, 0, AW * 0.5, hy, AW * 0.66);
+    hg.addColorStop(0, "rgba(120,168,244,.14)");
+    hg.addColorStop(0.5, "rgba(90,140,225,.05)");
+    hg.addColorStop(1, "rgba(90,140,225,0)");
+    bgx.fillStyle = hg;
+    bgx.fillRect(0, 0, AW, AH);
+
+    // BULUTLAR BURADA DEĞİL — kayan manzara şeridine taşındı
+    // (buildMountains). Sebebi: burada statik kalıyorlardı ve dağlar
+    // kayarken onlar durunca ekran "alt/üst iki ayrı sahne" gibi
+    // bölünüyordu. Manzaranın tamamı tek parça hareket etmeli.
+
+    // Ay — tasarımda sol üstte, kraterli.
+    const mx = AW * 0.16, my = AH * 0.11, mr = Math.max(14, AW * 0.075);
+    const glow = bgx.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 2.6);
+    glow.addColorStop(0, 'rgba(150,185,240,.20)');
+    glow.addColorStop(1, 'rgba(150,185,240,0)');
+    bgx.fillStyle = glow;
+    bgx.beginPath();
+    bgx.arc(mx, my, mr * 2.6, 0, Math.PI * 2);
+    bgx.fill();
+    const mg = bgx.createRadialGradient(mx - mr * 0.35, my - mr * 0.4, mr * 0.1, mx, my, mr);
+    mg.addColorStop(0, C.moon[0]);
+    mg.addColorStop(1, C.moon[1]);
+    bgx.fillStyle = mg;
+    bgx.beginPath();
+    bgx.arc(mx, my, mr, 0, Math.PI * 2);
+    bgx.fill();
+    const crnd = lcg(909);
+    bgx.fillStyle = 'rgba(48,62,92,.45)';
+    for (let i = 0; i < 8; i++) {
+      const a = crnd() * Math.PI * 2, d = crnd() * mr * 0.72;
+      const cr = mr * (0.08 + crnd() * 0.14);
+      bgx.beginPath();
+      bgx.arc(mx + Math.cos(a) * d, my + Math.sin(a) * d, cr, 0, Math.PI * 2);
+      bgx.fill();
+    }
+  }
+
+  function buildSprites() {
+    const uw = UFO_W * U;
+    sprUfo = makeSprite(uw, uw * 0.62, (x) => drawUfo(x, uw));
+    // İzin sprite'ı YOK — her karede UFO'nun yolundan çiziliyor (paintTrail).
+
+    const pw = W.pipeW * U;
+    bodyPad = Math.max(4, Math.round(pw * 0.22));
+    sprBody = buildBody(pw, bodyPad);
+    sprCapDown = buildCap(pw, bodyPad, false);
+    sprCapUp = buildCap(pw, bodyPad, true);
+    // Prosedürel dağlar YALNIZCA görsel yoksa. Görsel beklenirken de
+    // çizilmiyor: bir an yanlış manzarayı gösterip sonra değiştirmek,
+    // hiç göstermemekten kötü.
+    if (bgFailed) buildMountains(); else mtnCv = null;
+  }
+
+  // ═══════════ YERLEŞİM ═══════════
+  // Dünya birimleri çözünürlükten bağımsız olduğu için yeniden
+  // boyutlandırma OYUN DURUMUNU BOZMAZ: yalnızca U (birim başına piksel) ve
+  // sprite'lar yenilenir; y/vy/pipes olduğu gibi kalır. Ekran döndürmenin
+  // turu öldürmemesinin sebebi bu.
+  function layout() {
+    if (!wrapEl || !cv) return false;
+    const w = wrapEl.clientWidth, h = wrapEl.clientHeight;
+    if (!w || !h) return false;
+    AW = w; AH = h;
+    U = AH / SCENE_H;
+    groundTopPx = AH - W.groundH * U;
+    originY = groundTopPx + W.floor * U;     // W.floor negatif → yukarı kayar
+    birdPx = Math.round(AW * BIRD_X_FRAC);
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    [bgCv, cv].forEach((c) => {
+      c.style.width = AW + 'px';
+      c.style.height = AH + 'px';
+      c.width = Math.round(AW * dpr);
+      c.height = Math.round(AH * dpr);
+      c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+    });
+    // Skor rakamı sahneyle birlikte ölçekleniyor.
+    arenaEl.style.setProperty('--fufo-digit', Math.round(U * 0.30) + 'px');
+    return true;
+  }
+
+  function ensureLayout() {
+    layoutRaf = 0;
+    if (layout()) { buildSprites(); paintBackdrop(); paint(); return; }
+    // Tuval ölçüsü layout'a bağlı; hazır olana kadar bekle. Üst sınır,
+    // ekran hiç görünür olmazsa sonsuz döngüye girmemek için.
+    if (++layoutTries > 60) return;
+    layoutRaf = requestAnimationFrame(ensureLayout);
+  }
+
+  // ═══════════ KOORDİNAT ═══════════
+  const yPx = (wy) => originY - wy * U;
+  const xPx = (wx) => birdPx + wx * U;
+  // Engellerin doğduğu x: sağ kenarın hemen dışı. Referansın sabit 1.2'si
+  // onun kendi ekran oranına göreydi; ekran genişliğinden türetmek her
+  // cihazda AYNI görünür ritmi verir (engel tam kenardan girer). Aradaki
+  // mesafe zaten W.spacing ile korunduğu için zorluk değişmiyor.
+  const spawnX = () => (AW - birdPx) / U + W.pipeW;
+
+  // ═══════════ SİMÜLASYON ═══════════
+  const gapFor = (i) => (i < W.openingGaps.length ? W.openingGaps[i] : W.gap);
+
+  // ART ARDA GELEN BOŞLUKLAR BİRBİRİNE ÇOK YAKIN OLMAMALI (2026-08-08,
+  // sahibin geri bildirimi: "sütun hizaları hep sıralı gibi, neredeyse
+  // hepsi aynı").
+  //
+  // Referans her engeli BAĞIMSIZ ve düzgün dağılımla seçiyor. Matematiksel
+  // olarak doğru ama oynanışta yanıltıcı: bağımsız çekimlerde arka arkaya
+  // benzer değerlerin gelmesi olağandır ve oyuncu bunu "hep aynı yükseklik"
+  // diye okur — 1.0 birimlik aralıkta iki ardışık boşluğun 0.15'ten yakın
+  // olma olasılığı ~%28, yani her dört engelden birinde.
+  //
+  // Çözüm dağılımı DEĞİŞTİRMEK değil, yalnızca ardışık tekrarı elemek:
+  // çekim MIN_GAP_DELTA'dan yakın çıkarsa yeniden çekiliyor. Sınırlı sayıda
+  // deneme var — sonsuz döngü riski olmasın ve aralık daralsa bile oyun
+  // durmasın. Genel dağılım hâlâ düzgün, sadece "sıralı" hissi gidiyor.
+  const MIN_GAP_DELTA = 0.22;
+  function nextGapY(prevY) {
+    const span = W.gapMax - W.gapMin;
+    let v = W.gapMin + Math.random() * span;
+    if (prevY == null) return v;
+    for (let i = 0; i < 6 && Math.abs(v - prevY) < MIN_GAP_DELTA; i++) {
+      v = W.gapMin + Math.random() * span;
+    }
+    return v;
+  }
+
+  function spawnPipe() {
+    const last = pipes.length ? pipes[pipes.length - 1] : null;
+    // Yeni engel her zaman ÖNCEKİNDEN tam spacing kadar uzağa konuyor, "şu
+    // an neredeyse oraya" değil: tik kuantalanması yüzünden mesafe yavaşça
+    // kayardı ve ritim bozulurdu.
+    pipes.push({
+      x: last ? last.x + W.spacing : spawnX(),
+      gapY: nextGapY(last ? last.gapY : null),
+      gapH: gapFor(spawned),
+      passed: false,
+    });
+    spawned++;
+  }
+
+  function flap() {
+    vy = W.flap;                              // hız ATANIR, eklenmez
+    GameAudio.play('tap');
+    GameAudio.haptic('micro');
+  }
+
+  // Daire ↔ eksen hizalı dikdörtgen. Engelin ekran dışına taşan kısmı için
+  // sonlu ama büyük bir sınır (BIG) yeterli.
+  function hitsRect(cx, cy, r, x0, y0, x1, y1) {
+    const nx = cx < x0 ? x0 : (cx > x1 ? x1 : cx);
+    const ny = cy < y0 ? y0 : (cy > y1 ? y1 : cy);
+    const dx = cx - nx, dy = cy - ny;
+    return dx * dx + dy * dy < r * r;
+  }
+
+  const BIG = 12;
+
+  function collides() {
+    const r = W.radius;
+    for (let i = 0; i < pipes.length; i++) {
+      const p = pipes[i];
+      const x0 = p.x - W.pipeW / 2, x1 = p.x + W.pipeW / 2;
+      if (x1 < -r || x0 > r) continue;               // yatayda hiç değmiyor
+      const gt = p.gapY + p.gapH / 2, gb = p.gapY - p.gapH / 2;
+      if (hitsRect(0, y, r, x0, gt, x1, BIG)) return true;
+      if (hitsRect(0, y, r, x0, -BIG, x1, gb)) return true;
+    }
+    return false;
+  }
+
+  function step() {
+    elapsed += TICK;
+
+    if (state === 'ready') {
+      // Başlangıçta UFO süzülür: yerçekimi yok, engel yok, skor yok.
+      // Referansın "getready" hâli — oyun İLK DOKUNUŞLA başlar.
+      y = Math.sin(elapsed * W.bobW) * W.bobAmp;
+      vy = 0; rot = 0;
+      mtnScroll += W.speed * MTN_PARALLAX * TICK * U;
+      return;
+    }
+    if (state === 'revive' || state === 'over') return;
+
+    // Yarı-örtük Euler: önce hız, sonra konum.
+    vy -= W.gravity * TICK;
+    if (vy < -W.fallCap) vy = -W.fallCap;
+    y += vy * TICK;
+    rot = vy > 0 ? W.rotUp : Math.max(W.rotMin, W.rotUp + vy * W.rotK);
+
+    if (state === 'dying') {
+      // Çarptıktan sonra engeller DURUR, yalnızca UFO düşer. Klasik
+      // davranış ve işlevi var: oyuncu neye çarptığını görebilsin.
+      if (y - W.radius <= W.floor) { y = W.floor + W.radius; land(); }
+      return;
+    }
+
+    // ── state === 'play' ──
+    mtnScroll += W.speed * MTN_PARALLAX * TICK * U;
+    const dx = W.speed * TICK;
+    // İz noktaları engellerle AYNI hızda geriye kayıyor: iz dünyada sabit
+    // durup geride kalmalı. UFO'nun ekran x'i sabit olduğu için, kaydırmayı
+    // yapmazsak iz araca yapışık bir çubuk gibi görünürdü — düzeltilen tam
+    // olarak buydu.
+    const dpx = dx * U;
+    for (let i = 0; i < trail.length; i++) trail[i].x -= dpx;
+    pushTrail(birdPx, yPx(y));
+    for (let i = 0; i < pipes.length; i++) {
+      const p = pipes[i];
+      p.x -= dx;
+      if (!p.passed && p.x <= 0) {            // engel UFO'nun hizasını geçti
+        p.passed = true;
+        score++;
+        syncScore();
+        GameAudio.play('scoreTick');
+      }
+    }
+    // Ekranı tamamen terk edenleri at (dizi sınırsız büyümesin).
+    while (pipes.length && pipes[0].x < -(birdPx / U + W.pipeW)) pipes.shift();
+    if (!pipes.length || pipes[pipes.length - 1].x <= spawnX() - W.spacing) spawnPipe();
+
+    // TAVAN YOK (klasik): UFO ekranın üstüne çıkabilir ve orada ölmez.
+    // Tek ölüm sebepleri engel ve zemin.
+    if (y - W.radius <= W.floor) { y = W.floor + W.radius; land(); return; }
+    if (collides()) hit();
+  }
+
+  function hit() {
+    if (state !== 'play') return;
+    state = 'dying';
+    if (vy > 0) vy = 0;                       // yukarı ivme kesiliyor
+    GameAudio.play('error');
+    GameAudio.haptic([70, 30, 70]);
+    if (arenaEl) {
+      arenaEl.classList.remove('hit');
+      void arenaEl.offsetWidth;
+      arenaEl.classList.add('hit');
+    }
+  }
+
+  function land() {
+    if (state === 'over') return;
+    if (state === 'play') {                   // doğrudan zemine çarpma
+      GameAudio.play('error');
+      GameAudio.haptic([70, 30, 70]);
+    }
+    state = 'over';
+    stopLoop();
+    updateChrome();                           // duraklat düğmesi kalksın
+    paint();
+    best = phHighScore(GID, score);
+    GameAudio.play('crystalOver');
+    gameEvent('game_ended', {
+      gameId: 'flappyUfo', result: 'lost', score: score,
+      durationMs: Date.now() - startedAt,
+    });
+    overT = setTimeout(() => {
+      overT = 0;
+      showGameOver(false, 'Düştün!',
+        score === 1 ? '1 geçit geçtin.' : score + ' geçit geçtin.', {
+          accent: '#1d5fd6', accentLight: '#9ed8ff', accentGlow: 'rgba(70,170,255,.65)',
+          mark: '✧',
+          stats: [
+            { label: 'Skor', value: score.toLocaleString() },
+            { label: 'En İyi', value: best.toLocaleString(), record: score >= best && score > 0 },
+          ],
+          onContinue: revive,
+          onRestart: newGame,
+        });
+    }, 340);
+  }
+
+  // "Devam et" (reklam/elmas/Plus). UFO'nun ÖNÜNÜ AÇMAK zorunlu: oyuncu bir
+  // engele çarparak öldü, olduğu yerde diriltirsek aynı engelin içinde
+  // uyanır ve ödediği şey boşa gider. Yakın engeller temizlenip UFO orta
+  // yüksekliğe alınıyor, sonra İLK DOKUNUŞA kadar donuyor — anında düşmeye
+  // başlasaydı oyuncu tepki veremeden yine ölürdü (Yılan'ın 'waiting'
+  // durumuyla aynı gerekçe). Skor korunuyor; turu kabuk yeniden açıyor
+  // (app.js _runGameOverContinuation).
+  function revive() {
+    if (overT) { clearTimeout(overT); overT = 0; }
+    pipes = pipes.filter((p) => p.x < -W.pipeW || p.x > W.spacing * 1.15);
+    y = 0; vy = 0; rot = 0;
+    trail = [];                    // eski iz yeni konumla ilgisiz
+    paused = false;
+    state = 'revive';
+    if (arenaEl) arenaEl.classList.remove('hit');
+    setStart(false);
+    updateChrome();
+    paint();
+    if (typeof showToast === 'function') showToast('🛸 Dokun ve devam et');
+  }
+
+  function newGame() {
+    if (overT) { clearTimeout(overT); overT = 0; }
+    if (arenaEl) arenaEl.classList.remove('hit');
+    pipes = [];
+    trail = [];
+    paused = false;
+    spawned = 0;
+    y = 0; vy = 0; rot = 0;
+    score = 0;
+    elapsed = 0;
+    state = 'ready';
+    startedAt = Date.now();
+    best = phHighScore(GID);
+    syncScore();
+    setStart(true);
+    updateChrome();
+    // Bir tur = bir uçuş. Yeniden başlatma yeni tur açar; "devam et" AÇMAZ
+    // (turu kabuk reopen ediyor).
+    gameEvent('game_started', { gameId: 'flappyUfo' });
+    paint();
+    startLoop();
+  }
+
+  // İlk dokunuş hem oyunu başlatır HEM DE ilk kanat çırpışıdır. Ayırmak
+  // ("önce başlat, sonra ayrı bir dokunuşla yüksel") UFO'yu oyuncu daha
+  // tepki veremeden düşürürdü; referans da tek dokunuş kullanıyor.
+  function onTap() {
+    // Duraklamışken ekrana dokunmak DEVAM ETTİRİR ve kanat ÇIRPMAZ. Aksi
+    // hâlde oyuncu devam etmek için dokunduğunda UFO bir de zıplardı —
+    // duraklatmanın amacı durumu korumak, değiştirmek değil.
+    if (paused) { setPaused(false); return; }
+    if (state === 'ready' || state === 'revive') {
+      const wasReady = state === 'ready';
+      state = 'play';
+      if (wasReady) { setStart(false); startedAt = Date.now(); }
+      flap();
+      updateChrome();
+      startLoop();
+      return;
+    }
+    if (state === 'play') flap();
+  }
+
+  // ═══════════ DURAKLAT ═══════════
+  // Referansta duraklatma YOK; bu sahibin açık isteğiyle eklendi
+  // (2026-08-08). Oynanışı değiştirmiyor: zaman tamamen donuyor, hiçbir
+  // durum sıfırlanmıyor, skor/engel/iz olduğu gibi kalıyor.
+  //
+  // Yalnızca oyun SÜRERKEN anlamlı: başlangıç ekranında zaten kimse
+  // düşmüyor, oyun-sonu panelinde ise zaten duruyor.
+  function setPaused(on) {
+    if (state !== 'play' && state !== 'revive') return;
+    if (paused === on) return;
+    paused = on;
+    if (arenaEl) arenaEl.classList.toggle('paused', paused);
+    // startLoop() biriktiriciyi ve lastT'yi sıfırlıyor; bu ŞART, yoksa
+    // duraklamada geçen gerçek süre tek karede fizik adımı olarak işlenir
+    // ve oyuncu devam ettiği anda ölür (MAX_CATCHUP bunu sınırlar ama
+    // yine de bir sıçrama olurdu).
+    if (paused) stopLoop(); else startLoop();
+  }
+
+  // Duraklat düğmesi yalnızca oyun sürerken görünür.
+  function updateChrome() {
+    if (!arenaEl) return;
+    arenaEl.classList.toggle('playing', state === 'play' || state === 'revive');
+    if (!(state === 'play' || state === 'revive') && paused) {
+      paused = false;
+      arenaEl.classList.remove('paused');
+    }
+  }
+
+  // ═══════════ ÇİZİM ═══════════
+  function paint() {
+    if (!ctx || !U || !sprUfo) return;
+    ctx.clearRect(0, 0, AW, AH);
+
+    // Dağ şeridi — döşeme, en fazla 3 drawImage.
+    if (mtnCv) {
+      const ox = -(mtnScroll % mtnTileW);
+      for (let x = ox; x < AW; x += mtnTileW) {
+        ctx.drawImage(mtnCv.cv, x, mtnTop, mtnTileW, mtnTileH);
+      }
+    }
+
+    // Engeller — gövde GERİLİYOR, bilezik olduğu gibi. Engeller dağların
+    // ÜSTÜNE çiziliyor (tasarımda da sütunlar manzaranın önünde).
+    const pw = W.pipeW * U;
+    for (let i = 0; i < pipes.length; i++) {
+      const p = pipes[i];
+      const cx = xPx(p.x);
+      if (cx + pw < -bodyPad || cx - pw > AW + bodyPad) continue;
+      const left = cx - pw / 2 - bodyPad;
+      const gt = yPx(p.gapY + p.gapH / 2);    // boşluğun ÜST kenarı (piksel)
+      const gb = yPx(p.gapY - p.gapH / 2);    // boşluğun ALT kenarı
+      if (gt > 0) ctx.drawImage(sprBody.cv, left, 0, sprBody.w, gt);
+      ctx.drawImage(sprCapDown.cv, cx - sprCapDown.w / 2,
+                    gt - sprCapDown.h + bodyPad, sprCapDown.w, sprCapDown.h);
+      if (gb < AH) ctx.drawImage(sprBody.cv, left, gb, sprBody.w, AH - gb);
+      ctx.drawImage(sprCapUp.cv, cx - sprCapUp.w / 2, gb - bodyPad,
+                    sprCapUp.w, sprCapUp.h);
+    }
+
+    // UFO (+ iz).
+    const uy = yPx(y);
+    if (state === 'play' || state === 'dying') paintTrail(uy);
+    ctx.save();
+    ctx.translate(birdPx, uy);
+    // Tuvalde y aşağı artar: burnu YUKARI kaldırmak için ters işaret.
+    if (rot) ctx.rotate(-rot);
+    ctx.drawImage(sprUfo.cv, -sprUfo.w / 2, -sprUfo.h * 0.62, sprUfo.w, sprUfo.h);
+    ctx.restore();
+  }
+
+  // ═══════════ DÖNGÜ ═══════════
+  // Sabit adımlı biriktirici: ÇİZİM kare hızına, FİZİK saniyeye bağlı.
+  // guard, tarayıcının uzun bir duraklamadan sonra döngüyü kilitlemesini
+  // engelliyor (MAX_CATCHUP zaten sınırlıyor, bu ikinci emniyet).
+  function frame(t) {
+    raf = 0;
+    let dt = (t - lastT) / 1000;
+    lastT = t;
+    if (!(dt > 0)) dt = 0;
+    if (dt > MAX_CATCHUP) dt = MAX_CATCHUP;
+    acc += dt;
+    let guard = 0;
+    while (acc >= TICK && guard++ < 240) { acc -= TICK; step(); }
+    paint();
+    if (state === 'ready' || state === 'play' || state === 'dying') {
+      raf = requestAnimationFrame(frame);
+    }
+  }
+
+  function startLoop() {
+    if (raf) return;                          // çift döngü koruması
+    lastT = (typeof performance !== 'undefined' && performance.now)
+      ? performance.now() : Date.now();
+    acc = 0;                                  // birikmiş zaman ATILIYOR
+    raf = requestAnimationFrame(frame);
+  }
+  function stopLoop() {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+  }
+
+  // ═══════════ HUD ═══════════
+  function syncScore() {
+    const hi = phHighScore(GID);
+    if (scoreEl) scoreEl.textContent = String(score);
+    if (bestEl) bestEl.textContent = 'EN İYİ: ' + hi;
+    if (startBestEl) startBestEl.textContent = String(hi);
+    // Kabuğun skor kapsülü gizli (ownsScoreDisplay) ama değeri güncel
+    // tutuluyor: "Skor 2x" düğmesi o elemanı okuyor.
+    if (typeof updateGameScore === 'function') updateGameScore(score);
+  }
+
+  function setStart(show) {
+    if (startEl) startEl.classList.toggle('on', !!show);
+  }
+
+  // ═══════════ GİRDİ ═══════════
+  function onPointer(e) {
+    // pointerdown (click değil): gecikme en düşük olsun — §4'ün istediği
+    // "tepkisel kontrol" tam olarak bu. setPointerCapture BİLEREK yok,
+    // bkz. CLAUDE.md §5 phCamera tuzağı.
+    if (e.button != null && e.button !== 0) return;
+    e.preventDefault();
+    onTap();
+  }
+  function onKey(e) {
+    if (e.key !== ' ' && e.key !== 'ArrowUp' && e.key !== 'w' && e.key !== 'W') return;
+    e.preventDefault();
+    onTap();
+  }
+
+  // ═══════════ SAHNE ═══════════
+  function css() {
+    return `
+      /* Tasarımdaki uzay gecesi: koyu lacivert → siyaha yakın. Kabuğun
+         menekşe .ph-scene'i yalnızca bu oyunun sahnesinde maviye dönüyor. */
+      .fufo-scene{
+        background:
+          radial-gradient(ellipse 90% 46% at 50% 100%, rgba(46,96,196,.22) 0%, transparent 70%),
+          radial-gradient(ellipse 120% 88% at 50% 42%, #0c1738 0%, #04081c 76%);
+      }
+      .fufo-wrap{
+        flex:1; align-self:stretch; min-height:0;
+        display:flex; position:relative; z-index:1;
+      }
+      .fufo-arena{
+        position:relative; flex:1; min-height:0; overflow:hidden;
+        border-radius:16px;
+        border:1px solid rgba(126,110,220,.32);
+        /* TEK ve KESİNTİSİZ gece tonu. Önceki hâli dipte #101d46'ya
+           çıkıyor, üstüne de tabana oturan güçlü bir mavi radyal
+           ekliyordu; sonuç, dağların arasındaki tonun tepedeki gökyüzüyle
+           tutmaması ve ekranın "alt/üst iki ayrı sahne" gibi bölünmesiydi
+           (sahibin bildirdiği hata). Artık aydınlanma yalnızca ufuktaki
+           zayıf parıltıdan geliyor ve o da tuvalde. */
+        background: linear-gradient(180deg, #050a1e 0%, #071026 58%, #081328 100%);
+        /* Dokunuş kaydırma/zoom'a gitmesin: her dokunuş bir kanat çırpışı. */
+        touch-action:none;
+        -webkit-user-select:none; user-select:none;
+      }
+      /* İki tuval de mutlak: biri STATİK (arka plan), diğeri oyun. */
+      .fufo-bg,.fufo-cv{position:absolute; inset:0; display:block}
+      .fufo-bg{z-index:1}
+      .fufo-cv{z-index:2}
+
+      /* Skor — tasarımda arenanın üst ortasında, beyaz ve kalın; altında
+         küçük "EN İYİ" satırı. */
+      .fufo-hud{
+        position:absolute; z-index:3; left:0; right:0; top:2.2%;
+        display:flex; flex-direction:column; align-items:center; gap:2px;
+        pointer-events:none;
+      }
+      .fufo-score{
+        font:900 var(--fufo-digit,44px)/1 var(--ph-font-display);
+        color:#fff; letter-spacing:.01em;
+        text-shadow:0 0 14px rgba(120,190,255,.55), 0 2px 6px rgba(0,0,0,.55);
+      }
+      .fufo-best{
+        font:700 calc(var(--fufo-digit,44px) * .30)/1 var(--ph-font-display);
+        color:rgba(226,238,255,.88); letter-spacing:.10em;
+        text-shadow:0 1px 4px rgba(0,0,0,.6);
+      }
+
+      /* Başlangıç ekranı — tasarımın sol paneli: rekor kartı + oynat
+         düğmesi. pointer-events YOK ve bu bilinçli: dokunuş her yerden
+         arenaya gidiyor, böylece "düğmeye mi bastım, ekrana mı" ikiliği hiç
+         doğmuyor ve tek bir girdi yolu kalıyor. */
+      .fufo-start{
+        position:absolute; z-index:4; inset:0;
+        display:none; flex-direction:column; align-items:center;
+        justify-content:flex-end; padding-bottom:13%; gap:14px;
+        pointer-events:none;
+      }
+      .fufo-start.on{display:flex}
+      .fufo-card{
+        display:flex; align-items:center; gap:14px;
+        padding:12px 22px; border-radius:16px;
+        background:rgba(9,14,36,.82);
+        border:1px solid rgba(140,120,235,.45);
+        box-shadow:0 0 22px rgba(70,110,220,.18);
+      }
+      .fufo-card-l{display:flex; flex-direction:column; align-items:center; gap:3px}
+      .fufo-card-lbl{
+        font:700 11px/1 var(--ph-font-display); letter-spacing:.16em;
+        color:rgba(214,228,255,.82);
+      }
+      .fufo-card-val{font:900 30px/1 var(--ph-font-display); color:#fff}
+      .fufo-card-ico{font-size:26px; line-height:1}
+      .fufo-play{
+        display:flex; align-items:center; justify-content:center;
+        width:min(58%,230px); height:72px; border-radius:20px;
+        background:linear-gradient(180deg,#2f7ff0 0%,#1348a8 55%,#0b2a6e 100%);
+        border:1px solid rgba(150,205,255,.60);
+        box-shadow:0 0 26px rgba(50,130,255,.34), inset 0 1px 0 rgba(255,255,255,.22);
+      }
+      .fufo-play-ico{
+        width:0; height:0;
+        border-left:26px solid rgba(190,226,255,.95);
+        border-top:17px solid transparent; border-bottom:17px solid transparent;
+        margin-left:7px;
+      }
+      .fufo-hint{
+        font:600 12px/1 var(--ph-font-display); letter-spacing:.08em;
+        color:rgba(200,218,255,.72);
+      }
+
+      /* Duraklat düğmesi — tasarımdaki sol üst kare. Yalnızca oyun
+         sürerken görünür (.playing); başlangıç ekranında ve oyun-sonu
+         panelinde duraklatacak bir şey yok. */
+      .fufo-pause{
+        position:absolute; z-index:5; left:3.5%; top:2.4%;
+        width:42px; height:42px; padding:0;
+        display:none; align-items:center; justify-content:center; gap:4px;
+        border-radius:13px; cursor:pointer;
+        background:rgba(9,14,36,.72);
+        border:1px solid rgba(140,120,235,.55);
+        box-shadow:0 0 14px rgba(70,110,220,.22);
+      }
+      .fufo-arena.playing .fufo-pause{display:flex}
+      .fufo-pause i{
+        display:block; width:4px; height:15px; border-radius:2px;
+        background:rgba(226,238,255,.92);
+      }
+      .fufo-pause:active{transform:scale(.94)}
+      /* Duraklatma perdesi */
+      .fufo-paused-veil{
+        position:absolute; z-index:4; inset:0;
+        display:none; flex-direction:column; align-items:center; justify-content:center;
+        gap:6px; pointer-events:none; background:rgba(4,8,26,.58);
+      }
+      .fufo-arena.paused .fufo-paused-veil{display:flex}
+      .fufo-paused-veil span{
+        font:900 22px/1 var(--ph-font-display); letter-spacing:.14em; color:#fff;
+        text-shadow:0 0 14px rgba(120,190,255,.55);
+      }
+      .fufo-paused-veil small{
+        font:600 12px/1 var(--ph-font-display); letter-spacing:.08em;
+        color:rgba(200,218,255,.78);
+      }
+
+      /* Çarpma: TEK, kısa çerçeve darbesi. Sürekli çalışan efekt yok. */
+      @keyframes fufoHit{
+        0%,100%{border-color:rgba(126,110,220,.32)}
+        35%{border-color:rgba(255,120,140,.95);
+            box-shadow:0 0 24px rgba(255,80,110,.45)}
+      }
+      .fufo-arena.hit{animation:fufoHit 300ms ease-out}
+    `;
+  }
+
+  function init(c) {
+    container = c;
+    layoutTries = 0;
+    container.classList.add('ph-scene', 'fufo-scene');
+    injectStyle('css-fufo', css());
+
+    wrapEl = document.createElement('div');
+    wrapEl.className = 'fufo-wrap';
+    wrapEl.innerHTML =
+      '<div class="fufo-arena">' +
+        '<canvas class="fufo-bg"></canvas>' +
+        '<canvas class="fufo-cv"></canvas>' +
+        '<div class="fufo-hud">' +
+          '<span class="fufo-score">0</span>' +
+          '<span class="fufo-best">EN İYİ: 0</span>' +
+        '</div>' +
+        // Duraklat — tasarımdaki sol üst düğme. Arenanın çocuğu ama kendi
+        // pointer olayını YUTUYOR (bkz. onPauseTap), yoksa aynı dokunuş hem
+        // duraklatır hem kanat çırpardı.
+        '<button class="fufo-pause" type="button" aria-label="Duraklat">' +
+          '<i></i><i></i>' +
+        '</button>' +
+        '<div class="fufo-paused-veil"><span>DURAKLATILDI</span>' +
+          '<small>Devam etmek için dokun</small></div>' +
+        '<div class="fufo-start">' +
+          '<div class="fufo-card">' +
+            '<span class="fufo-card-l">' +
+              '<span class="fufo-card-lbl">EN İYİ SKOR</span>' +
+              '<span class="fufo-card-val">0</span>' +
+            '</span>' +
+            '<span class="fufo-card-ico">🏆</span>' +
+          '</div>' +
+          '<div class="fufo-play"><i class="fufo-play-ico"></i></div>' +
+          '<span class="fufo-hint">Yükselmek için dokun</span>' +
+        '</div>' +
+      '</div>';
+    container.appendChild(wrapEl);
+
+    arenaEl = wrapEl.querySelector('.fufo-arena');
+    bgCv = wrapEl.querySelector('.fufo-bg');
+    cv = wrapEl.querySelector('.fufo-cv');
+    bgx = bgCv.getContext('2d');
+    ctx = cv.getContext('2d');
+    scoreEl = wrapEl.querySelector('.fufo-score');
+    bestEl = wrapEl.querySelector('.fufo-best');
+    startEl = wrapEl.querySelector('.fufo-start');
+    startBestEl = wrapEl.querySelector('.fufo-card-val');
+
+    // Yıldızlar arenanın İÇİNDE (tasarımda gökyüzü oyun alanının kendisi).
+    // Statik + CSS animasyonlu; oyun tuvaline hiç dokunmuyor.
+    atmoEl = phAtmosphere(arenaEl, { stars: 44, beams: 0, motes: 0, skyPct: 74 });
+
+    newGame();
+    ensureLayout();
+    // Görsel çözülünce sahneyi bir kez daha boya. APK'da dosya yerelde,
+    // yani bu pratikte anında; ağdan gelen web yolunda ise oyun bu arada
+    // zaten oynanabilir durumda.
+    ensureBg(() => {
+      if (!U || !bgx) return;
+      if (bgFailed && !mtnCv) buildMountains();
+      paintBackdrop();
+      paint();
+    });
+
+    addEv(arenaEl, 'pointerdown', onPointer);
+    // stopPropagation ŞART: düğme arenanın çocuğu, olay yukarı kabarsaydı
+    // aynı dokunuş hem duraklatır hem kanat çırpardı.
+    addEv(wrapEl.querySelector('.fufo-pause'), 'pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setPaused(!paused);
+    });
+    addEv(document, 'keydown', onKey);
+    addEv(window, 'resize', () => {
+      if (layout()) { buildSprites(); paintBackdrop(); paint(); }
+    });
+    // Arka plana giden uygulamada döngü DURUR. Durmasaydı oyuncu ekrana
+    // bakmazken UFO düşer ve tur görülmeden biterdi.
+    addEv(document, 'visibilitychange', () => {
+      if (document.hidden) stopLoop();
+      // !paused ŞART: oyuncu duraklatıp uygulamadan çıkıp döndüğünde oyun
+      // kendiliğinden başlamamalı — duraklatma oyuncunun kararı.
+      else if (!paused && (state === 'ready' || state === 'play' || state === 'dying')) startLoop();
+    });
+  }
+
+  function cleanup() {
+    stopLoop();
+    if (overT) { clearTimeout(overT); overT = 0; }
+    if (layoutRaf) { cancelAnimationFrame(layoutRaf); layoutRaf = 0; }
+    clearEvs();
+    if (atmoEl) { atmoEl.remove(); atmoEl = null; }
+    if (container) {
+      container.innerHTML = '';
+      container.classList.remove('ph-scene', 'fufo-scene');
+    }
+    container = wrapEl = arenaEl = bgCv = cv = null;
+    scoreEl = bestEl = startEl = startBestEl = null;
+    ctx = bgx = null;
+    sprUfo = sprBody = sprCapDown = sprCapUp = mtnCv = null;
+    pipes = [];
+    trail = [];
+    paused = false;
+    U = 0;
+    // 'over': başka bir yerden gelebilecek bir startLoop() çağrısı ölü
+    // duruma döngü açmasın.
+    state = 'over';
+  }
+
+  // Skor sahnenin kendi içinde (tasarımda arenanın üstünde), bu yüzden
+  // kabuğun SKOR kapsülü gizleniyor — aynı sayı iki yerde durmamalı.
+  return { init, cleanup, ownsScoreDisplay: true };
+})();

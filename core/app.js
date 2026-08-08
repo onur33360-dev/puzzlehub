@@ -88,6 +88,7 @@ const PUZZLE_GAMES = [
   { name:'Labirent', emoji:'🌀', rating:4.2, badge:null, desc:'Çıkışı bul', bg:'linear-gradient(135deg,#059669,#065f46)' },
   { name:'Resim Kaydır', emoji:'🖼️', rating:4.9, badge:'yeni', desc:'Fotoğrafı kaydır, tamamla', bg:'linear-gradient(135deg,#123a4a,#06121c)' },
   { name:'Yılan', emoji:'🐍', rating:4.8, badge:'yeni', desc:'Klasik yılan — elmasları topla', bg:'linear-gradient(135deg,#16255e,#060b22)' },
+  { name:'Flappy UFO', emoji:'🛸', rating:4.7, badge:'yeni', desc:'Dokun, yüksel, geçitlerden süz', bg:'linear-gradient(135deg,#132a63,#04081c)' },
 ];
 
 // Mockup panel 1 "Bugünün Görevleri" ile birebir üç görev.
@@ -3088,6 +3089,7 @@ const GAME_MAP = {
   // Faz 3 bitti: tema hazır, oyun Keşfet ve ana ekranda AÇIK.
   'Resim Kaydır': 'jigsawCard',
   'Yılan': 'snakeGame',
+  'Flappy UFO': 'flappyUfo',
 };
 
 let _currentGameId = null;

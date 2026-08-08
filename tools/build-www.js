@@ -49,6 +49,11 @@ const SHIP = [
   // (surumden bagimsiz, ilk kullanimda dolan kova) — ses politikasiyla
   // ayni mantik. APK'da SW zaten kayitli degil, dosyalar yerel.
   'assets/jigsaw',
+  // Flappy UFO'nun arka plan illustrasyonu. Ayni gerekce: APK'ya girmek
+  // zorunda ama SHELL_ASSETS'e BILEREK eklenmedi (her surum bump'inda
+  // yeniden indirilmesin); ayni-origin gorsel istekleri sw.js'te zaten
+  // MEDIA_CACHE'e dusuyor.
+  'assets/flappy',
 ];
 
 function fail(msg) {
