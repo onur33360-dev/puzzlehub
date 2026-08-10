@@ -29,7 +29,7 @@ const APP_SRC = fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8');
 
 const GAMES = [
   'game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',
-  'mazeGame', 'screwPuzzle', 'waterSort', 'arrowPuzzle', 'jigsawCard',
+  'waterSort', 'arrowPuzzle', 'jigsawCard',
 ];
 const IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30'];
 
@@ -114,7 +114,7 @@ function testContract() {
   // ── TEK SEFERLİK: tekrar tekrar ödenmiyor ──
   const afterFirst = DS.get();
   for (let i = 0; i < 25; i++) B.check();
-  playRounds(GE, 3, 'mazeGame');
+  playRounds(GE, 3, 'memoryGame');
   eq('rozet İKİNCİ kez ödenmiyor', DS.get(), afterFirst);
   eq('rozet listeye iki kez yazılmıyor',
      earnedIds(B).filter(x => x === 'first_game').length, 1);

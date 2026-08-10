@@ -5128,572 +5128,6 @@ PuzzleGames.blockPuzzle = (() => {
 })();
 
 // ╔══════════════════════════════════════╗
-// ║        6. LABİRENT                   ║
-// ╚══════════════════════════════════════╝
-PuzzleGames.mazeGame = (() => {
-  const W = 13, H = 13;
-  let maze, playerX, playerY, endX, endY, startTime, moveCount, container;
-
-  function init(c) {
-    container = c; startTime = Date.now(); moveCount = 0;
-    gameEvent('game_started', { gameId: 'mazeGame' });
-    generateMaze();
-    playerX = 1; playerY = 1; endX = W-2; endY = H-2;
-    injectStyle('css-maze', `
-      .maze-grid{display:grid;grid-template-columns:repeat(${W},1fr);gap:1px;width:100%;max-width:360px;padding:2px;border-radius:10px;background:rgba(255,255,255,0.02)}
-      .mz-c{aspect-ratio:1;border-radius:2px;transition:background .15s}
-      .mz-wall{background:rgba(255,255,255,0.12)}
-      .mz-path{background:rgba(255,255,255,0.02)}
-      .mz-player{background:#22c55e;border-radius:50%;box-shadow:0 0 8px rgba(34,197,94,0.5)}
-      .mz-end{background:#ef4444;border-radius:50%;box-shadow:0 0 8px rgba(239,68,68,0.5);animation:mzPulse 1s infinite}
-      .mz-trail{background:rgba(168,85,247,0.15)}
-      .mz-info{display:flex;gap:20px;justify-content:center;font-size:13px;font-weight:700;color:#9a9ab0;margin-top:6px}
-      @keyframes mzPulse{0%,100%{opacity:1}50%{opacity:0.5}}
-    `);
-    render();
-    let tx,ty;
-    addEv(container,'touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});
-    addEv(container,'touchend',e=>{const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;if(Math.abs(dx)>20||Math.abs(dy)>20){Math.abs(dx)>Math.abs(dy)?movePlayer(dx>0?1:(-1),0):movePlayer(0,dy>0?1:(-1))}},{passive:true});
-    addEv(document,'keydown',onKey);
-  }
-  function onKey(e){
-    const map={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
-    if(map[e.key]){e.preventDefault();movePlayer(map[e.key][0],map[e.key][1])}
-  }
-  function generateMaze() {
-    maze = Array.from({length:H},()=>Array(W).fill(1));
-    function carve(x,y){
-      maze[y][x]=0;
-      const dirs=[[0,-2],[0,2],[-2,0],[2,0]].sort(()=>Math.random()-0.5);
-      for(const[dx,dy]of dirs){
-        const nx=x+dx,ny=y+dy;
-        if(nx>0&&nx<W-1&&ny>0&&ny<H-1&&maze[ny][nx]===1){maze[y+dy/2][x+dx/2]=0;carve(nx,ny)}
-      }
-    }
-    carve(1,1);
-    maze[H-2][W-2]=0; // çıkış açık
-  }
-  function movePlayer(dx,dy) {
-    const nx=playerX+dx, ny=playerY+dy;
-    if(nx<0||nx>=W||ny<0||ny>=H||maze[ny][nx]===1)return;
-    maze[playerY][playerX] = 2; // trail
-    GameAudio.play('step');
-    playerX=nx; playerY=ny; moveCount++;
-    const secs = Math.floor((Date.now()-startTime)/1000);
-    updateGameScore(Math.max(5000-secs*50-moveCount*5,500));
-    render();
-    if(playerX===endX&&playerY===endY){
-      // Labirentin kaybetme durumu yok: yalnızca 'won'. Skor da süre/adım
-      // formülünün az önce updateGameScore'a yazdığı değerin aynısı.
-      gameEvent('game_ended', {
-        gameId: 'mazeGame', result: 'won',
-        score: Math.max(5000-secs*50-moveCount*5,500), durationMs: secs*1000,
-      });
-      GameAudio.play('win'); GameAudio.haptic(25);
-      showGameOver(true,'Çıkışı Buldun','Labirentin çıkışına ulaştın.',{
-        accent:'var(--ph-jewel-4-shadow)',accentLight:'var(--ph-jewel-4-highlight)',accentGlow:'var(--ph-jewel-4-glow)',
-        mark:'✦',
-        stats:[
-          {label:'Süre',value:secs+' sn'},
-          {label:'Adım',value:moveCount},
-        ],
-      });
-    }
-  }
-  function render() {
-    const secs = Math.floor((Date.now()-startTime)/1000);
-    container.innerHTML = `
-      <div class="maze-grid">${maze.map((r,y)=>r.map((v,x)=>{
-        if(x===playerX&&y===playerY)return '<div class="mz-c mz-player"></div>';
-        if(x===endX&&y===endY)return '<div class="mz-c mz-end"></div>';
-        return `<div class="mz-c ${v===1?'mz-wall':v===2?'mz-trail':'mz-path'}"></div>`
-      }).join('')).join('')}</div>
-      <div class="mz-info"><div>⏱️ ${secs}s</div><div>👣 ${moveCount} adım</div></div>`;
-  }
-  function cleanup(){clearEvs()}
-  return {init,cleanup};
-})();
-
-
-
-// ╔══════════════════════════════════════╗
-// ║     7. VİDA USTASI (SCREW PUZZLE)    ║
-// ╚══════════════════════════════════════╝
-PuzzleGames.screwPuzzle = (() => {
-  const PAL = [
-    {f:'#ef4444',l:'#f87171',g:'rgba(239,68,68,.4)',name:'Kırmızı'},
-    {f:'#3b82f6',l:'#60a5fa',g:'rgba(59,130,246,.4)',name:'Mavi'},
-    {f:'#22c55e',l:'#4ade80',g:'rgba(34,197,94,.4)',name:'Yeşil'},
-    {f:'#eab308',l:'#fbbf24',g:'rgba(234,179,8,.4)',name:'Sarı'},
-    {f:'#a855f7',l:'#c084fc',g:'rgba(168,85,247,.4)',name:'Mor'},
-    {f:'#f97316',l:'#fb923c',g:'rgba(249,115,22,.4)',name:'Turuncu'},
-  ];
-  const WOOD = [
-    {f:'#b8860b',l:'#d4a834',d:'#7a5a08'},
-    {f:'#a0522d',l:'#c4764d',d:'#6d3519'},
-    {f:'#8b6914',l:'#b08a3a',d:'#5c4610'},
-    {f:'#cd853f',l:'#dca060',d:'#9a6228'},
-    {f:'#9b7653',l:'#b89474',d:'#6b4e33'},
-    {f:'#8b4513',l:'#b06030',d:'#5a2d0c'},
-  ];
-  const MAX_SLOTS = 7;
-  const SCR_SZ = 46;
-
-  // ───────── SEVİYELER ─────────
-  // Kural: Her renk 3 veya 6 kez, aynı renk aynı tahtada kümelenmiş
-  // Tahtalar: bazıları yan yana (seçim hakkı), bazıları üst üste
-  const LEVELS = [
-    // Lv1: 2 tahta üst üste, 6 vida, 2 renk (3+3) — öğretici
-    {boards:[
-      {x:10,y:55,w:80,h:28,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]},
-      {x:20,y:30,w:60,h:32,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:0}]}
-    ]},
-    // Lv2: 2 tahta üst üste, 6 vida, 2 renk (3+3)
-    {boards:[
-      {x:8,y:55,w:84,h:28,screws:[{rx:.15,ry:.5,c:1},{rx:.5,ry:.5,c:0},{rx:.85,ry:.5,c:1}]},
-      {x:18,y:28,w:64,h:34,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:1}]}
-    ]},
-    // Lv3: 2 tahta yan yana + 1 üstte, 9 vida, 3 renk (3+3+3)
-    {boards:[
-      {x:3,y:55,w:45,h:30,screws:[{rx:.3,ry:.4,c:0},{rx:.7,ry:.4,c:0},{rx:.5,ry:.8,c:1}]},
-      {x:52,y:55,w:45,h:30,screws:[{rx:.3,ry:.4,c:1},{rx:.7,ry:.4,c:2},{rx:.5,ry:.8,c:2}]},
-      {x:15,y:25,w:70,h:36,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]}
-    ]},
-    // Lv4: 3 tahta üst üste, 9 vida, 3 renk — renkler kümelenmiş
-    {boards:[
-      {x:5,y:60,w:90,h:24,screws:[{rx:.2,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.8,ry:.5,c:0}]},
-      {x:12,y:38,w:76,h:28,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:1}]},
-      {x:22,y:14,w:56,h:30,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:2}]}
-    ]},
-    // Lv5: 2 yan yana + 1 üstte, 9 vida, 3 renk
-    {boards:[
-      {x:3,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:1},{rx:.75,ry:.4,c:2},{rx:.5,ry:.8,c:0}]},
-      {x:53,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:0},{rx:.75,ry:.4,c:0},{rx:.5,ry:.8,c:2}]},
-      {x:10,y:24,w:80,h:40,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]}
-    ]},
-    // Lv6: 4 tahta, 12 vida, 4 renk (3+3+3+3) — kümelenmiş
-    {boards:[
-      {x:3,y:68,w:94,h:20,screws:[{rx:.15,ry:.5,c:0},{rx:.38,ry:.5,c:0},{rx:.62,ry:.5,c:0},{rx:.85,ry:.5,c:1}]},
-      {x:10,y:48,w:80,h:26,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:1},{rx:.8,ry:.5,c:2}]},
-      {x:18,y:28,w:64,h:26,screws:[{rx:.2,ry:.5,c:2},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:3}]},
-      {x:28,y:6,w:44,h:28,screws:[{rx:.25,ry:.5,c:3},{rx:.75,ry:.5,c:3}]}
-    ]},
-    // Lv7: 2 yan yana (alt) + 2 yan yana (üst), 12 vida, 4 renk
-    {boards:[
-      {x:3,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:0},{rx:.75,ry:.4,c:0},{rx:.5,ry:.8,c:0}]},
-      {x:53,y:58,w:44,h:28,screws:[{rx:.25,ry:.4,c:1},{rx:.75,ry:.4,c:1},{rx:.5,ry:.8,c:1}]},
-      {x:3,y:18,w:44,h:46,screws:[{rx:.25,ry:.3,c:2},{rx:.75,ry:.3,c:2},{rx:.5,ry:.7,c:2}]},
-      {x:53,y:18,w:44,h:46,screws:[{rx:.25,ry:.3,c:3},{rx:.75,ry:.3,c:3},{rx:.5,ry:.7,c:3}]}
-    ]},
-    // Lv8: 5 tahta, 15 vida, 5 renk — karışık ama kazanılabilir
-    {boards:[
-      {x:3,y:72,w:94,h:18,screws:[{rx:.15,ry:.5,c:0},{rx:.38,ry:.5,c:0},{rx:.62,ry:.5,c:1},{rx:.85,ry:.5,c:1}]},
-      {x:3,y:54,w:44,h:22,screws:[{rx:.3,ry:.5,c:2},{rx:.7,ry:.5,c:2}]},
-      {x:53,y:54,w:44,h:22,screws:[{rx:.3,ry:.5,c:3},{rx:.7,ry:.5,c:3}]},
-      {x:10,y:28,w:80,h:30,screws:[{rx:.15,ry:.5,c:0},{rx:.38,ry:.5,c:4},{rx:.62,ry:.5,c:4},{rx:.85,ry:.5,c:4}]},
-      {x:25,y:4,w:50,h:28,screws:[{rx:.2,ry:.5,c:1},{rx:.5,ry:.5,c:2},{rx:.8,ry:.5,c:3}]}
-    ]},
-    // Lv9: 2 yan yana + 2 üstte, 12 vida, 4 renk (3+3+3+3)
-    {boards:[
-      {x:3,y:62,w:44,h:24,screws:[{rx:.3,ry:.5,c:0},{rx:.7,ry:.5,c:0},{rx:.5,ry:.3,c:0}]},
-      {x:53,y:62,w:44,h:24,screws:[{rx:.3,ry:.5,c:1},{rx:.7,ry:.5,c:1},{rx:.5,ry:.3,c:1}]},
-      {x:3,y:28,w:44,h:40,screws:[{rx:.3,ry:.5,c:2},{rx:.7,ry:.5,c:2},{rx:.5,ry:.3,c:2}]},
-      {x:53,y:28,w:44,h:40,screws:[{rx:.3,ry:.5,c:3},{rx:.7,ry:.5,c:3},{rx:.5,ry:.3,c:3}]}
-    ]},
-    // Lv10: BOSS — 5 tahta, 18 vida, 6 renk
-    {boards:[
-      {x:2,y:74,w:96,h:16,screws:[{rx:.1,ry:.5,c:0},{rx:.3,ry:.5,c:0},{rx:.5,ry:.5,c:0},{rx:.7,ry:.5,c:1},{rx:.9,ry:.5,c:1}]},
-      {x:2,y:56,w:44,h:22,screws:[{rx:.3,ry:.5,c:1},{rx:.7,ry:.5,c:2}]},
-      {x:54,y:56,w:44,h:22,screws:[{rx:.3,ry:.5,c:2},{rx:.7,ry:.5,c:2}]},
-      {x:8,y:30,w:84,h:30,screws:[{rx:.12,ry:.5,c:3},{rx:.35,ry:.5,c:3},{rx:.62,ry:.5,c:3},{rx:.85,ry:.5,c:4}]},
-      {x:18,y:4,w:64,h:30,screws:[{rx:.2,ry:.5,c:4},{rx:.5,ry:.5,c:4},{rx:.8,ry:.5,c:5},{rx:.5,ry:.3,c:5},{rx:.5,ry:.7,c:5}]}
-    ]}
-  ];
-
-  let container, level, score, slots, screws, boards, undoStack, undoUsed;
-  let wrapEl, areaEl, slotsEl;
-  let animating = false;
-
-  function haptic(ms) { GameAudio.haptic(ms); }
-  function snd(type) { GameAudio.play(type); }
-
-  // ───────── EKRAN SARSINTISI ─────────
-  function screenShake(intensity, dur) {
-    const el = wrapEl, start = performance.now();
-    const anim = (now) => {
-      const elapsed = now - start;
-      if (elapsed > dur) { el.style.transform = ''; return; }
-      const decay = 1 - elapsed/dur;
-      el.style.transform = `translate(${(Math.random()*2-1)*intensity*decay}px,${(Math.random()*2-1)*intensity*decay}px)`;
-      requestAnimationFrame(anim);
-    };
-    requestAnimationFrame(anim);
-  }
-
-  // ───────── PARTİKÜLLER ─────────
-  function particles(cx, cy, color, n) {
-    for(let i=0;i<n;i++){
-      const p=document.createElement('div');
-      const a=(Math.PI*2/n)*i+Math.random()*.4, d=20+Math.random()*50, sz=3+Math.random()*6;
-      p.style.cssText=`position:absolute;left:${cx}px;top:${cy}px;width:${sz}px;height:${sz}px;background:${color};border-radius:${Math.random()>.5?'50%':'2px'};pointer-events:none;z-index:200;box-shadow:0 0 ${sz*2}px ${color};animation:spPart ${400+Math.random()*300}ms cubic-bezier(.2,.8,.3,1) forwards`;
-      p.style.setProperty('--px',Math.cos(a)*d+'px');
-      p.style.setProperty('--py',Math.sin(a)*d+'px');
-      areaEl.appendChild(p);
-      setTimeout(()=>p.remove(),750);
-    }
-  }
-
-  // ───────── UÇAN SKOR ─────────
-  function floatText(text, x, y, color, big) {
-    const el=document.createElement('div');
-    el.textContent=text;
-    const sz=big?28:18;
-    el.style.cssText=`position:absolute;left:${x}px;top:${y}px;font-size:${sz}px;font-weight:900;color:${color||'#fbbf24'};pointer-events:none;z-index:210;white-space:nowrap;text-shadow:0 0 12px ${color||'#fbbf24'},0 2px 8px rgba(0,0,0,.5);animation:spFloat 1s ease-out forwards`;
-    areaEl.appendChild(el);
-    setTimeout(()=>el.remove(),1100);
-  }
-
-  // ───────── CSS ─────────
-  function injectCSS() {
-    injectStyle('css-screw', `
-      .sp2-wrap{position:relative;width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:12px;will-change:transform;margin:0 auto}
-      .sp2-bar{display:flex;justify-content:space-between;align-items:center;width:100%;padding:0 4px}
-      .sp2-bar .sb-left{display:flex;align-items:center;gap:8px}
-      .sp2-bar .sb-lbl{font-size:13px;font-weight:800;color:#c084fc;letter-spacing:.5px}
-      .sp2-bar .sb-val{font-size:20px;font-weight:900;color:#fbbf24;transition:transform .15s}
-      .sp2-bar .sb-val.bump{animation:spBump .3s ease}
-      .sp2-bar .sb-hi{font-size:11px;color:#5d5d78;font-weight:600}
-      .sp2-undo{background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.3);color:#c084fc;font:700 12px/1 inherit;padding:7px 14px;border-radius:20px;cursor:pointer;transition:.2s;user-select:none}
-      .sp2-undo:active{transform:scale(.92);background:rgba(168,85,247,.3)}
-      .sp2-undo.off{opacity:.25;pointer-events:none}
-      .sp2-area{position:relative;width:100%;aspect-ratio:4/5;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.1));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 6px 30px rgba(0,0,0,.3);overflow:hidden}
-      .sp2-board{position:absolute;border-radius:12px;pointer-events:none;transition:transform .6s cubic-bezier(.4,0,.2,1),opacity .5s;overflow:visible}
-      .sp2-board-inner{position:absolute;inset:0;border-radius:12px;overflow:hidden}
-      .sp2-board .wood-grain{position:absolute;inset:0;border-radius:12px;opacity:.15;background:repeating-linear-gradient(95deg,transparent 0,transparent 4px,rgba(0,0,0,.03) 4px,rgba(0,0,0,.03) 6px)}
-      .sp2-board .wood-bevel{position:absolute;inset:0;border-radius:12px;box-shadow:inset 0 2px 0 rgba(255,255,255,.2),inset 0 -3px 0 rgba(0,0,0,.35),inset 2px 0 rgba(255,255,255,.1),inset -2px 0 rgba(0,0,0,.18)}
-      .sp2-board .wood-shadow{position:absolute;inset:-4px;border-radius:14px;z-index:-1;box-shadow:0 6px 20px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3)}
-      .sp2-board.shake{animation:spShake .35s ease}
-      .sp2-board.fall{transform:translateY(140%) rotate(12deg)!important;opacity:0!important;transition:transform .7s cubic-bezier(.4,0,.2,1),opacity .5s .2s}
-      .sp2-screw{position:absolute;border-radius:50%;cursor:pointer;z-index:50;transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .2s,filter .2s;user-select:none;-webkit-tap-highlight-color:transparent}
-      .sp2-screw .scr-body{width:100%;height:100%;border-radius:50%;position:relative;box-shadow:0 4px 10px rgba(0,0,0,.55),inset 0 -3px 5px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.3);overflow:hidden}
-      .sp2-screw .scr-shine{position:absolute;width:40%;height:40%;top:6%;left:10%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.6),transparent 70%)}
-      .sp2-screw .scr-cross{position:absolute;inset:0}
-      .sp2-screw .scr-cross::before,.sp2-screw .scr-cross::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);background:rgba(0,0,0,.3);border-radius:1px}
-      .sp2-screw .scr-cross::before{width:55%;height:12%}
-      .sp2-screw .scr-cross::after{width:12%;height:55%}
-      .sp2-screw .scr-rim{position:absolute;inset:3px;border-radius:50%;border:1.5px solid rgba(255,255,255,.18)}
-      .sp2-screw.active{animation:spPulse 1.5s ease infinite}
-      .sp2-screw.covered{opacity:.35;filter:saturate(.1) brightness(.45) grayscale(.5);transform:scale(.75);cursor:not-allowed;transition:all .5s}
-      .sp2-screw.covered::after{content:'🔒';position:absolute;top:-8px;right:-8px;font-size:13px;z-index:60;filter:brightness(1.5) drop-shadow(0 1px 3px rgba(0,0,0,.8))}
-      .sp2-screw.covered.deny{animation:spDeny .4s ease}
-      .sp2-screw.removing{animation:spUnscrew .5s cubic-bezier(.4,0,.2,1) forwards}
-      .sp2-screw:not(.covered):not(.removing):hover{transform:scale(1.08);filter:brightness(1.15)}
-      .sp2-screw:not(.covered):not(.removing):active{transform:scale(.85)}
-      .sp2-slots{display:flex;gap:8px;justify-content:center;padding:12px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);box-shadow:0 -2px 16px rgba(0,0,0,.15)}
-      .sp2-slot{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.03);border:2px dashed rgba(255,255,255,.08);display:grid;place-items:center;transition:.3s}
-      .sp2-slot.filled{border-style:solid;border-color:rgba(255,255,255,.15);background:rgba(255,255,255,.06)}
-      .sp2-slot .mini{width:36px;height:36px;border-radius:50%;position:relative;animation:spSlotIn .35s cubic-bezier(.34,1.56,.64,1);box-shadow:0 3px 8px rgba(0,0,0,.45),inset 0 -2px 4px rgba(0,0,0,.25);overflow:hidden}
-      .sp2-slot .mini .scr-shine{position:absolute;width:30%;height:30%;top:10%;left:12%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.45),transparent 70%)}
-      .sp2-slot .mini .scr-cross{position:absolute;inset:0}
-      .sp2-slot .mini .scr-cross::before,.sp2-slot .mini .scr-cross::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);background:rgba(0,0,0,.3);border-radius:1px}
-      .sp2-slot .mini .scr-cross::before{width:50%;height:10%}
-      .sp2-slot .mini .scr-cross::after{width:10%;height:50%}
-      .sp2-slot.clearing{animation:spClear .55s ease forwards}
-      .sp2-overlay{position:absolute;inset:0;z-index:300;display:grid;place-items:center;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);animation:spFadeIn .3s ease}
-      .sp2-overlay h2{font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 20px rgba(168,85,247,.5);text-align:center;line-height:1.6;animation:spPop .5s cubic-bezier(.34,1.56,.64,1)}
-      @keyframes spUnscrew{0%{transform:scale(1) rotate(0)}20%{transform:scale(.85) rotate(90deg)}100%{transform:scale(0) rotate(720deg);opacity:0}}
-      @keyframes spPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.15)}80%{transform:scale(.95)}100%{transform:scale(1);opacity:1}}
-      @keyframes spSlotIn{0%{transform:scale(0) translateY(-20px);opacity:0}60%{transform:scale(1.15) translateY(2px)}100%{transform:scale(1) translateY(0);opacity:1}}
-      @keyframes spClear{0%{transform:scale(1);filter:brightness(1)}30%{transform:scale(1.3);filter:brightness(2.5) drop-shadow(0 0 12px #fbbf24)}100%{transform:scale(0);opacity:0;filter:brightness(3)}}
-      @keyframes spShake{0%,100%{transform:translateX(0)}15%{transform:translateX(-5px) rotate(-1deg)}35%{transform:translateX(5px) rotate(1deg)}55%{transform:translateX(-3px) rotate(-.5deg)}75%{transform:translateX(3px) rotate(.5deg)}}
-      @keyframes spPart{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--px),var(--py)) scale(0);opacity:0}}
-      @keyframes spFloat{0%{transform:translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translateY(-55px) scale(1.3);opacity:0}}
-      @keyframes spBump{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
-      @keyframes spFadeIn{from{opacity:0}to{opacity:1}}
-      @keyframes spGlow{0%{box-shadow:0 0 0 rgba(168,85,247,0)}50%{box-shadow:0 0 20px rgba(168,85,247,.4)}100%{box-shadow:0 0 0 rgba(168,85,247,0)}}
-      @keyframes spPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}50%{box-shadow:0 0 0 6px rgba(255,255,255,.12)}}
-      @keyframes spDeny{0%,100%{transform:scale(.75) translateX(0)}20%{transform:scale(.75) translateX(-5px)}40%{transform:scale(.75) translateX(5px)}60%{transform:scale(.75) translateX(-3px)}80%{transform:scale(.75) translateX(3px)}}
-      .sp2-slots.glow{animation:spGlow .5s ease}
-      .sp2-hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:11px;color:rgba(255,255,255,.25);pointer-events:none}
-    `);
-  }
-
-  // ───────── COVERED CHECK ─────────
-  function isCovered(sc) {
-    const my = boards[sc.bi];
-    for (let i = sc.bi + 1; i < boards.length; i++) {
-      if (boards[i].removed) continue;
-      const b = boards[i];
-      const overlapX = my.x < b.x + b.w && my.x + my.w > b.x;
-      const overlapY = my.y < b.y + b.h && my.y + my.h > b.y;
-      if (overlapX && overlapY) return true;
-    }
-    return false;
-  }
-
-  // ───────── LOAD LEVEL ─────────
-  function loadLevel(lv) {
-    const data = LEVELS[lv]; if (!data) return;
-    // Tur = SEVİYE. init() de, seviye ilerlemesi de buradan geçiyor, yani
-    // tek enjeksiyon iki yolu birden kapsıyor.
-    gameEvent('game_started', { gameId: 'screwPuzzle' });
-    score = 0; slots = []; undoStack = []; undoUsed = false; animating = false;
-    boards = data.boards.map((b,i) => ({...b, idx:i, removed:false, sids:[]}));
-    screws = [];
-    let sid = 0;
-    boards.forEach((b,bi) => {
-      b.screws.forEach(s => {
-        screws.push({id:sid++, bi, color:s.c, px:b.x+s.rx*b.w, py:b.y+s.ry*b.h, removed:false});
-        boards[bi].sids.push(sid-1);
-      });
-    });
-    render();
-  }
-
-  // ───────── RENDER ─────────
-  function render() {
-    wrapEl.innerHTML = '';
-
-    // Score bar
-    const bar = document.createElement('div'); bar.className = 'sp2-bar';
-    bar.innerHTML = `
-      <div class="sb-left">
-        <span class="sb-lbl">🔩 Seviye ${level+1}</span>
-        <span class="sb-hi">/ ${LEVELS.length}</span>
-      </div>
-      <span class="sb-val" id="sp-score">⭐ ${score}</span>`;
-    const ub = document.createElement('button');
-    ub.className = 'sp2-undo' + (undoUsed||!undoStack.length?' off':'');
-    ub.textContent = '↩ Geri Al';
-    if(!undoUsed&&undoStack.length) addEv(ub,'click',doUndo);
-    bar.appendChild(ub);
-    wrapEl.appendChild(bar);
-
-    // Game area
-    areaEl = document.createElement('div'); areaEl.className = 'sp2-area';
-    wrapEl.appendChild(areaEl);
-
-    // Boards — alttakiler daha karanlık
-    const totalBoards = boards.filter(b=>!b.removed).length;
-    boards.forEach((b,i) => {
-      if(b.removed) return;
-      const el = document.createElement('div'); el.className = 'sp2-board';
-      const w = WOOD[i%WOOD.length];
-      // Derinlik: alttaki tahtalar daha koyu, üsttekiler daha parlak
-      const depthFactor = 0.6 + (i / Math.max(boards.length-1,1)) * 0.4;
-      el.style.cssText = `left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%;background:linear-gradient(145deg,${w.l},${w.f},${w.d});z-index:${5+i};border:1px solid ${w.d};filter:brightness(${depthFactor.toFixed(2)})`;
-      el.innerHTML = '<div class="wood-shadow"></div><div class="board-inner"><div class="wood-grain"></div><div class="wood-bevel"></div></div>';
-      el.dataset.bi = i;
-      areaEl.appendChild(el);
-    });
-
-    // Screws
-    screws.forEach(s => {
-      if(s.removed) return;
-      const cov = isCovered(s);
-      const el = document.createElement('div');
-      el.className = 'sp2-screw' + (cov ? ' covered' : ' active');
-      const sz = SCR_SZ;
-      el.style.cssText = `left:calc(${s.px}% - ${sz/2}px);top:calc(${s.py}% - ${sz/2}px);width:${sz}px;height:${sz}px;z-index:${50+s.bi}`;
-      const c = PAL[s.color];
-      el.innerHTML = `<div class="scr-body" style="background:radial-gradient(circle at 30% 30%,${c.l},${c.f} 60%,${c.f}aa)"><div class="scr-shine"></div><div class="scr-cross"></div><div class="scr-rim"></div></div>`;
-      el.dataset.sid = s.id;
-      if(!cov) addEv(el,'click',()=>tapScrew(s.id));
-      else addEv(el,'click',()=>denyScrew(el));
-      areaEl.appendChild(el);
-    });
-
-    // Hint
-    if(level === 0 && screws.some(s=>!s.removed&&isCovered(s))) {
-      const hint = document.createElement('div');
-      hint.className = 'sp2-hint';
-      hint.textContent = '💡 Üstteki tahtanın vidalarını önce çıkar!';
-      areaEl.appendChild(hint);
-    }
-
-    // Slots
-    slotsEl = document.createElement('div'); slotsEl.className = 'sp2-slots';
-    for(let i=0;i<MAX_SLOTS;i++) {
-      const d = document.createElement('div');
-      d.className = 'sp2-slot'+(slots[i]!==undefined?' filled':'');
-      if(slots[i]!==undefined) {
-        const c = PAL[slots[i]];
-        const m = document.createElement('div'); m.className = 'mini';
-        m.style.background = `radial-gradient(circle at 30% 30%,${c.l},${c.f})`;
-        m.innerHTML = '<div class="scr-shine"></div><div class="scr-cross"></div>';
-        d.appendChild(m);
-      }
-      slotsEl.appendChild(d);
-    }
-    wrapEl.appendChild(slotsEl);
-  }
-
-  // ───────── KİLİTLİ VİDA ─────────
-  function denyScrew(el) {
-    el.classList.remove('deny');
-    void el.offsetWidth;
-    el.classList.add('deny');
-    GameAudio.play('error');
-    GameAudio.haptic(5);
-  }
-
-  // ───────── TAP SCREW ─────────
-  function tapScrew(sid) {
-    if(animating) return;
-    const s = screws.find(x=>x.id===sid);
-    if(!s||s.removed||isCovered(s)) return;
-    if(slots.length>=MAX_SLOTS) return;
-    animating = true;
-    haptic(15);
-    snd('unscrew');
-
-    undoStack.push({sid:s.id, bi:s.bi, col:s.color, ss:[...slots]});
-    s.removed = true;
-    score += 10; updateGameScore(score);
-    bumpScore();
-
-    const el = areaEl.querySelector(`[data-sid="${sid}"]`);
-    if(el) el.classList.add('removing');
-
-    slots.push(s.color);
-
-    // Board clear check
-    const bd = boards[s.bi];
-    if(bd.sids.every(id=>screws.find(x=>x.id===id).removed) && !bd.removed) {
-      bd.removed = true;
-      score += 100; updateGameScore(score);
-      snd('board');
-      haptic(30);
-      const be = areaEl.querySelector(`[data-bi="${s.bi}"]`);
-      if(be) {
-        be.classList.add('shake');
-        setTimeout(()=>be.classList.add('fall'),350);
-      }
-      const bRect = areaEl.getBoundingClientRect();
-      const cx = bRect.width*(bd.x+bd.w/2)/100;
-      const cy = bRect.height*(bd.y+bd.h/2)/100;
-      floatText('+100 🪵',cx-30,cy-10,'#fbbf24',true);
-      particles(cx,cy,WOOD[bd.idx%WOOD.length].l,12);
-      screenShake(4,300);
-    }
-
-    setTimeout(()=>chk3(()=>{animating=false;render();checkEnd();}),550);
-  }
-
-  function bumpScore() {
-    const el = document.getElementById('sp-score');
-    if(el){el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump');}
-  }
-
-  // ───────── 3 MATCH ─────────
-  function chk3(cb) {
-    const cc = {};
-    slots.forEach(c => {cc[c]=(cc[c]||0)+1;});
-    let mc = -1;
-    for(const c in cc) {if(cc[c]>=3){mc=parseInt(c);break;}}
-    if(mc >= 0) {
-      score += 50; updateGameScore(score);
-      snd('match');
-      haptic(25);
-
-      const bRect = areaEl.getBoundingClientRect();
-      const cx = bRect.width/2, cy = bRect.height*.85;
-      floatText('+50 ✨',cx-15,cy-30,'#fbbf24');
-      particles(cx,cy,PAL[mc].l,14);
-      screenShake(2,200);
-
-      slotsEl.classList.remove('glow');
-      void slotsEl.offsetWidth;
-      slotsEl.classList.add('glow');
-
-      let rm=0; const ns=[];
-      for(let i=0;i<slots.length;i++){
-        if(slots[i]===mc&&rm<3) rm++; else ns.push(slots[i]);
-      }
-      setTimeout(()=>{slots=ns;chk3(cb);},550);
-    } else {if(cb)cb();}
-  }
-
-  // ───────── UNDO ─────────
-  function doUndo() {
-    if(undoUsed||!undoStack.length||animating) return;
-    undoUsed = true; haptic(10);
-    const u = undoStack.pop();
-    const s = screws.find(x=>x.id===u.sid);
-    if(s) {
-      s.removed = false;
-      const bd = boards[s.bi];
-      if(bd.removed && !bd.sids.every(id=>screws.find(x=>x.id===id).removed)) bd.removed=false;
-    }
-    slots = u.ss; score = Math.max(0,score-10); updateGameScore(score);
-    render();
-  }
-
-  // ───────── WIN/LOSE ─────────
-  function checkEnd() {
-    if(screws.every(s=>s.removed)) {
-      const empty = MAX_SLOTS - slots.length;
-      const bonus = 200 + empty*30;
-      score += bonus; updateGameScore(score);
-      // Seviye tamamlandı = tur kazanıldı. Son seviyede kutu açılıyor, ara
-      // seviyelerde loadLevel yeni tur başlatıyor; olay her ikisinde de aynı.
-      gameEvent('game_ended', { gameId: 'screwPuzzle', result: 'won', score });
-      snd('win'); haptic([50,30,50]);
-      const nxt = level + 1;
-      if(nxt < LEVELS.length) localStorage.setItem('ph_screw_level',nxt.toString());
-      setTimeout(()=>{
-        if(nxt>=LEVELS.length) {
-          showGameOver(true,'Oyun Tamamlandı','Tüm bölümleri bitirdin.',{
-            accent:'var(--ph-jewel-7-shadow)',accentLight:'var(--ph-jewel-7-highlight)',accentGlow:'var(--ph-jewel-7-glow)',
-            mark:'✦',
-            stats:[
-              {label:'Skor',value:score.toLocaleString()},
-              {label:'Bölüm',value:(level+1)},
-            ],
-          });
-        } else {
-          const ov = document.createElement('div'); ov.className='sp2-overlay';
-          ov.innerHTML=`<h2>✅ Seviye ${level+1} Tamam!<br><span style="font-size:18px;color:#fbbf24">+${bonus} bonus</span></h2>`;
-          areaEl.appendChild(ov);
-          screenShake(5,350);
-          setTimeout(()=>{ov.remove();level=nxt;loadLevel(level);},2000);
-        }
-      },400);
-      return;
-    }
-    if(slots.length>=MAX_SLOTS) {
-      const cc={}; slots.forEach(c=>{cc[c]=(cc[c]||0)+1;});
-      if(!Object.values(cc).some(v=>v>=3)) {
-        gameEvent('game_ended', { gameId: 'screwPuzzle', result: 'lost', score });
-        snd('lose'); haptic(100);
-        setTimeout(()=>showGameOver(false,'Slotlar Doldu','Boş slot kalmadı.',{
-          accent:'var(--ph-jewel-7-shadow)',accentLight:'var(--ph-jewel-7-highlight)',accentGlow:'var(--ph-jewel-7-glow)',
-          mark:'✧',
-          stats:[
-            {label:'Skor',value:score.toLocaleString()},
-            {label:'Bölüm',value:(level+1)},
-          ],
-        }),300);
-      }
-    }
-  }
-
-  // ───────── INIT ─────────
-  function init(c) {
-    container = c;
-    level = parseInt(localStorage.getItem('ph_screw_level')||'0',10);
-    if(level>=LEVELS.length) level=0;
-    injectCSS();
-    wrapEl = document.createElement('div'); wrapEl.className='sp2-wrap';
-    container.appendChild(wrapEl);
-    loadLevel(level);
-  }
-
-  function cleanup() { clearEvs(); animating=false; }
-  return {init,cleanup};
-})();
-
-// ╔══════════════════════════════════════╗
 // ║   8. İKSİR SIRALAMA (WATER SORT)     ║
 // ╚══════════════════════════════════════╝
 PuzzleGames.waterSort = (() => {
@@ -11007,7 +10441,7 @@ PuzzleGames.snakeGame = (() => {
     newGame();
     ensureLayout();
 
-    // Kaydırma: paylaşımlı phSwipe (2048 ve Labirent'in de kullandığı).
+    // Kaydırma: paylaşımlı phSwipe (2048'in de kullandığı).
     // Ayrı bir dokunuş matematiği yazmak, eksen kilidi ve fiske eşiği gibi
     // çözülmüş sorunları yeniden çözmek olurdu.
     phSwipe(container, (d) => {
@@ -12471,4 +11905,1271 @@ PuzzleGames.flappyUfo = (() => {
   // Skor sahnenin kendi içinde (tasarımda arenanın üstünde), bu yüzden
   // kabuğun SKOR kapsülü gizleniyor — aynı sayı iki yerde durmamalı.
   return { init, cleanup, ownsScoreDisplay: true };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AKIŞ BAĞLANTI (Flow Connect) — 2026-08-09
+// ═══════════════════════════════════════════════════════════════════════
+// Aynı renkteki iki noktayı ızgara üzerinden birleştir; yollar kesişemez
+// ve TAHTANIN TAMAMI dolmadan seviye bitmez.
+//
+// Bu oyun bir yeniden yazım DEĞİL, sıfırdan yazım. Öncesinde yalnızca
+// Keşfet kartında bir animasyon vardı (`MiniDemos.demo_flowConnect`) —
+// oyun modülü hiç yoktu, `REEL_GAMES`'te `playable:false` duruyordu ve
+// app.js'in `PUZZLE_GAMES`/`GAME_MAP` kayıtlarında hiç görünmüyordu.
+//
+// ── KAYBETME DURUMU YOK, VE BU BİR EKSİKLİK DEĞİL ──
+// Hamle sayacı ve yıldız var ama hamle bitince kaybetme yok: yıldız
+// yalnızca VERİMLİLİĞİ ölçer. Gerekçe platform ilkesi — oyuncu istediği
+// kadar düşünebilmeli. Su Sıralama'ya kaybetme durumu eklenmişti ama
+// oradaki gerekçe ölçülmüş bir hamle optimumuydu; burada öyle bir
+// gerekçe yok, dolayısıyla "devam et" ekonomisi de yok.
+//
+// ── PERFORMANS DURUŞU (docs/04 + docs/03) ──
+//  • Tuval, uygulamadan ÖNCE seçildi (politikanın çekirdek kuralı):
+//    tahta bir bütün olarak yeniden çiziliyor ve parmak sürüklerken
+//    sürekli değişiyor. 9x9'da 81 hücrelik bir DOM ağacını her harekette
+//    yeniden düzenlemek, Blok Puzzle'da ÖLÇÜLMÜŞ olan compositing
+//    tuzağının aynısı olurdu.
+//  • pointermove İÇİNDE ÇİZİM YOK — hareket yalnızca durumu değiştirip
+//    requestPaint() çağırır, çizim karede bir kez rAF'ta olur. (Blok
+//    Puzzle'ın birinci kuralı.)
+//  • rAF döngüsü YALNIZCA canlı bir nabız/parlama varken çalışır ve
+//    biter bitmez durur; boşta maliyet sıfır.
+//  • Canlı shadowBlur/filter YOK. Yolların "parlaması" altına çizilen
+//    daha geniş ve saydam bir konturdan geliyor — iki drawImage değil,
+//    iki stroke; gölge süzgeci ise kare başına ödenirdi.
+PuzzleGames.flowConnect = (() => {
+  // Yalnızca rekor/ilerleme anahtarı için. gameEvent() çağrılarında
+  // BİLEREK kullanılmıyor: tools/game-events-test.js kaynağı tarayıp her
+  // çağrının id'sini içinde bulunduğu oyunla karşılaştırıyor ve bir
+  // değişkeni çözemez (bkz. snakeGame'deki aynı not).
+  const GID = 'flowConnect';
+  const LV_KEY = 'ph_flow_level';
+
+  // ═══════════ PALET ═══════════
+  // Dokuz renk, çünkü en zor bant 9 renk kullanıyor. Tasarım görselinin
+  // şeker tonları (pembe, fıstık yeşili, mor, mavi, deniz yeşili) çekirdek
+  // beşliyi oluşturuyor; kalan dördü aynı doygunluk/parlaklık ailesinden
+  // seçildi ki hiçbiri diğerinin önüne geçmesin.
+  //
+  // Canvas renkleri CSS token'ı okuyamaz (CLAUDE.md §5 palet notu), o
+  // yüzden burada yazılı. `deep` uçların dış halkası ve yolun alt gölgesi,
+  // `soft` ise geniş/saydam parıltı konturu.
+  const PALETTE = [
+    { base: '#ff5fa2', deep: '#c81e63', soft: 'rgba(255,95,162,.30)' },  // pembe
+    { base: '#8fd633', deep: '#4e8f10', soft: 'rgba(143,214,51,.30)' },  // fıstık
+    { base: '#a855f7', deep: '#6d28d9', soft: 'rgba(168,85,247,.30)' },  // mor
+    { base: '#3f9bff', deep: '#1b5fc4', soft: 'rgba(63,155,255,.30)' },  // mavi
+    { base: '#2ed3a7', deep: '#0d8f6e', soft: 'rgba(46,211,167,.30)' },  // deniz
+    { base: '#ffa23a', deep: '#c96a05', soft: 'rgba(255,162,58,.30)' },  // turuncu
+    { base: '#ffd23a', deep: '#c99700', soft: 'rgba(255,210,58,.30)' },  // sarı
+    { base: '#ff5c5c', deep: '#c01f1f', soft: 'rgba(255,92,92,.30)' },   // kırmızı
+    { base: '#22c9e8', deep: '#0b8fa8', soft: 'rgba(34,201,232,.30)' },  // camgöbeği
+  ];
+
+  // ═══════════ SEVİYELER ═══════════
+  // Biçim: "SÜTUNxSATIR|rc<yönler>,..." (R sağ, L sol, D aşağı, U yukarı).
+  //
+  // TAHTA DİKEY DİKDÖRTGEN, KARE DEĞİL (2026-08-09, sahibin isteği:
+  // "oyun alanını boyuna uzat"). Kare tahta telefonda GENİŞLİĞE dayanıp
+  // dikeyde ~200 px boş bırakıyordu ve büyüyemiyordu — kare bir ızgara
+  // ancak genişleyerek uzayabilir. Satır/sütun oranı ekrandan çıkarıldı:
+  // kullanılabilir alan ~362x548 px, yani 548/362 ≈ 1.51. Bu orandaki
+  // tahtalar iki ekseni de dolduruyor (6x9 → 60 px hücre, 360x540 px;
+  // 8x12 → 45 px hücre, 360x540 px).
+  // Motor W ve H'yi zaten ayrı taşıyordu; kare olan yalnızca VERİYDİ.
+  // Dizgi ÇÖZÜMÜ saklar; oyuncunun gördüğü uç noktalar ondan TÜRETİLİR
+  // (her yolun ilk ve son hücresi). Üç kazancı var:
+  //  1. İpucu mümkün — doğru rota zaten elimizde, cihazda çözücü
+  //     çalıştırmak gerekmiyor,
+  //  2. tools/flow-levels-test.js hem saklanan çözümü (bitişiklik,
+  //     çakışmama, tam kaplama) hem de uçlardan BAĞIMSIZ aramayla
+  //     çözülebilirliği ayrı ayrı sınayabiliyor,
+  //  3. yön harfi hücre başına 1 bayt — 70 seviye ≈ 4.5 KB.
+  //
+  // ÜRETİM YÖNTEMİ (tools/flow-levels-test.js --gen): önce tahtayı
+  // tamamen kaplayan rastgele bir Hamilton yolu üretilir (backbite
+  // karıştırması), sonra K parçaya kesilir. Her parça bir rengin yolu.
+  // Tam kaplama ve çözülebilirlik böylece YAPISAL garanti olur; rastgele
+  // uç atıp "acaba çözülür mü" diye ummak değil.
+  //
+  // ZORLUK, tahta boyutuna göre DEĞİL ölçülen bir skora göre sıralandı
+  // (yol uzunluğu, dönüş sayısı, gerçek yol/kuş uçuşu oranı, uçların
+  // kenarda mı içeride mi olduğu, en uzun yolun tahtayı yeme oranı,
+  // çözüm sayısının logaritması). Ölçülen onluk blok ortalamaları:
+  // ZORLUK ÖLÇÜTÜ AÇGÖZLÜ OYUNCUNUN BAŞARI ORANI: her rengi gördüğü
+  // sırayla EN KISA yoldan bağlayan acemi oyuncu tahtayı kaç denemede
+  // çözüyor? Oyunun bitiş kuralı "bütün çiftler bağlı" olduğuna göre
+  // zorluk budur; tam kaplamalı çözümün ne kadar dolambaçlı olduğu
+  // oyuncuya dokunmuyor.
+  // Ölçülen onluk blok ortalamaları (KOLAYLIK, yani düşmeli):
+  // %93 → %63 → %44 → %31 → %19 → %10 → %3.
+  // 4x6/4 renkten 8x12/9 renge.
+  //
+  // İlk üç seviye ELDE yazıldı, üretilmedi: üreteç iyi tahta yapar ama
+  // ÖĞRETEMEZ. Hangi fikrin hangi sırada tanıtıldığı bir tasarım kararı
+  // (Ok Bulmaca'daki HAND_LEVELS ile aynı gerekçe).
+  // Üretildi: tools/flow-levels-test.js --gen --seed=20260809
+  const LEVELS = [
+    // ── Öğretici — 4x6, 4 renk
+    '4x6|00RRR,10RRR,20DRURDRU,40DRURDRU',   //  1  açgözlü %100  (hedef %100)  çözüm 3
+    '4x6|00RRRDL,10RDLDR,22RDLDR,41LDRRR',   //  2  açgözlü %100  (hedef %100)  çözüm 1
+    '4x6|00DDDDDRU,01RRDLLDD,22RDLDRDL',   //  3  açgözlü %100  (hedef %100)  çözüm 2
+    // ── Başlangıç — 4x6, 4 renk
+    '4x6|31RU,21UULDDDDDRUR,52RUUUU,03LD',   //  4  açgözlü %100  (hedef %100)  çözüm 2
+    '4x6|22RUULDLUL,10DRDL,40DRURDR,43UL',   //  5  açgözlü %100  (hedef %97)  çözüm 1
+    '4x6|21URDDL,30UUURR,03DDDDDLU,41DLU',   //  6  açgözlü %100  (hedef %93)  çözüm 3
+    '4x6|41DLUU,31UURDDD,52RUU,23UULLLDD',   //  7  açgözlü %100  (hedef %90)  çözüm 6
+    '4x6|52RUUUUUL,12LUL,10DDRUR,32DLDLU',   //  8  açgözlü % 79  (hedef %87)  çözüm 1
+    '4x6|12LD,22RUULLLDDDDDRUR,52RU,33LL',   //  9  açgözlü % 78  (hedef %83)  çözüm 2
+    '4x6|50RUL,30UUURRRD,12DRDDDLUU,31UU',   // 10  açgözlü % 75  (hedef %80)  çözüm 3
+    // ── Kolay — 5x8, 4 renk
+    '5x8|02RRDLL,11ULDDRRDRURDDD,53ULL,31LDDDDRUURDDRRUL',   // 11  açgözlü % 75  (hedef %75)  çözüm 32
+    '5x8|74UUUUUU,04LLLLDRDLDDDDDRUU,41URU,12RDDDLDRDDLU',   // 12  açgözlü % 72  (hedef %72)  çözüm 2
+    '5x8|73RUU,53LUUUR,33DRUUUULDLULLDRDLD,31DLDRDLDRRUR',   // 13  açgözlü % 69  (hedef %69)  çözüm 9
+    '5x8|61LDRRUUURDD,73RUUUUUUULD,23DLLDDLU,30URRUULLDR',   // 14  açgözlü % 66  (hedef %66)  çözüm 64
+    '5x8|32UURDDRUUULLLLDRDLD,31DDD,62UURR,54LDRDLLLLUUU',   // 15  açgözlü % 64  (hedef %64)  çözüm 60
+    '5x8|12DDLDRDLD,62RUUUURDDD,64DLLLLUUUUURULU,01RRRDL',   // 16  açgözlü % 61  (hedef %61)  çözüm 48
+    '5x8|14ULLLLDDDRDLDD,70RUURU,32ULU,12RDRDLDDDLDRRUUU',   // 17  açgözlü % 58  (hedef %58)  çözüm 8
+    '5x8|20RULURRR,04DDDDDDDLUL,72LLURULURRDR,43UUULDDLL',   // 18  açgözlü % 55  (hedef %55)  çözüm 14
+    // ── Kolay+ — 5x8, 5 renk
+    '5x8|63LLURRUURD,54DDLLLLUU,40UU,10URRDRURDDL,22DDLUUU',   // 19  açgözlü % 55  (hedef %55)  çözüm 54
+    '5x8|00DD,30DDD,70RUU,52RULLUUUURRRDLL,22DRURDDDDLLDRR',   // 20  açgözlü % 53  (hedef %53)  çözüm 51
+    '5x8|42LLUR,32UULDLUURRRRD,13DRDL,43RD,53LLLDDRURDRRUL',   // 21  açgözlü % 51  (hedef %51)  çözüm 16
+    '5x8|63LUUURRDLD,54DDLLLLU,61ULURULU,21ULUR,02DDRRULUR',   // 22  açgözlü % 49  (hedef %49)  çözüm 64
+    '5x8|21URDR,24DDDDD,73LUR,53UULD,52LDDLUUURULUUURRRRDL',   // 23  açgözlü % 48  (hedef %48)  çözüm 24
+    '5x8|50DDRRRR,64UULLD,53DLL,51ULU,20RULURRDDRUURDDDLLL',   // 24  açgözlü % 46  (hedef %46)  çözüm 35
+    '5x8|63DRUUUUUUULDLULLDR,21LDDDDDRR,62LU,52RUUUL,32LDR',   // 25  açgözlü % 44  (hedef %44)  çözüm 4
+    '5x8|74LLL,70UURDRUUULDLUURR,23UL,11LURRRRD,24DLDDDRUU',   // 26  açgözlü % 42  (hedef %42)  çözüm 64
+    // ── Orta — 6x9, 5 renk
+    '6x9|83RRUUUUUUUULLLLLDDRR,32DRDLL,41ULDDDD,80RRULURRDR,64UUULURULLL',   // 27  açgözlü % 42  (hedef %42)  çözüm 28
+    '6x9|34LLLDDDDRURRRU,54LLURRRUU,24URULLDD,22UULLDRDLDDDDDDRRRR,85ULL',   // 28  açgözlü % 41  (hedef %41)  çözüm 64
+    '6x9|14URDDLLDRRDD,65LLDRRDLLL,81LURRUUL,61LUURULURULURRRD,12DDDRDRU',   // 29  açgözlü % 39  (hedef %39)  çözüm 64
+    '6x9|05LLD,14RDDLULLLURULLDDDRDLDDDDRUURRDLDRRR,75LUR,55ULDL,43ULDDL',   // 30  açgözlü % 38  (hedef %38)  çözüm 64
+    '6x9|43UUL,12LDDRD,41DRRRRDDDLUULLLDRRDLLLUU,50UUUUURRRRRDDDD,44UUUL',   // 31  açgözlü % 36  (hedef %36)  çözüm 37
+    '6x9|80UURU,50URURDDDDLDRRUU,53UURDDDDDRUUUUUULL,22LURRRRULL,02LLDDD',   // 32  açgözlü % 35  (hedef %35)  çözüm 64
+    '6x9|64UUULDLUURR,14LLLDD,41DRRDLDLLDRRRURDRUUUUUUUULL,02LLDDD,40DDR',   // 33  açgözlü % 34  (hedef %33)  çözüm 64
+    '6x9|33RUULDLLLU,00RDRURRRDDDDLLLULLDRD,50DRRURD,64URDDDLLL,81LURRRR',   // 34  açgözlü % 32  (hedef %32)  çözüm 64
+    // ── Orta+ — 6x9, 6 renk
+    '6x9|72RRUUU,34LDDDLU,42UULDLU,10URDRURRRDLLDRRDDDDDDLLLL,80URUUU,40DD',   // 35  açgözlü % 32  (hedef %32)  çözüm 63
+    '6x9|82ULDLUUUURD,61RURDRDLDRRUUU,54UR,35ULURULLLLLDDDR,21URRDLDD,43UR',   // 36  açgözlü % 31  (hedef %31)  çözüm 64
+    '6x9|45UU,15ULDDLDRDLLD,51UURULURRU,02LLDDDDDDDDRUURDD,83URDRUU,55LLDR',   // 37  açgözlü % 29  (hedef %29)  çözüm 64
+    '6x9|01LDDDDDRURRRD,64DLUULDL,60DDRURDRRRUUUU,35LLLLU,22RURD,25UULLLDL',   // 38  açgözlü % 28  (hedef %28)  çözüm 58
+    '6x9|54RULURULU,15ULLLDRDD,43LULDD,52RDDRU,65DDLLLLLUR,72ULLUUUUUURDDR',   // 39  açgözlü % 26  (hedef %26)  çözüm 16
+    '6x9|02LLDRRDRDRUULURRDDD,45LLD,52DRDRUU,55DDDLLLULDLUURULUR,42UL,30UR',   // 40  açgözlü % 25  (hedef %25)  çözüm 64
+    '6x9|00RRRRRDLDRDD,44ULLURULLLDRDLDRDLDDDRRRUURD,84RUUU,54LU,42DD,72LU',   // 41  açgözlü % 24  (hedef %23)  çözüm 64
+    '6x9|11RRU,02LLDDRDLDDDDDRU,61RUL,41RRDDRDL,72DRRRUUUUUUUULD,24LLDRRDD',   // 42  açgözlü % 22  (hedef %22)  çözüm 64
+    // ── İleri — 7x10, 6 renk
+    '7x10|22LDRRDLLDDDDRRULUURDR,65RUUUUUU,05DDDDDLU,34ULURULLDLULDDDDDDD,80DRRRRRULU,75RDD',   // 43  açgözlü % 22  (hedef %22)  çözüm 64
+    '7x10|32DDRUR,54RRUL,35RULURULLLLDRRDDLULLDDDDR,63RDLLD,83RRUURDDDLLLLLLUR,71LUUUUUURUL',   // 44  açgözlü % 21  (hedef %21)  çözüm 64
+    '7x10|61UURR,44ULLLLDDDDR,81LDRRURDRURDRU,76ULDLUL,73LUURRRRUL,35RUUULDDLUULLDLULDDRRRU',   // 45  açgözlü % 20  (hedef %20)  çözüm 64
+    '7x10|81RRRRU,74LLLURRRRUUULDDLLURUL,22ULURRDDRUURRD,15DRDDDDDDDL,94LLLLUUUURUL,30RULUU',   // 46  açgözlü % 19  (hedef %19)  çözüm 64
+    '7x10|31DRUUURDD,43RUUURDDDDRUUUUULLLLLLDR,21LDDDDR,51RRRDRRDDDLL,93LLL,80URDRRRRULLLUR',   // 47  açgözlü % 17  (hedef %17)  çözüm 64
+    '7x10|72RRRUULDLULDLUURRRRULUULLLLU,01RRRRRDLD,26DDDDDDDL,85LDLUL,92LLU,81ULUUUUURDRURD',   // 48  açgözlü % 16  (hedef %16)  çözüm 64
+    '7x10|74LDRRURDDLLLL,82ULDDLUUURRU,53DRUURDDRUUUUUULDLULD,12ULDD,31RURRR,35LLDLLDLUUUUU',   // 49  açgözlü % 15  (hedef %15)  çözüm 64
+    '7x10|61UUUUURRRRRUL,04LLLLDDDDDDD,71DLD,91RRRURDRUUUUU,36ULLDRDLLUU,22DDDRDLDDRURRUULD',   // 50  açgözlü % 14  (hedef %14)  çözüm 64
+    // ── Zor — 7x11, 8 renk
+    '7x11|00DDRUURDDDLL,40RRR,33RDDLL,62RDLLUUL,60DDDDRRRULLURRRUURD,85DLDR,a6UUUUUUUUUULLLDD,24URDDDD',   // 51  açgözlü % 14  (hedef %14)  çözüm 64
+    '7x11|95ULURUR,76DDDLLULDLLLUUUU,50UU,20UURR,12LDRDR,23RULURRRDLDRDDDLUULDD,64LLDR,83LDLUUUURRULLU',   // 52  açgözlü % 13  (hedef %13)  çözüm 64
+    '7x11|35UULURRDDDDDLULDLUURU,23UULLLDRRDDDDDRRRRDLDRDDLU,94DLL,92UL,91DL,90UUUUUU,20RDD,51DDRRRDLD',   // 53  açgözlü % 12  (hedef %12)  çözüm 64
+    '7x11|02DDRUURRRDDDL,25ULDDLDRR,46DDLDRDLDR,a6LLLLLLUUUUU,51ULUUUURDD,31RDD,53DDLULDDDRURDRU,74UUR',   // 54  açgözlü % 11  (hedef %11)  çözüm 64
+    '7x11|55RDDDDDLUUL,74RULLDD,93RDLLLLURRUULDLUURR,52LLUUUUURDRUR,13DRRU,14URRDDDDLULDDLU,42LUU,22DR',   // 55  açgözlü % 10  (hedef %10)  çözüm 64
+    '7x11|84DRUURDDDLLLUULD,a2LLU,91ULU,60RDRRRUURDRUULLURRULURULLDDL,22LURRUL,01LDDDRDL,50RRDR,53UULD',   // 56  açgözlü %  9  (hedef %9)  çözüm 64
+    '7x11|26UULLDLULD,22RDLLUUULDDDDRDLDRDLD,81DLDRRRR,94LLUUUR,73DRUURDD,95DRUUU,66UUULDDLLLUR,44UURU',   // 57  açgözlü %  8  (hedef %8)  çözüm 64
+    '7x11|73RRUUUURDDDD,86DDLLURULLDDL,a1LUUURD,91RUUULLUURULURR,32DR,33UUL,11LURRRRRRDDLULDDDDDL,53LL',   // 58  açgözlü %  7  (hedef %7)  çözüm 64
+    // ── Uzman — 8x12, 9 renk
+    '8x12|25RRDDDDDLU,56UULD,55DDDRRD,a7DLUULDDLUU,84LDLLDRRDLLLUU,80URDRURRULURUUUURRRULL,04LLLLDRDLD,40RURUURDDDLDDL,60UR',   // 59  açgözlü %  7  (hedef %7)  çözüm 64
+    '8x12|b7LLULDLUULLDRDLLUUURRUUR,64DLDRD,95RDRUULLURRUULDLUURRU,27UULDDDLUUULLLD,13RDD,44LUULLUULDDDD,50DD,71UUUURD,52RR',   // 60  açgözlü %  6  (hedef %6)  çözüm 64
+    '8x12|66DDDD,b6RUUUUUUUL,56LDDDDDDL,a4LDLUURRULLLDDDLUUU,70RRRRUUURURRULURUL,05DDLD,33DLDRDLL,60URULU,20RDRURURULLLLDRR',   // 61  açgözlü %  6  (hedef %6)  çözüm 64
+    '8x12|93DRURRULLLUU,53ULDDDDLULDDDD,b1UUR,a2DRRRURDRUUUULURUUUU,17ULDDDDDLDDLU,54URUUUULDD,34LU,13ULDDDLDD,61LUUUURUULD',   // 62  açgözlü %  5  (hedef %5)  çözüm 64
+    '8x12|a4LL,a1LDRRRRRUR,b6RUUUUUUULDL,54DRRDLDRDLLLL,91LURRRRULLLLURRRULLLUUUUU,01RD,11DDDRRRRUU,24URRDDRUUUL,05LLDDLDRR',   // 63  açgözlü %  4  (hedef %4)  çözüm 64
+    '8x12|91DRRRURRU,85LU,64LDDDLULU,72UUURDRUUUUURRRDD,26UL,25DD,46URDDLLDDRURDDDDDLULDLLLL,b0UUUUUUUUUUURDRURDD,33LULDDDD',   // 64  açgözlü %  4  (hedef %4)  çözüm 64
+    '8x12|25URDDLLUUURRRDDDDDDD,87DDDL,a6UUU,75LUURDRU,46LLLLURUUULLLDDDDD,60DRURDDLLDDD,b1RRRRUUUL,94DLLLURRUUUUL,51UUURUL',   // 65  açgözlü %  3  (hedef %3)  çözüm 64
+    '8x12|61DDDRURULUR,64DD,85RRDDDLLURULLL,a3RDLLULDLUUUUUUURDRU,32LLUUURDDRUURRRDRURDDDDD,67DLLU,66ULLUUR,45RUUL,24ULDDDD',   // 66  açgözlü %  3  (hedef %3)  çözüm 64
+    '8x12|14URDDLDRDLL,33UUULD,11ULDDRRDLLDD,60DDRRDLLDDR,a1RDRRRUULUU,75DRDDDRUUUULURU,47UUUULDDDD,56LDLULDLUULDDD,72RDDDR',   // 67  açgözlü %  2  (hedef %2)  çözüm 64
+    '8x12|66LLLU,43LURRDDRUURRDLDRDDDDDDLUUUULDDLLDR,a5DL,b3LLLUUUU,60RDDDDRUURRUL,72UULLURULUUURRDL,21RRU,03RDDRRUL,05RRDD',   // 68  açgözlü %  1  (hedef %1)  çözüm 64
+    '8x12|53RUURRUUURDDDDDDDDDLLLUURDRUU,56UL,55DLLDDDDRRRRDLLLLLUULDDLU,90UUR,81RUULLUUR,51RURUU,13RDRU,05LLLDDDLLUUU,01DD',   // 69  açgözlü %  1  (hedef %1)  çözüm 64
+    '8x12|21UULDDDR,32UR,13LURRRRRDLDRD,36LUULD,34LDDDDRUUUR,55DD,85RUUUURDDD,87DLDRDLLLLLLLUUUUURU,50URRDDDLDRDLDRRUURDDRU',   // 70  açgözlü %  0  (hedef %0)  çözüm 64
+  ];
+
+  // ═══════════ ÇEKİRDEK MODEL ═══════════
+  // Bu bölüm SUNUMDAN TAMAMEN BAĞIMSIZ: hiçbir yerde canvas, DOM, ses ya
+  // da zaman yok. Sebebi mimari değil pratik — Keşfet önizlemesi de aynı
+  // kuralları çalıştırmak zorunda ve kuralların ikinci bir kopyası,
+  // ikisinin sessizce ayrışması demektir. reels.js bu fabrikayı
+  // `PuzzleGames.flowConnect.engine` üzerinden kullanıyor.
+
+  function parseLevel(str) {
+    const bar = str.indexOf('|');
+    if (bar < 0) return null;
+    // "SÜTUNxSATIR" — tahta DİKEY DİKDÖRTGEN. 'x' yoksa kare kabul edilir
+    // (eski biçim); motor W ve H'yi baştan beri ayrı taşıyordu.
+    const dim = str.slice(0, bar).split('x');
+    const W = parseInt(dim[0], 10);
+    const H = dim.length > 1 ? parseInt(dim[1], 10) : W;
+    const segs = str.slice(bar + 1).split(',').map((p) => {
+      // Koordinat 36'LIK TABANDA: dikey tahtada satır 10'u aşıyor ve
+      // ondalık yazımda "101" ayrıştırılamıyor (satır 10 sütun 1 mi,
+      // satır 1 sütun 0 mu?). 36'lık tabanda her ikisi de tek karakter.
+      // Yön harfleri büyük, koordinatlar küçük — çakışmıyorlar.
+      let cur = parseInt(p[0], 36) * W + parseInt(p[1], 36);
+      const seg = [cur];
+      for (let i = 2; i < p.length; i++) {
+        const ch = p[i];
+        cur += ch === 'R' ? 1 : ch === 'L' ? -1 : ch === 'D' ? W : -W;
+        seg.push(cur);
+      }
+      return seg;
+    });
+    return { W, H, segs, pairs: segs.map((s) => [s[0], s[s.length - 1]]) };
+  }
+
+  // Deterministik RNG — sonsuz mod seviyeleri seviye numarasından
+  // türetiliyor, yani aynı seviye her açılışta aynı tahtayı veriyor.
+  // Math.random olsaydı "yeniden başlat" başka bir tahta açardı ve
+  // "başlangıç durumuna dön" sözü tutulmazdı.
+  function mulberry(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Backbite: ızgarayı tamamen kaplayan rastgele bir yol. Yılan sırasıyla
+  // başlar (her zaman geçerli bir Hamilton yolu), sonra uçtan "ısırıklar"
+  // atarak şeklini karıştırır — uzunluk ve kaplama değişmez.
+  // tools/flow-levels-test.js'teki üretecin aynısı; oradaki tohumlu
+  // sürüm 70 seviyelik tabloyu üretti, buradaki sürüm 71. seviyeden
+  // sonrasını cihazda üretiyor.
+  function hamiltonian(W, H, rnd, steps) {
+    const N = W * H;
+    const p = [];
+    for (let r = 0; r < H; r++) {
+      if (r % 2 === 0) for (let c = 0; c < W; c++) p.push(r * W + c);
+      else for (let c = W - 1; c >= 0; c--) p.push(r * W + c);
+    }
+    const pos = new Int32Array(N);
+    for (let i = 0; i < N; i++) pos[p[i]] = i;
+    for (let s = 0; s < steps; s++) {
+      if (rnd() < 0.5) {
+        p.reverse();
+        for (let i = 0; i < N; i++) pos[p[i]] = i;
+      }
+      const h = p[0], hr = h / W | 0, hc = h % W;
+      const cand = [];
+      if (hr > 0) cand.push(h - W);
+      if (hr < H - 1) cand.push(h + W);
+      if (hc > 0) cand.push(h - 1);
+      if (hc < W - 1) cand.push(h + 1);
+      const i = pos[cand[(rnd() * cand.length) | 0]];
+      if (i <= 1) continue;
+      let a = 0, b = i - 1;
+      while (a < b) {
+        const t = p[a]; p[a] = p[b]; p[b] = t;
+        pos[p[a]] = a; pos[p[b]] = b;
+        a++; b--;
+      }
+    }
+    return p;
+  }
+
+  // ÇÖZÜCÜ ÇALIŞTIRILMIYOR ve buna gerek de yok: tahta çözülmüş bir
+  // yolun parçalanmasıyla doğuyor, yani çözülebilirliği yapısal.
+  // Doğrulanacak bir şey olmadığı için üretim ana iş parçacığını
+  // kilitlemiyor (Ok Bulmaca'nın staleMax dersi; ölçüm
+  // `flow-levels-test.js --bench`).
+  // minLen 3: iki hücrelik bir yolun uçları komşudur ve hiçbir karar
+  // içermez — bulmaca değil, dekorasyon.
+  function genLevel(W, H, K, seed) {
+    const rnd = mulberry(seed);
+    const N = W * H;
+    if (K * 3 > N) return null;
+    // İKİ DÖNGÜ: pahalı olan Hamilton yolu, ucuz olan kesim. Eskiden her
+    // denemede yol YENİDEN üretiliyor ve tek bir kesim deneniyordu; 8x12/9
+    // renkte 40 üretimin 1'i boş dönüyordu (ölçüldü) ve oyuncu 71. seviyede
+    // "üretilemedi" görebilirdi. Kesim rastgele bir bölüşüm, başarısız
+    // olması olağan — aynı yol üstünde tekrar denemek doğru olan.
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const p = hamiltonian(W, H, rnd, N * 26);
+      for (let cutTry = 0; cutTry < 200; cutTry++) {
+        const cuts = new Set();
+        while (cuts.size < K - 1) cuts.add(1 + ((rnd() * (N - 1)) | 0));
+        const idx = [0].concat([...cuts].sort((a, b) => a - b), [N]);
+        let ok = true;
+        for (let i = 0; i < K; i++) if (idx[i + 1] - idx[i] < 3) { ok = false; break; }
+        if (!ok) continue;
+        const segs = [];
+        for (let i = 0; i < K; i++) segs.push(p.slice(idx[i], idx[i + 1]));
+        return { W, H, segs, pairs: segs.map((s) => [s[0], s[s.length - 1]]) };
+      }
+    }
+    return null;
+  }
+
+  // createBoard — bütün OYUN KURALLARI burada, tek yerde.
+  function createBoard(src) {
+    const lv = (typeof src === 'string') ? parseLevel(src) : src;
+    if (!lv) return null;
+    const W = lv.W, H = lv.H, N = W * H, K = lv.pairs.length;
+    const owner = new Int8Array(N).fill(-1);   // hücre → renk, boşsa -1
+    const endOf = new Int8Array(N).fill(-1);   // hücre → uç noktası olduğu renk
+    const paths = [];
+    for (let i = 0; i < K; i++) {
+      const a = lv.pairs[i][0], b = lv.pairs[i][1];
+      owner[a] = i; owner[b] = i;
+      endOf[a] = i; endOf[b] = i;
+      paths.push([]);
+    }
+
+    const head = (i) => (paths[i].length ? paths[i][paths[i].length - 1] : -1);
+    // "Bağlı" = yol iki uç noktayı da içeriyor. Yalnızca son hücreye
+    // bakmak yetmez: oyuncu aynı uçtan başlayıp aynı uca dönemez ama
+    // yolu kısaltıp uzatabilir, o yüzden koşul uzunlukla birlikte.
+    const isConnected = (i) => paths[i].length >= 2 && endOf[head(i)] === i && head(i) !== paths[i][0];
+
+    // Yolun k. hücresinden sonrasını sil. Uç noktalar HER ZAMAN kendi
+    // renklerine ait kalır — onları serbest bırakmak noktayı tahtadan
+    // silerdi.
+    function truncate(i, k) {
+      const p = paths[i];
+      for (let j = k; j < p.length; j++) if (endOf[p[j]] !== i) owner[p[j]] = -1;
+      p.length = k;
+    }
+    function clearPath(i) { truncate(i, 0); }
+
+    return {
+      W, H, N, K, owner, endOf, paths, pairs: lv.pairs, segs: lv.segs,
+      head, isConnected, clearPath,
+
+      // Sürükleme başlangıcı. İki meşru başlangıç var:
+      //  • bir uç nokta → o rengin yolu SIFIRLANIR ve oradan yeniden çizilir,
+      //  • kendi yolunun ortasındaki bir hücre → yol oraya kadar kısaltılır
+      //    (yolu baştan çizmeden düzeltmenin yolu bu).
+      // Dönen değer renk indisi, tutulacak bir şey yoksa -1.
+      startDrag(cell) {
+        if (cell < 0 || cell >= N) return -1;
+        const e = endOf[cell];
+        if (e >= 0) { clearPath(e); paths[e].push(cell); return e; }
+        const o = owner[cell];
+        if (o < 0) return -1;
+        const k = paths[o].indexOf(cell);
+        if (k < 0) return -1;
+        truncate(o, k + 1);
+        return o;
+      },
+
+      // TEK BİR ORTOGONAL ADIM. Çapraz atlama ve hücre atlaması burada
+      // değil, çağıranın ara hücreleri tek tek yürümesiyle engelleniyor
+      // (bkz. dragTo) — kuralın kendisi "yalnızca komşuya" olarak kalıyor.
+      // Dönen: null (engellendi) ya da olan biteni anlatan bir etiket.
+      extend(i, cell) {
+        const p = paths[i];
+        if (!p.length) return null;
+        const h = p[p.length - 1];
+        if (cell === h) return null;
+        if (cell < 0 || cell >= N) return null;
+        const hr = h / W | 0, hc = h % W, cr = cell / W | 0, cc = cell % W;
+        if (Math.abs(hr - cr) + Math.abs(hc - cc) !== 1) return null;
+
+        // Geri sarma: bir önceki hücreye dönmek son parçayı siler.
+        // Her şeyden ÖNCE bakılmalı — o hücre kendi rengimize ait
+        // olduğu için aşağıdaki "kendi yoluna değdi" dalına düşerdi ve
+        // aynı sonucu verirdi, ama niyeti kaybederdik.
+        if (p.length >= 2 && cell === p[p.length - 2]) {
+          if (endOf[h] !== i) owner[h] = -1;
+          p.pop();
+          return 'back';
+        }
+        // Bağlanmış bir yol yalnızca geri sarılabilir; hedefin ötesine
+        // uzamak diye bir şey yok.
+        if (isConnected(i)) return null;
+
+        const e = endOf[cell];
+        if (e === i) {
+          // Kendi diğer ucumuz — bağlantı tamamlandı.
+          if (cell === p[0]) return null;
+          p.push(cell);
+          return 'done';
+        }
+        if (e >= 0) return null;            // başka rengin ucundan geçilmez
+
+        const o = owner[cell];
+        if (o === i) {
+          // Kendi yolumuza değdik: ilmeği at, oraya kadar kısalt.
+          const k = p.indexOf(cell);
+          if (k < 0) return null;
+          truncate(i, k + 1);
+          return 'loop';
+        }
+        if (o >= 0) {
+          // Başka rengin yolu: değilen yerden İTİBAREN kesilir. Türün
+          // standart davranışı — üstünden çizmek silmek demektir.
+          const k = paths[o].indexOf(cell);
+          if (k < 0) return null;
+          truncate(o, k);
+          owner[cell] = i; p.push(cell);
+          return 'cut';
+        }
+        owner[cell] = i; p.push(cell);
+        return 'ok';
+      },
+
+      connectedCount() {
+        let n = 0;
+        for (let i = 0; i < K; i++) if (isConnected(i)) n++;
+        return n;
+      },
+      filled() {
+        let n = 0;
+        for (let i = 0; i < N; i++) if (owner[i] >= 0) n++;
+        return n;
+      },
+      // BİTİŞ = BÜTÜN ÇİFTLER BAĞLI. Tam kaplama ŞART DEĞİL.
+      //
+      // 2026-08-09, sahip kararı — ve bu bir tercih değil düzeltme:
+      // oyun tam kaplama isterken oyuncu bütün renkleri bağlıyor, tahta
+      // "kabul etmiyor" ve ipucu "zaten hepsi bağlı" diyordu. Yani
+      // oyunun içinde "bitti"nin İKİ tanımı vardı ve oyuncuya ikisi
+      // birden gösteriliyordu. Amaç, kesişmeden bağlamak; boş kare
+      // kalması bir kusur değil.
+      //
+      // Seviyeler yine tam kaplamalı çözümlerden türetiliyor ve bu
+      // DEĞİŞMİYOR: üretim yöntemi çözülebilirliğin yapısal garantisi
+      // (bkz. §2) ve saklanan çözüm ipucunun kaynağı. Değişen tek şey,
+      // o çözümün oyuncudan TALEP EDİLMEMESİ.
+      isComplete() {
+        for (let i = 0; i < K; i++) if (!isConnected(i)) return false;
+        return true;
+      },
+      // Tam kaplama artık bir KAPI değil, bir USTALIK ÖLÇÜSÜ — yıldız
+      // buradan hesaplanıyor (bkz. stars()). İlerlemeyi asla engellemez.
+      isPerfect() {
+        for (let i = 0; i < K; i++) if (!isConnected(i)) return false;
+        for (let i = 0; i < N; i++) if (owner[i] < 0) return false;
+        return true;
+      },
+      snapshot() {
+        return { owner: owner.slice(), paths: paths.map((p) => p.slice()) };
+      },
+      restore(s) {
+        owner.set(s.owner);
+        for (let i = 0; i < K; i++) { paths[i].length = 0; s.paths[i].forEach((c) => paths[i].push(c)); }
+      },
+    };
+  }
+
+  // ═══════════ DURUM ═══════════
+  // boardAreaEl (.fc-wrap) TAHTANIN ÖLÇÜLDÜĞÜ kutu; wrapEl onun dışındaki
+  // sütun. İkisi aynı genişlikte DEĞİL (bkz. .fc-wrap'in negatif marjı).
+  let container, wrapEl, boardAreaEl, boardEl, cv, ctx;
+  let lvlEl, movesEl, starsEl, progEl, fillEl, ctrlEl, topBarEl;
+  let atmoEl = null;
+  let board = null, level = 0, cell = 0, dpr = 1;
+  let active = -1, moves = 0, score = 0, changedInDrag = false;
+  let undoStack = [];
+  let pulses = [];            // {i, t0} — bağlantı nabızları
+  let winSweep = 0;           // >0 ise kazanma taraması sürüyor (başlangıç zamanı)
+  let raf = 0, paintQueued = false, layoutRaf = 0, layoutTries = 0, roBoard = null;
+  let levelStartedAt = 0, lastStepSfx = 0, lastBlockSfx = 0;
+  let hintUsed = 0, locked = false;
+
+  // Tavan yalnızca TABLET için var: telefonda hiçbir tahta buna
+  // dayanmıyor, sınırlayan her zaman genişlik. 76'ydı ve KÜÇÜK tahtaları
+  // (4x4/5x5) gereksiz yere kısıtlıyordu — cihazda ölçüldü: 4x4 için
+  // genişlik 91 px'e izin verirken tavan 76'da tutuyordu. Tasarım
+  // görselinde de tahta ekran genişliğini neredeyse tamamen kaplıyor.
+  const CELL_MAX = 96;
+  // Tahta iç payı ve pay dışı boşluk kısıldı (10→7, 8→2): ikisi birlikte
+  // 9x9'da hücreyi 36'dan 40 px'e çıkarıyor. Genişlik sınırlayan eksen
+  // olduğu için buradan kazanılan her piksel doğrudan hücreye gidiyor.
+  const PAD = 7;              // tahta iç payı (px)
+  // 4: tahtanın dış gölgesi ve yuvarlak köşeleri ekran kenarına yapışmasın.
+  // 2 denendi ve tahta kenara değiyordu; 6 ise 9x9'un hücresini 40'tan
+  // 39'a düşürüyor. 4 ikisini de veriyor — ölçülerek seçildi, yuvarlak
+  // bir sayı olduğu için değil.
+  const EDGE = 4;
+
+  // ═══════════ YERLEŞİM ═══════════
+  function layout() {
+    if (!boardAreaEl || !cv || !board) return false;
+    // ÖLÇÜLEN ELEMAN areaEl (.fc-wrap), wrapEl DEĞİL. İkisi farklı
+    // genişlikte: negatif yan marj .fc-wrap'te, yani tahtanın gerçek
+    // alanı 384 px iken dış sarmal 360 px. Yanlışını ölçmek sessizce
+    // küçük bir tahta veriyordu (cihazda 40 yerine 38 px hücre) ve
+    // hiçbir şey hata vermiyordu — ölçüm doğru bir sayıdı, yanlış
+    // kutunun sayısıydı.
+    const availW = boardAreaEl.clientWidth;
+    // YÜKSEKLİK KARDEŞLERDEN ÇIKARILIYOR, kendi kutusundan DEĞİL.
+    // .fc-wrap artık flex:0 0 auto (boşluğu ölü bantlara dağıtmasın diye),
+    // yani yüksekliği İÇERİĞİ kadar — tahtanın boyutunu ondan okumak
+    // "tahta ne kadarsa o kadar yer var" demek olurdu, yani döngü.
+    // Serbest yükseklik = sütunun tamamı − HUD − kontroller − boşluklar.
+    const topH = topBarEl ? topBarEl.getBoundingClientRect().height : 0;
+    const ctrlH = ctrlEl ? ctrlEl.getBoundingClientRect().height : 0;
+    const availH = (wrapEl ? wrapEl.clientHeight : 0) - topH - ctrlH - 8;
+    if (availH <= 0) return false;
+    if (!availW || !availH) return false;
+    // Hücre TAM SAYI: ızgara çizgileri ve yol uçları piksel hizasında
+    // kalsın, yarım piksel bulanıklığı olmasın.
+    const c = Math.min(
+      Math.floor((availW - PAD * 2 - EDGE * 2) / board.W),
+      Math.floor((availH - PAD * 2 - EDGE * 2) / board.H),
+      CELL_MAX
+    );
+    if (c < 14) return false;
+    cell = c;
+    const W = cell * board.W, H = cell * board.H;
+    boardEl.style.width = (W + PAD * 2) + 'px';
+    boardEl.style.height = (H + PAD * 2) + 'px';
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.style.width = W + 'px';
+    cv.style.height = H + 'px';
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Statik katmanlar hücre boyutuna bağlı; ölçü değişti, geçersizler.
+    // paint() ilk çağrıda yeniden kuruyor.
+    bgCv = dotCv = null;
+    return true;
+  }
+  function ensureLayout() {
+    layoutRaf = 0;
+    if (layout()) { paint(); return; }
+    if (++layoutTries > 60) return;
+    layoutRaf = requestAnimationFrame(ensureLayout);
+  }
+
+  // ═══════════ ÇİZİM ═══════════
+  // requestPaint / paint ayrımı Blok Puzzle'ın birinci kuralı: pointermove
+  // içinde ÇİZİLMEZ. Bir karede gelen üç hareket olayı üç boyama demek
+  // olurdu; burada durum üç kez değişir, boyama bir kez olur.
+  function requestPaint() {
+    if (paintQueued) return;
+    paintQueued = true;
+    requestAnimationFrame(() => { paintQueued = false; paint(); });
+  }
+
+  const cx = (c) => (c % board.W + 0.5) * cell;
+  const cy = (c) => ((c / board.W | 0) + 0.5) * cell;
+
+  function strokePath(p, width, style) {
+    if (p.length < 2) return;
+    ctx.strokeStyle = style;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx(p[0]), cy(p[0]));
+    for (let i = 1; i < p.length; i++) ctx.lineTo(cx(p[i]), cy(p[i]));
+    ctx.stroke();
+  }
+
+  // STATİK KATMANLAR ÖNBELLEKTE — ölçümle gerekli çıktı, tasarım tercihi
+  // değil. İlk sürüm her karede ızgarayı VE 9 rengin 18 uç noktasını
+  // (her biri üç dolu yay = 54 yay) yeniden çiziyordu, oysa ikisi de
+  // yerleşim değişmedikçe sabit. Galaxy A51'de 9x9 tahtada sürekli
+  // sürükleme altında ölçülen: P50 26ms · P90 42ms · P95 46ms ·
+  // %37.9 janky (cihaz termal durum 2'deyken).
+  // Bu, Blok Puzzle'da yazılı olan "tahtanın tamamını yeniden boyama"
+  // kuralının aynısı; orada da çözüm çevrimdışı önbellekti.
+  // Kare başına 54 yay → 2 drawImage.
+  let bgCv = null, dotCv = null, dotSig = -1;
+
+  function buildLayers() {
+    if (!cell || !board) return;
+    const W = board.W * cell, H = board.H * cell;
+    const mk = () => {
+      const c = document.createElement('canvas');
+      c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+      const x = c.getContext('2d');
+      x.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { c, x };
+    };
+    // Izgara TUVALDE, CSS'te değil: CSS arka planı tahtanın iç payına göre
+    // kayıyor ve hücrelerle hizalamak için ikinci bir eleman gerekiyordu.
+    const g = mk();
+    g.x.strokeStyle = 'rgba(120,160,205,.28)';
+    g.x.lineWidth = 1;
+    g.x.beginPath();
+    for (let i = 1; i < board.W; i++) { g.x.moveTo(i * cell + 0.5, 0); g.x.lineTo(i * cell + 0.5, H); }
+    for (let i = 1; i < board.H; i++) { g.x.moveTo(0, i * cell + 0.5); g.x.lineTo(W, i * cell + 0.5); }
+    g.x.stroke();
+    bgCv = g.c;
+
+    const d = mk();
+    for (let i = 0; i < board.K; i++) drawDots(d.x, i, 0);
+    dotCv = d.c;
+  }
+
+  // Tek bir rengin iki ucu. `grow` yalnızca nabız sırasında sıfırdan
+  // farklı; o an ilgili renk önbelleğin ÜSTÜNE canlı çiziliyor.
+  function drawDots(x, i, grow) {
+    const col = PALETTE[i % PALETTE.length];
+    const conn = board.isConnected(i);
+    board.pairs[i].forEach((c2) => {
+      const px = cx(c2), py = cy(c2), r = cell * (0.31 + grow);
+      x.fillStyle = col.deep;
+      x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
+      x.fillStyle = col.base;
+      x.beginPath(); x.arc(px, py, r * 0.84, 0, Math.PI * 2); x.fill();
+      // Parlama noktası: küreselliği veren şey.
+      x.fillStyle = 'rgba(255,255,255,' + (conn ? 0.55 : 0.34) + ')';
+      x.beginPath();
+      x.arc(px - r * 0.26, py - r * 0.30, r * 0.30, 0, Math.PI * 2);
+      x.fill();
+    });
+  }
+
+  // Uç noktaların "bağlandı" parlaklığı değiştiği için önbellek bağlantı
+  // durumu değişince yenilenmeli. Sürükleme sırasında bu nadirdir (renk
+  // başına en fazla birkaç kez), boyama ise her karededir — pahalı olanı
+  // nadir olana taşımak bu.
+  function refreshDots() {
+    if (!dotCv || !cell) return;
+    const x = dotCv.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.clearRect(0, 0, dotCv.width, dotCv.height);
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (let i = 0; i < board.K; i++) drawDots(x, i, 0);
+  }
+
+  function paint() {
+    if (!ctx || !board || !cell) return;
+    if (!bgCv) { buildLayers(); dotSig = -1; }
+    // Uç noktaların parlaklığı "bağlandı mı"ya göre değişiyor, yani
+    // önbellek bağlantı KÜMESİ değişince yenilenmeli — her karede değil.
+    // İmza 9 bitlik bir maske; hesabı bir avuç dizi uzunluğu okuması,
+    // 54 yay yeniden çizmenin yanında hiçbir şey. Sayı yerine MASKE
+    // tutuluyor: bir renk bağlanırken başka biri kopabilir ve sayı aynı
+    // kalabilir (kesme hamlesinde olan tam olarak budur).
+    let sig = 0;
+    for (let i = 0; i < board.K; i++) if (board.isConnected(i)) sig |= (1 << i);
+    if (sig !== dotSig) { dotSig = sig; refreshDots(); }
+    const W = board.W * cell, H = board.H * cell;
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(bgCv, 0, 0, W, H);
+
+    const lw = cell * 0.40;
+    const now = performance.now();
+
+    // Yollar: önce geniş+saydam "parıltı" konturu, sonra dolu gövde.
+    // Canlı shadowBlur YOK — aynı görünüm iki stroke ile, kare başına
+    // süzgeç ödemeden elde ediliyor (Blok Puzzle ve Yılan'da yerleşmiş
+    // kural).
+    for (let i = 0; i < board.K; i++) {
+      const p = board.paths[i];
+      if (p.length < 2) continue;
+      const col = PALETTE[i % PALETTE.length];
+      strokePath(p, lw + cell * 0.22, col.soft);
+      strokePath(p, lw, col.base);
+      // Üst kenardaki ince açık şerit: yolun "hacimli" durmasını sağlayan
+      // tek şey bu. Tasarım görselindeki hamur/şeker malzemesi.
+      ctx.globalAlpha = 0.30;
+      strokePath(p, lw * 0.30, '#ffffff');
+      ctx.globalAlpha = 1;
+    }
+
+    // Aktif yolun ucu: oyuncunun parmağının altındaki hücreyi işaretler.
+    if (active >= 0 && board.paths[active].length) {
+      const h = board.head(active);
+      const col = PALETTE[active % PALETTE.length];
+      ctx.strokeStyle = col.base;
+      ctx.lineWidth = Math.max(1.5, cell * 0.06);
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.arc(cx(h), cy(h), cell * 0.44, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Uç noktalar EN ÜSTTE: yol onların altından geçmeli, üstünden değil.
+    // Tek drawImage — 18 nokta × 3 yay yerine (bkz. buildLayers).
+    if (dotCv) ctx.drawImage(dotCv, 0, 0, W, H);
+    // Nabız atan renk (varsa) önbelleğin ÜSTÜNE canlı çiziliyor. Aynı anda
+    // en fazla bir-iki renk nabız atar, yani bu istisna kare maliyetini
+    // önbellek öncesine geri döndürmüyor.
+    for (let j = 0; j < pulses.length; j++) {
+      const u = Math.min(1, (now - pulses[j].t0) / 380);
+      drawDots(ctx, pulses[j].i, Math.sin(u * Math.PI) * 0.16);
+    }
+
+    // Kazanma taraması: soldan sağa geçen bir ışık bandı. Tek seferlik,
+    // bittiğinde döngü duruyor.
+    if (winSweep) {
+      const u = (now - winSweep) / 620;
+      if (u < 1) {
+        const bx = u * (W + cell * 2) - cell;
+        const g = ctx.createLinearGradient(bx - cell, 0, bx + cell, 0);
+        g.addColorStop(0, 'rgba(255,255,255,0)');
+        g.addColorStop(0.5, 'rgba(255,255,255,.42)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+  }
+
+  // Canlı animasyon döngüsü. YALNIZCA canlı bir nabız/tarama varken
+  // çalışır ve biter bitmez durur — boşta maliyet sıfır olmalı (Yılan'da
+  // ve Flappy'de yerleşmiş kural).
+  function animate() {
+    raf = 0;
+    const now = performance.now();
+    pulses = pulses.filter((p) => now - p.t0 < 380);
+    if (winSweep && now - winSweep > 620) winSweep = 0;
+    paint();
+    if (pulses.length || winSweep) raf = requestAnimationFrame(animate);
+  }
+  function kick() { if (!raf) raf = requestAnimationFrame(animate); }
+
+  // ═══════════ GİRDİ ═══════════
+  // Dokunma hedefi CÖMERT: tahtanın bir hücre dışına kadar taşan
+  // dokunuşlar kenar hücresine kırpılıyor. "Tahtadan çıkıp geri girme"
+  // ve "iki hücrenin arasına dokunma" kenar durumları böylece kendiliğinden
+  // çözülüyor — parmak oyuncuyla kavga etmemeli.
+  function cellAt(clientX, clientY) {
+    if (!cv || !cell) return -1;
+    const r = cv.getBoundingClientRect();
+    if (!r.width) return -1;
+    const sx = (board.W * cell) / r.width, sy = (board.H * cell) / r.height;
+    const x = (clientX - r.left) * sx, y = (clientY - r.top) * sy;
+    let c = Math.floor(x / cell), rw = Math.floor(y / cell);
+    if (c < -1 || c > board.W || rw < -1 || rw > board.H) return -1;
+    c = Math.max(0, Math.min(board.W - 1, c));
+    rw = Math.max(0, Math.min(board.H - 1, rw));
+    return rw * board.W + c;
+  }
+
+  function stepFeedback(res) {
+    if (res === 'done') {
+      pulses.push({ i: active, t0: performance.now() });
+      kick();
+      GameAudio.play('match'); GameAudio.haptic(14);
+      return;
+    }
+    // Hücre tıkırtısı: kısılmış. Hızlı sürüklemede saniyede on kez
+    // çalarsa "tatlı" olmaktan çıkıp gürültü olur.
+    const now = performance.now();
+    if (now - lastStepSfx > 55) { lastStepSfx = now; GameAudio.play('step'); }
+  }
+
+  // Parmak birkaç hücre birden atladığında ARA HÜCRELER TEK TEK yürünür.
+  // Doğrudan hedefe atlamak çapraz kayma ve hücre atlama demek olurdu;
+  // durmak ise hızlı sürüklemede yolun parmağın gerisinde kalması. Önce
+  // farkı büyük olan eksen denenir, o engelliyse diğeri.
+  function dragTo(target) {
+    if (active < 0 || target < 0) return;
+    let guard = 0;
+    while (guard++ < 96) {
+      const h = board.head(active);
+      if (h < 0 || h === target) break;
+      const hr = h / board.W | 0, hc = h % board.W;
+      const tr = target / board.W | 0, tc = target % board.W;
+      const dr = tr - hr, dc = tc - hc;
+      const horiz = dc !== 0 ? h + Math.sign(dc) : -1;
+      const vert = dr !== 0 ? h + Math.sign(dr) * board.W : -1;
+      const order = Math.abs(dc) >= Math.abs(dr) ? [horiz, vert] : [vert, horiz];
+      let moved = false;
+      for (let k = 0; k < order.length; k++) {
+        if (order[k] < 0) continue;
+        const res = board.extend(active, order[k]);
+        if (res) { changedInDrag = true; stepFeedback(res); moved = true; break; }
+      }
+      if (!moved) {
+        // Engellendi. Sert bir kesinti değil, kısık bir uyarı — oyuncu
+        // zaten duvara dayandığını görüyor.
+        const now = performance.now();
+        if (now - lastBlockSfx > 320) { lastBlockSfx = now; GameAudio.play('error'); }
+        break;
+      }
+    }
+    requestPaint();
+  }
+
+  function onDown(e) {
+    if (locked || !board) return;
+    const c = cellAt(e.clientX, e.clientY);
+    if (c < 0) return;
+    // Anlık görüntü sürükleme BAŞLARKEN alınır: "geri al" bir çizim
+    // oturumunu geri alır, hücre hücre değil (hücre hücre geri alma bu
+    // türde yorucu — zaten geri sarma parmakla yapılıyor).
+    const snap = board.snapshot();
+    const i = board.startDrag(c);
+    if (i < 0) return;
+    e.preventDefault();
+    undoStack.push(snap);
+    if (undoStack.length > 60) undoStack.shift();
+    active = i;
+    changedInDrag = false;
+    GameAudio.play('tap'); GameAudio.haptic('micro');
+    requestPaint();
+  }
+
+  function onMove(e) {
+    if (active < 0) return;
+    e.preventDefault();
+    dragTo(cellAt(e.clientX, e.clientY));
+  }
+
+  function onUp() {
+    if (active < 0) return;
+    active = -1;
+    if (changedInDrag) {
+      moves++;
+      updateHud();
+      // Kazanma kontrolü sürükleme BİTİNCE: parmak hâlâ ekrandayken
+      // kutlamaya girmek, oyuncunun elinin altından tahtayı çekmek olur.
+      if (board.isComplete()) { onWin(); return; }
+    } else {
+      // Hiçbir şey değişmediyse anlık görüntü de gereksiz — yığında
+      // birikirse "geri al" hiçbir şey yapmıyormuş gibi görünür.
+      undoStack.pop();
+    }
+    updateHud();
+    requestPaint();
+  }
+
+  // ═══════════ HUD ═══════════
+  // Mükemmel oyun = renk başına tek sürükleme. Eşikler oradan TÜRETİLİYOR,
+  // seviyeye özel sayı yok: 3★ = K'nın %35 üstüne kadar, 2★ = iki katına
+  // kadar. Oranlar renk sayısıyla kendiliğinden ölçekleniyor (Su
+  // Sıralama'nın yıldız eşiklerindeki aynı yaklaşım).
+  // YILDIZ ARTIK DOLULUĞA BAKIYOR, hamle verimliliğine değil.
+  // Zorunlu bir değişiklik, tercih değil: tam kaplama bitiş şartı olmaktan
+  // çıkınca her oyuncu K tane kısa yol çizip 3★ alırdı, yani yıldız
+  // hiçbir şey ölçmezdi. (Su Sıralama'da geri alma kalkınca yıldızların
+  // dayanağının kalmaması ile birebir aynı durum.)
+  //
+  // Yeni dayanak, artık TALEP EDİLMEYEN ama hâlâ var olan ustalık hedefi:
+  // tahtayı ne kadar doldurduğun. İlerlemeyi asla engellemez — 1★ da
+  // seviyeyi geçirir.
+  // Eşikler oran, sabit sayı değil; tahta boyutundan bağımsız ölçekleniyor.
+  const STAR_2_FILL = 0.85;
+  function fillRatio() {
+    if (!board) return 0;
+    return board.filled() / board.N;
+  }
+  function stars() {
+    if (!board) return 3;
+    if (board.isPerfect()) return 3;
+    return fillRatio() >= STAR_2_FILL ? 2 : 1;
+  }
+  function updateHud() {
+    if (!board) return;
+    if (lvlEl) lvlEl.textContent = String(level + 1);
+    if (movesEl) movesEl.textContent = String(moves);
+    // Kapsül İKİ sayı taşıyor ve ikisi farklı şey söylüyor:
+    //  • n/K  → KAZANMA koşulu (bağlanan çift sayısı),
+    //  • %d   → doluluk, yani YILDIZ hedefi.
+    // Doluluk gösterilmeseydi oyuncu 1★ aldığında sebebini göremezdi;
+    // görünmeyen bir ölçüte göre puanlamak, puanlamamaktan kötüdür.
+    if (progEl) {
+      progEl.textContent = board.connectedCount() + '/' + board.K;
+      if (fillEl) fillEl.textContent = '%' + Math.round(fillRatio() * 100);
+    }
+    if (starsEl) {
+      // OYUNCU HİÇBİR ŞEY YAPMADAN NOT VERİLMEZ. Yıldız artık doluluğa
+      // bakıyor ve seviye başında doluluk yalnızca uç noktalardan gelen
+      // ~%38 — yani ★☆☆ görünüyordu. Teknik olarak doğru, iletişim olarak
+      // yanlış: oyuncu daha tahtaya dokunmadan "kötü gidiyorsun" demek.
+      // İlk hamleye kadar üç boş yıldız = HEDEF; sonrası gerçek durum.
+      const s = moves ? stars() : 0;
+      starsEl.textContent = '★★★'.slice(0, s) + '☆☆☆'.slice(0, 3 - s);
+    }
+    const undoBtn = ctrlEl && ctrlEl.querySelector('[data-act="undo"]');
+    if (undoBtn) undoBtn.classList.toggle('off', undoStack.length === 0);
+  }
+
+  // ═══════════ EYLEMLER ═══════════
+  function undo() {
+    if (locked || !undoStack.length) return;
+    board.restore(undoStack.pop());
+    // Hamle sayacı da geri alınır. Alınmasaydı "geri al" bedava
+    // görünürken yıldızı sessizce yerdi — oyuncunun göremediği bir ceza.
+    if (moves > 0) moves--;
+    active = -1;
+    GameAudio.play('button'); GameAudio.haptic('soft');
+    updateHud();
+    requestPaint();
+  }
+
+  function resetLevel() {
+    if (locked) return;
+    for (let i = 0; i < board.K; i++) board.clearPath(i);
+    undoStack = [];
+    moves = 0;
+    active = -1;
+    // Yeniden başlatmak GERÇEKTEN yeni bir tur: GameEvents'in 2. değişmezi
+    // gereği açık tur önce 'quit' ile kapanır.
+    levelStartedAt = Date.now();
+    gameEvent('game_started', { gameId: 'flowConnect' });
+    GameAudio.play('button'); GameAudio.haptic('soft');
+    updateHud();
+    requestPaint();
+  }
+
+  function requestHint() {
+    if (locked || !board) return;
+    if (!board.segs) { showToast('💡 Bu tahtada ipucu yok'); return; }
+    if (typeof offerRewardChoice !== 'function') { revealHint(); return; }
+    offerRewardChoice({
+      title: 'İpucu',
+      adText: 'Reklam İzle → İpucu',
+      gemCost: econ('HINT_DIAMONDS', 10),
+      gemText: 'İpucu',
+      onGrant: revealHint,
+    });
+  }
+  // İpucu BİR RENGİ TAMAMEN ÇİZER, birkaç hücre göstermez. Sebebi kural
+  // değil tutarlılık: tahtanın doğru rotası saklı çözümden geliyor ve o
+  // rota, oyuncunun başka renkler için çizdiği yollarla çakışabilir.
+  // Çakışanları temizleyip rotayı bütün olarak yazmak her durumda geçerli
+  // bir tahta bırakır; yarım bir rota bırakmak bırakmazdı.
+  function revealHint() {
+    let pick = -1;
+    for (let i = 0; i < board.K; i++) if (!board.isConnected(i)) { pick = i; break; }
+    if (pick < 0) { showToast('✨ Zaten hepsi bağlı'); return; }
+    const route = board.segs[pick];
+    // Rotanın geçtiği hücreleri başka renklerden geri al.
+    route.forEach((c) => {
+      const o = board.owner[c];
+      if (o >= 0 && o !== pick) {
+        const k = board.paths[o].indexOf(c);
+        if (k >= 0) {
+          for (let j = k; j < board.paths[o].length; j++) {
+            const x = board.paths[o][j];
+            if (board.endOf[x] !== o) board.owner[x] = -1;
+          }
+          board.paths[o].length = k;
+        }
+      }
+    });
+    board.clearPath(pick);
+    route.forEach((c) => { board.owner[c] = pick; board.paths[pick].push(c); });
+    // GERİ AL YIĞINI TEMİZLENİYOR — ve bu bir temizlik değil, hata düzeltmesi.
+    // Yığındaki anlık görüntüler ipucundan ÖNCEsine ait. Oyuncu bir yol
+    // çizip sonra ipucu alsa ve ardından geri alsa, restore() ipucunun
+    // çizdiği yolu da silerdi: parayla alınan şey bedava bir düğmeyle yok
+    // olurdu. Yığını boşaltmak "satın alınan geri alınamaz" demenin de
+    // doğru yolu.
+    undoStack = [];
+    hintUsed++;
+    moves++;
+    pulses.push({ i: pick, t0: performance.now() });
+    kick();
+    GameAudio.play('match'); GameAudio.haptic('star');
+    updateHud();
+    if (board.isComplete()) { onWin(); return; }
+    requestPaint();
+  }
+
+  // ═══════════ SEVİYE AKIŞI ═══════════
+  function onWin() {
+    locked = true;                     // kutlama boyunca girdi kapalı
+    active = -1;
+    const st = stars();
+    const bonus = 50 + board.K * 10 + st * 40;
+    score += bonus;
+    updateGameScore(score);
+    phHighScore(GID, score);
+    // Skor GameEvents'ten ÖNCE ekleniyor: sonra eklemek "en iyi skor"u bir
+    // seviye geriden bildirir (Resim Kaydır'da cihazda ölçülmüş hata).
+    gameEvent('game_ended', {
+      gameId: 'flowConnect', result: 'won', score,
+      durationMs: Date.now() - levelStartedAt,
+    });
+    winSweep = performance.now();
+    kick();
+    GameAudio.play('win');
+    if (boardEl) {
+      const r = boardEl.getBoundingClientRect();
+      phParticleBurst(document.body, r.left + r.width / 2, r.top + r.height / 2,
+        PALETTE[0].base, 14);
+    }
+    const starStr = '⭐'.repeat(st) + '☆'.repeat(3 - st);
+    setTimeout(() => {
+      phShowCelebration({
+        title: 'Seviye ' + (level + 1) + ' Tamam!',
+        subtitle: starStr + '  +' + bonus + ' puan',
+        sfx: 'star',
+      }).then(() => {
+        locked = false;
+        loadLevel(level + 1);
+      });
+    }, 640);
+  }
+
+  // 70 seviyelik tablo bitince seviyeler CİHAZDA üretiliyor. Tahta 8x12 ve
+  // 9 renkte SABİTLENİYOR — palet 9 renk ve daha fazlası aynı rengi iki
+  // kez göstermek demek olurdu, ki bu bulmacayı zorlaştırmaz, okunmaz
+  // yapar. Yani zorluk uzman bandında PLATOYA çıkıyor; tahtalar değişmeye
+  // devam ediyor ama derece artmıyor. Bilinçli bir sınır.
+  function levelSource(lv) {
+    if (lv < LEVELS.length) return LEVELS[lv];
+    // Tohum seviye numarasından: aynı seviye her açılışta aynı tahta.
+    return genLevel(8, 12, 9, 0x9E3779B1 ^ (lv * 2654435761));
+  }
+
+  function loadLevel(lv) {
+    level = lv;
+    try { localStorage.setItem(LV_KEY, String(level)); } catch (e) {}
+    const src = levelSource(lv);
+    const b = createBoard(src);
+    // Üreteç boş dönerse (olmamalı) seviye sayacı ilerlememeli, yoksa
+    // oyuncu boş bir tahtayla baş başa kalır.
+    if (!b) { showToast('⚠️ Seviye üretilemedi'); locked = false; return; }
+    board = b;
+    undoStack = [];
+    moves = 0; active = -1; hintUsed = 0;
+    pulses = []; winSweep = 0;
+    // Yeni tahta = yeni uç noktalar (ve muhtemelen yeni tahta boyutu).
+    bgCv = dotCv = null; dotSig = -1;
+    levelStartedAt = Date.now();
+    // Tur = SEVİYE (init de seviye ilerlemesi de buradan geçiyor).
+    // Seviye tamamlanınca 'won' yayınlanıyor; başlangıç yayınlanmasaydı
+    // kazanma sayısı başlangıç sayısını aşardı.
+    gameEvent('game_started', { gameId: 'flowConnect' });
+    updateHud();
+    layoutTries = 0;
+    ensureLayout();
+  }
+
+  // ═══════════ SAHNE ═══════════
+  function css() {
+    return `
+      /* Tasarım görselindeki tahta AYDINLIK. Kabuğun gece paleti
+         korunuyor (başlık çubuğu ona ait), tahta ise görseldeki gibi
+         beyaz bir panel olarak duruyor — karanlık sahnenin içinde
+         aydınlatılmış bir masa. Renkli yollar en çok burada okunuyor. */
+      .fc-scene{
+        background:
+          radial-gradient(ellipse 90% 55% at 50% 38%, rgba(70,120,220,.22) 0%, transparent 70%),
+          radial-gradient(ellipse 130% 95% at 50% 50%, #131c46 0%, #060a20 78%);
+      }
+      .fc-top{
+        position:relative; z-index:2; display:flex; align-items:center;
+        justify-content:space-between; gap:var(--ph-space-2);
+        width:100%; padding:0 6px; min-height:34px;
+      }
+      /* Doluluk: kazanma koşulunun YANINDA ama ondan sönük. Aynı kapsülde
+         iki sayı var ve hangisinin ilerlemeyi belirlediği bir bakışta
+         ayrılmalı — parlak olan n/K, sönük olan yıldız hedefi. */
+      .fc-fill{
+        margin-left:6px; font:700 10px/1 var(--ph-font-display);
+        color:var(--ph-text-tertiary,rgba(255,255,255,.45));
+        font-variant-numeric:tabular-nums;
+      }
+      .fc-moves{display:flex; flex-direction:column; align-items:center; line-height:1}
+      .fc-moves-row{display:flex; align-items:baseline; gap:5px}
+      .fc-moves-lbl{
+        font:800 9px/1 var(--ph-font-display); letter-spacing:.14em;
+        color:var(--ph-text-tertiary,rgba(255,255,255,.45));
+      }
+      .fc-moves-num{
+        font:900 20px/1 var(--ph-font-display); color:#fff;
+        font-variant-numeric:tabular-nums;
+      }
+      .fc-stars{font-size:11px; letter-spacing:1px; color:#ffd23a; margin-top:3px}
+
+      /* NEGATİF YAN MARJ, kabuğun 12px dolgusunu BU OYUN İÇİN geri alıyor.
+         Dolgu #screen-game'de ve bütün oyunlarda ortak, o yüzden oraya
+         dokunulmuyor; tahta ise genişlik sınırlı (cihazda ölçüldü:
+         9x9'da genişlikten 36 px, yükseklikten 58 px çıkıyor — yani
+         dikeyde bol yer varken tahta boşuna dardı). Geri alınan 24 px
+         doğrudan hücre boyutuna gidiyor.
+         Yalnızca tahta alanı genişliyor; üst bar ve kontroller kabuğun
+         hizasında kalıyor. */
+      /* flex:1 DEĞİL. Öyleyken sarmal bütün artan yüksekliği yutuyor ve
+         tahtayı ortalıyordu; sonuç, tahtanın üstünde ve altında 104'er
+         piksellik İKİ ölü bant oluyordu (cihazda ölçüldü) — sahibin
+         "alt ve üst tarafta çok fazla boşluk" dediği şey buydu.
+         Tahta KARE ve genişlik sınırlı olduğu için büyüyemiyor; yapılacak
+         tek şey boşluğu tahtanın ETRAFINDAN alıp tek bir yere toplamak.
+         Şimdi üç öğe (HUD, tahta, kontroller) tek bir blok gibi
+         paketleniyor ve blok dikeyde ortalanıyor. */
+      .fc-wrap{
+        flex:0 0 auto; align-self:stretch;
+        margin-inline:-12px;
+        display:flex; align-items:center; justify-content:center;
+        position:relative; z-index:1;
+      }
+      /* Tahta paneli — görseldeki yumuşak beyaz yüzey + mavi kenar.
+         Izgara çizgileri CSS'te DEĞİL tuvalde: buradaki iç pay yüzünden
+         CSS arka planı hücrelerle hizalanmıyordu ve ikinci bir eleman
+         gerektiriyordu. */
+      .fc-board{
+        position:relative; box-sizing:border-box; padding:10px;
+        border-radius:22px;
+        background:linear-gradient(180deg,#ffffff 0%,#eef5fd 100%);
+        border:2px solid #8fbdf0;
+        box-shadow:
+          0 14px 34px rgba(4,9,32,.55),
+          0 0 0 6px rgba(143,189,240,.10),
+          inset 0 2px 0 rgba(255,255,255,.95);
+      }
+      .fc-cv{display:block; border-radius:12px; touch-action:none}
+
+      /* Kontroller tahtaya YAKLAŞTIRILDI. Sahibin şikâyeti "alt ve üst
+         tarafta çok fazla boşluk"tu; tahta zaten ekran genişliğinin
+         %97'sinde ve KARE olduğu için daha fazla büyüyemiyor (sınırlayan
+         eksen genişlik). Dolayısıyla kazanılabilecek tek şey, artan dikey
+         boşluğun bantlar hâlinde göze çarpmaması. */
+      .fc-ctrl{
+        position:relative; z-index:2; display:flex; justify-content:center;
+        gap:var(--ph-space-6); width:100%; padding:0;
+        margin-top:-2px;
+      }
+      .fc-btn{
+        display:flex; flex-direction:column; align-items:center; gap:4px;
+        background:none; border:none; padding:2px 4px; cursor:pointer;
+        color:var(--ph-text-secondary,rgba(255,255,255,.72));
+        transition:transform var(--ph-duration-micro,120ms) ease;
+      }
+      .fc-btn:active{transform:scale(.92)}
+      .fc-btn-ico{
+        width:42px; height:42px; border-radius:50%;
+        display:flex; align-items:center; justify-content:center;
+        font-size:20px;
+        background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.05));
+        border:1px solid rgba(255,255,255,.16);
+        box-shadow:0 4px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22);
+      }
+      .fc-btn-lbl{font:700 10px/1 var(--ph-font-display); letter-spacing:.04em}
+      /* Pasif düğme GİZLENMİYOR, soluyor — "şimdi olmaz" ile "böyle bir
+         şey yok" farkı (AdBudget satırlarındaki aynı dil). */
+      .fc-btn.off{opacity:.34; pointer-events:none}
+      .fc-tag{
+        font:700 9px/1 var(--ph-font-display);
+        color:var(--ph-text-tertiary,rgba(255,255,255,.42));
+      }
+    `;
+  }
+
+  function init(c) {
+    container = c;
+    container.classList.add('ph-scene', 'fc-scene');
+    injectStyle('css-fc', css());
+    atmoEl = phAtmosphere(container, { stars: 26, beams: 1, motes: 6, skyPct: 92 });
+
+    wrapEl = document.createElement('div');
+    wrapEl.style.cssText =
+      // justify-content:center — üç öğe (HUD, tahta, kontroller) tek blok
+      // hâlinde dikeyde ortalanıyor. Artan boşluk artık tahtanın etrafına
+      // DEĞİL, bloğun üstüne ve altına düşüyor.
+      'flex:1;align-self:stretch;min-height:0;display:flex;flex-direction:column;' +
+      'align-items:center;justify-content:center;gap:4px;position:relative;z-index:1';
+    wrapEl.innerHTML =
+      '<div class="fc-top">' +
+        '<span class="ph-capsule">Seviye <span class="ph-capsule-num" data-role="lvl">1</span></span>' +
+        '<div class="fc-moves">' +
+          '<div class="fc-moves-row">' +
+            '<span class="fc-moves-lbl">HAMLE</span>' +
+            '<span class="fc-moves-num" data-role="moves">0</span>' +
+          '</div>' +
+          '<span class="fc-stars" data-role="stars">★★★</span>' +
+        '</div>' +
+        '<span class="ph-capsule"><span class="ph-capsule-num" data-role="prog">0/3</span>' +
+          '<span class="fc-fill" data-role="fill">%0</span></span>' +
+      '</div>' +
+      '<div class="fc-wrap"><div class="fc-board"><canvas class="fc-cv"></canvas></div></div>' +
+      '<div class="fc-ctrl">' +
+        '<button class="fc-btn" data-act="undo"><span class="fc-btn-ico">↩</span>' +
+          '<span class="fc-btn-lbl">Geri Al</span><span class="fc-tag">ücretsiz</span></button>' +
+        '<button class="fc-btn" data-act="reset"><span class="fc-btn-ico">🔄</span>' +
+          '<span class="fc-btn-lbl">Sıfırla</span><span class="fc-tag">ücretsiz</span></button>' +
+        '<button class="fc-btn" data-act="hint"><span class="fc-btn-ico">💡</span>' +
+          // 📺 emojisi BİLEREK yok: bu küçük etikette WebView'da tofu
+          // (boş kutu) olarak çıkıyor — masaüstü tarayıcıda doğrulandı.
+          // Düz metin her yazı tipinde okunur.
+          '<span class="fc-btn-lbl">İpucu</span><span class="fc-tag">💎' +
+          econ('HINT_DIAMONDS', 10) + ' · reklam</span></button>' +
+      '</div>';
+    container.appendChild(wrapEl);
+
+    boardAreaEl = wrapEl.querySelector('.fc-wrap');
+    boardEl = wrapEl.querySelector('.fc-board');
+    cv = wrapEl.querySelector('.fc-cv');
+    ctx = cv.getContext('2d');
+    lvlEl = wrapEl.querySelector('[data-role="lvl"]');
+    movesEl = wrapEl.querySelector('[data-role="moves"]');
+    starsEl = wrapEl.querySelector('[data-role="stars"]');
+    progEl = wrapEl.querySelector('[data-role="prog"]');
+    fillEl = wrapEl.querySelector('[data-role="fill"]');
+    ctrlEl = wrapEl.querySelector('.fc-ctrl');
+    topBarEl = wrapEl.querySelector('.fc-top');
+
+    score = 0;
+    locked = false;
+    updateGameScore(0);
+
+    // pointerdown TUVALDE, taşıma/bırakma PENCEREDE: parmak tahtanın
+    // dışına çıktığında sürükleme ölmemeli (kenar hücrelerini çizerken
+    // sürekli olan bir şey). setPointerCapture BİLEREK yok — yakalama,
+    // sonraki click'i yakalayan elemana yönlendiriyor ve bu daha önce
+    // Ok Bulmaca'yı tamamen oynanamaz yapmıştı (CLAUDE.md phCamera notu).
+    addEv(cv, 'pointerdown', onDown);
+    addEv(window, 'pointermove', onMove);
+    addEv(window, 'pointerup', onUp);
+    addEv(window, 'pointercancel', onUp);
+
+    addEv(ctrlEl, 'click', (e) => {
+      const b = e.target.closest('.fc-btn');
+      if (!b) return;
+      const a = b.dataset.act;
+      if (a === 'undo') undo();
+      else if (a === 'reset') resetLevel();
+      else if (a === 'hint') requestHint();
+    });
+    addEv(window, 'resize', () => { if (layout()) paint(); });
+    // TAHTA ÖLÇÜSÜ TEK SEFERLİK BİR ÖLÇÜMDEN ÇIKAMAZ. layout() ilk kez
+    // yerleşim daha oturmadan çalışabiliyor: cihazda ölçüldü — sarmalın
+    // genişliği o anda 360 px okunuyor, oysa (negatif marj uygulandıktan
+    // sonraki) gerçek değeri 384. Hücre 40 yerine 38'de kalıyor ve bir
+    // daha hiç düzelmiyor, çünkü `resize` olayı ATEŞLENMİYOR: pencere
+    // boyutu değişmedi, değişen şey elemanın kendi kutusu.
+    // ResizeObserver tam olarak bunu görüyor. Ekran döndürme, klavye ve
+    // geç uygulanan stil de aynı kapıdan geçiyor.
+    if (typeof ResizeObserver === 'function') {
+      roBoard = new ResizeObserver(() => { if (layout()) paint(); });
+      roBoard.observe(boardAreaEl);
+    }
+    // Uygulama arka plana giderken sürükleme KAPANIR. Kapanmasaydı
+    // pointerup hiç gelmeyebilir (WebView'da olan bir şey) ve oyuncu geri
+    // döndüğünde parmağını değdirdiği anda yarım kalmış sürükleme kaldığı
+    // yerden devam ederdi — dokunmadığı bir yolu çizmiş olurdu.
+    addEv(document, 'visibilitychange', () => { if (document.hidden) onUp(); });
+
+    let saved = 0;
+    try { saved = parseInt(localStorage.getItem(LV_KEY) || '0', 10) || 0; } catch (e) {}
+    loadLevel(Math.max(0, saved));
+  }
+
+  function cleanup() {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    if (layoutRaf) { cancelAnimationFrame(layoutRaf); layoutRaf = 0; }
+    // clearEvs() addEventListener'ları toplar; ResizeObserver onun
+    // kapsamında DEĞİL, kendi elden kapatılmalı.
+    if (roBoard) { roBoard.disconnect(); roBoard = null; }
+    clearEvs();
+    if (atmoEl) { atmoEl.remove(); atmoEl = null; }
+    if (container) {
+      container.innerHTML = '';
+      container.classList.remove('ph-scene', 'fc-scene');
+    }
+    container = wrapEl = boardAreaEl = boardEl = cv = null;
+    lvlEl = movesEl = starsEl = progEl = fillEl = ctrlEl = topBarEl = null;
+    ctx = null;
+    board = null; undoStack = []; pulses = [];
+    bgCv = dotCv = null; dotSig = -1;
+    active = -1; cell = 0; paintQueued = false; locked = false; winSweep = 0;
+  }
+
+  // engine: kuralların TEK kopyası. Keşfet önizlemesi (reels.js) ve
+  // tools/flow-levels-test.js bu ihracı tüketiyor — ikinci bir kural
+  // uygulaması, iki uygulamanın sessizce ayrışması demek olurdu.
+  return { init, cleanup, engine: { LEVELS, PALETTE, parseLevel, createBoard, genLevel } };
 })();

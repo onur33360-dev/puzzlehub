@@ -34,7 +34,7 @@ const EconomyConfig = {
   // İki eşik de İKİSİ BİRDEN sağlanmadan reklam çıkmaz. Tek eksen yeterli
   // olsaydı ikisi de kendi başına bozulurdu: yalnız süre → hızlı oynayan
   // oyuncu her 3 dakikada bir reklam yer; yalnız tur sayısı → kısa
-  // oyunlarda (Hafıza, Labirent) üç tur arka arkaya bir dakikaya sığar.
+  // oyunlarda (Hafıza, Resim Kaydır) üç tur arka arkaya bir dakikaya sığar.
   INTERSTITIAL_MIN_INTERVAL_MS: 3 * 60 * 1000,
   INTERSTITIAL_MIN_ROUNDS: 3,
 
@@ -79,16 +79,15 @@ const EconomyConfig = {
 // ==================== VERİ ====================
 
 const PUZZLE_GAMES = [
-  { name:'Vida Ustası', emoji:'🔩', rating:4.9, badge:'yeni', desc:'Vidaları sök, eşleştir!', bg:'linear-gradient(135deg,#b45309,#78350f)' },
   { name:'2048', emoji:'🔢', rating:4.8, badge:null, desc:'Sayı birleştir', bg:'linear-gradient(135deg,#d97706,#92400e)' },
   { name:'Bulmaca Blokları', emoji:'🧱', rating:4.5, badge:null, desc:'Blok yerleştir', bg:'linear-gradient(135deg,#7c3aed,#5b21b6)' },
   { name:'Hafıza Oyunu', emoji:'🧠', rating:4.3, badge:null, desc:'Kartları eşleştir', bg:'linear-gradient(135deg,#0891b2,#155e75)' },
   { name:'Kelime Avı', emoji:'📝', rating:4.6, badge:null, desc:'Gizli kelimeleri bul', bg:'linear-gradient(135deg,#16a34a,#166534)' },
   { name:'Sudoku', emoji:'#️⃣', rating:4.7, badge:null, desc:'9x9 tabloyu doldur', bg:'linear-gradient(135deg,#1d4ed8,#1e3a8a)' },
-  { name:'Labirent', emoji:'🌀', rating:4.2, badge:null, desc:'Çıkışı bul', bg:'linear-gradient(135deg,#059669,#065f46)' },
   { name:'Resim Kaydır', emoji:'🖼️', rating:4.9, badge:'yeni', desc:'Fotoğrafı kaydır, tamamla', bg:'linear-gradient(135deg,#123a4a,#06121c)' },
   { name:'Yılan', emoji:'🐍', rating:4.8, badge:'yeni', desc:'Klasik yılan — elmasları topla', bg:'linear-gradient(135deg,#16255e,#060b22)' },
   { name:'Flappy UFO', emoji:'🛸', rating:4.7, badge:'yeni', desc:'Dokun, yüksel, geçitlerden süz', bg:'linear-gradient(135deg,#132a63,#04081c)' },
+  { name:'Akış Bağlantı', emoji:'🔗', rating:4.8, badge:'yeni', desc:'Renkleri bağla, tahtayı doldur', bg:'linear-gradient(135deg,#2b6cb8,#0d1b3e)' },
 ];
 
 // Mockup panel 1 "Bugünün Görevleri" ile birebir üç görev.
@@ -1696,7 +1695,7 @@ function runRewardedAction(reward, onReward, opts) {
 // sağlanmadan reklam çıkmaz; tek eksen yeterli olsaydı ikisi de kendi
 // başına bozulurdu:
 //   • yalnız süre    → hızlı oynayan oyuncu her 3 dakikada bir reklam yer
-//   • yalnız tur     → kısa oyunlarda (Hafıza, Labirent) üç tur bir
+//   • yalnız tur     → kısa oyunlarda (Hafıza, Resim Kaydır) üç tur bir
 //                      dakikaya sığar, aynı sonuç
 // Eşikler EconomyConfig'te; buradaki kural onların AND'lenmesi.
 //
@@ -1940,7 +1939,17 @@ function offerRewardChoice(opts) {
     '</div>';
   // Başlık textContent ile: oyun adı/etiketi HTML olarak yorumlanmasın.
   panel.querySelector('.ph-offer-title').textContent = opts.title || 'Yardım';
-  panel.querySelector('[data-ph-ad-budget]').textContent = AdBudget.label();
+  // BURADA BİR data-ph-ad-budget SATIRI ARAMAYIN — 2026-08-07'de günlük
+  // hak satırı bu modalden kaldırıldı (fayda eylemleri artık günlük
+  // elmas hakkına işlemiyor), ama onu dolduran querySelector satırı
+  // kalmıştı ve null üzerinde .textContent yazmaya çalışıyordu. Sonuç:
+  // modal her açılışta TypeError atıyor, yani Ok Bulmaca'nın ve 2048'in
+  // ipucu/geri-al penceresi hiç açılmıyordu. 2026-08-09'da kaldırıldı.
+  //
+  // Node koşum takımı bunu YAKALAYAMAZ: tools/dom-sandbox.js'in
+  // querySelector'ı hiçbir zaman null dönmez, her zaman bir stub verir.
+  // Hata yalnızca gerçek tarayıcıda ortaya çıkıyor — bu satırın sessizce
+  // aylarca yaşamasının sebebi de bu.
   scrim.appendChild(panel);
   document.body.appendChild(scrim);
 
@@ -3077,19 +3086,20 @@ function renderSettings() {
 // ==================== OYUN MOTORU ====================
 
 const GAME_MAP = {
-  'Vida Ustası': 'screwPuzzle',
   '2048': 'game2048',
   'Hafıza Oyunu': 'memoryGame',
   'Kelime Avı': 'wordSearch',
   'Sudoku': 'sudoku',
   'Bulmaca Blokları': 'blockPuzzle',
-  'Labirent': 'mazeGame',
   'İksir Sıralama': 'waterSort',
   'Ok Bulmaca': 'arrowPuzzle',
   // Faz 3 bitti: tema hazır, oyun Keşfet ve ana ekranda AÇIK.
   'Resim Kaydır': 'jigsawCard',
   'Yılan': 'snakeGame',
   'Flappy UFO': 'flappyUfo',
+  // 2026-08-09: oyun gerçekten yazıldı. Öncesinde yalnızca Keşfet'te bir
+  // kart animasyonu vardı ve burada hiç kayıtlı değildi.
+  'Akış Bağlantı': 'flowConnect',
 };
 
 let _currentGameId = null;

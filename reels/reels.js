@@ -6,18 +6,18 @@
 // ===== OYUN VERİLERİ =====
 
 const REEL_GAMES = [
-  { id:'screwPuzzle', name:'Vida Ustası', emoji:'🔩', category:'puzzle', desc:'Vidaları sök, renkleri eşleştir!', difficulty:'Orta', gradient:['#b45309','#78350f'], playable:true },
   { id:'blockPuzzle', name:'Bulmaca Blokları', emoji:'🧱', category:'puzzle', desc:'Blokları yerleştir, satırları temizle!', difficulty:'Orta', gradient:['#7c3aed','#5b21b6'], playable:true },
   { id:'game2048', name:'2048', emoji:'🔢', category:'puzzle', desc:'Kaydır, birleştir, 2048\'e ulaş!', difficulty:'Kolay', gradient:['#d97706','#92400e'], playable:true },
   { id:'memoryGame', name:'Hafıza Oyunu', emoji:'🧠', category:'puzzle', desc:'Kartları eşleştir, hafızanı test et!', difficulty:'Kolay', gradient:['#0891b2','#155e75'], playable:true },
   { id:'wordSearch', name:'Kelime Avı', emoji:'📝', category:'puzzle', desc:'Gizli kelimeleri bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
   { id:'sudoku', name:'Sudoku', emoji:'#️⃣', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
-  { id:'mazeGame', name:'Labirent', emoji:'🌀', category:'puzzle', desc:'Çıkışı bul, zamana karşı yarış!', difficulty:'Orta', gradient:['#059669','#065f46'], playable:true },
   { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#1e2a63','#080b22'], playable:true },
   { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🔮', category:'puzzle', desc:'Enerji kanallarını doğru sırayla boşalt!', difficulty:'Kolay', gradient:['#2a1a5e','#0d0824'], playable:true },
-  { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Zor', gradient:['#e11d48','#881337'], playable:false },
-  // playable:false BİLEREK — motor ve resim sistemi hazır ama tema Faz 3'te.
-  // Oyuncuya çıplak tahta göstermektense kart demoda kalsın.
+  // 2026-08-09: oyun yazıldı, kart AÇILDI. Zorluk 'Zor' → 'Orta': ilk üç
+  // seviye öğretici ve eğri 70 seviyeye yayılıyor, "Zor" etiketi kartın
+  // yalan söylemesi olurdu. Gradyan da tasarım görselinin mavi-beyaz
+  // dünyasına çekildi (eskisi kırmızıydı ve oyunla hiç ilgisi yoktu).
+  { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Orta', gradient:['#2b6cb8','#0d1b3e'], playable:true, addedAt:'2026-08-09' },
   { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:true },
   { id:'snakeGame', name:'Yılan', emoji:'🐍', category:'arcade', desc:'Klasik yılan — elmasları topla, uza!', difficulty:'Kolay', gradient:['#16255e','#060b22'], playable:true, addedAt:'2026-08-08' },
   { id:'flappyUfo', name:'Flappy UFO', emoji:'🛸', category:'arcade', desc:'Dokun, yüksel, geçitlerden süz!', difficulty:'Orta', gradient:['#132a63','#04081c'], playable:true, addedAt:'2026-08-08' },
@@ -35,13 +35,11 @@ function _isNewGame(g) {
 }
 
 const GAME_NAME_MAP = {
-  'screwPuzzle': 'Vida Ustası',
   'blockPuzzle': 'Bulmaca Blokları',
   'game2048': '2048',
   'memoryGame': 'Hafıza Oyunu',
   'wordSearch': 'Kelime Avı',
   'sudoku': 'Sudoku',
-  'mazeGame': 'Labirent',
   'waterSort': 'İksir Sıralama',
   'arrowPuzzle': 'Ok Bulmaca',
   'flowConnect': 'Akış Bağlantı',
@@ -503,180 +501,6 @@ MiniDemos.demo_sudoku = function(gradient) {
   };
 };
 
-// ———————— 6. Maze Demo ————————
-MiniDemos.demo_maze = function(gradient) {
-  const el = document.createElement('div');
-  el.className = 'reel-demo-inner';
-  const state = { paused:false, raf:0 };
-  const MZ = 11; // odd for maze
-  // Simple fixed maze pattern
-  const maze = [
-    1,1,1,1,1,1,1,1,1,1,1,
-    1,0,0,0,1,0,0,0,0,0,1,
-    1,0,1,0,1,0,1,1,1,0,1,
-    1,0,1,0,0,0,0,0,1,0,1,
-    1,0,1,1,1,1,1,0,1,0,1,
-    1,0,0,0,0,0,1,0,0,0,1,
-    1,1,1,0,1,0,1,1,1,0,1,
-    1,0,0,0,1,0,0,0,0,0,1,
-    1,0,1,1,1,0,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,1,1,1,1,1,1,1,
-  ];
-  // Valid path through the maze
-  const validPath = [[1,1],[1,2],[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[3,7],[4,7],[5,7],[5,8],[5,9],[6,9],[7,9],[7,8],[7,7],[7,6],[7,5],[6,5],[5,5],[5,4],[5,3],[5,2],[5,1],[7,3],[7,2],[7,1],[9,1],[9,2],[9,3],[9,4],[9,5],[9,6],[9,7],[9,8],[9,9]];
-
-  const gridEl = document.createElement('div');
-  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+MZ+',1fr);gap:1px;width:80%;max-width:240px;aspect-ratio:1;';
-  const cells = [];
-  for(let y=0;y<MZ;y++) for(let x=0;x<MZ;x++) {
-    const c = document.createElement('div');
-    const isWall = maze[y*MZ+x]===1;
-    c.style.cssText = 'border-radius:2px;transition:all 0.3s;background:'+(isWall?'rgba(255,255,255,0.12)':'rgba(255,255,255,0.02)')+';';
-    gridEl.appendChild(c);
-    cells.push(c);
-  }
-  el.appendChild(gridEl);
-
-  let dotIdx = 0, stepTimer = 0;
-  const trail = [];
-
-  function drawFn(frame) {
-    stepTimer++;
-    if(stepTimer % 12 === 0) {
-      if(dotIdx < validPath.length) {
-        const [y,x] = validPath[dotIdx];
-        // Clear previous dot glow
-        if(trail.length>0) {
-          const [py,px]=trail[trail.length-1];
-          cells[py*MZ+px].style.background='rgba(34,197,94,0.2)';
-          cells[py*MZ+px].style.boxShadow='none';
-        }
-        // Draw current
-        const c = cells[y*MZ+x];
-        c.style.background='#22c55e';
-        c.style.boxShadow='0 0 10px #22c55e, 0 0 20px rgba(34,197,94,0.4)';
-        trail.push([y,x]);
-        dotIdx++;
-      } else {
-        // Reset
-        dotIdx = 0;
-        trail.length = 0;
-        for(let i=0;i<MZ*MZ;i++) {
-          const isWall = maze[i]===1;
-          cells[i].style.background = isWall?'rgba(255,255,255,0.12)':'rgba(255,255,255,0.02)';
-          cells[i].style.boxShadow = 'none';
-        }
-      }
-    }
-  }
-  _demoLoop(state, drawFn);
-
-  return {
-    el,
-    pause() { state.paused=true; },
-    resume() { if(state.paused){ state.paused=false; _demoLoop(state,drawFn); } },
-    destroy() { state.paused=true; cancelAnimationFrame(state.raf); el.innerHTML=''; }
-  };
-};
-
-
-// ===== SCREW PUZZLE DEMO =====
-MiniDemos.demo_screw = function(gradient) {
-  const el = document.createElement('div');
-  el.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden';
-  
-  const COLORS = ['#ef4444','#3b82f6','#22c55e','#eab308','#a855f7'];
-  const WOOD = ['#8B6914','#A0522D','#6B4226'];
-  
-  // Create boards
-  const boards = [
-    { x:15, y:30, w:70, h:28, z:1 },
-    { x:25, y:18, w:55, h:26, z:2 },
-  ];
-  
-  // Create screws on boards
-  const screwData = [];
-  boards.forEach((b,bi) => {
-    [{rx:0.12,ry:0.2},{rx:0.88,ry:0.2},{rx:0.12,ry:0.8},{rx:0.88,ry:0.8}].forEach(s => {
-      screwData.push({ x:b.x+s.rx*b.w, y:b.y+s.ry*b.h, c:Math.floor(Math.random()*3), bi, removed:false });
-    });
-  });
-  
-  let html = '';
-  // Boards
-  boards.forEach((b,i) => {
-    const c = WOOD[i];
-    html += `<div style="position:absolute;left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%;background:linear-gradient(145deg,${c},rgba(0,0,0,0.3));border-radius:6px;z-index:${b.z};box-shadow:0 3px 8px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.15),inset 0 -1px 0 rgba(0,0,0,0.3)"></div>`;
-  });
-  // Screws
-  screwData.forEach((s,i) => {
-    const c = COLORS[s.c];
-    html += `<div id="dsc${i}" style="position:absolute;left:${s.x}%;top:${s.y}%;width:14px;height:14px;margin:-7px;border-radius:50%;background:radial-gradient(circle at 35% 35%,${c},rgba(0,0,0,0.4));box-shadow:0 2px 4px rgba(0,0,0,0.5);z-index:10;transition:all .5s ease"><div style="position:absolute;inset:3px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.2)"></div></div>`;
-  });
-  // Slots
-  html += '<div style="position:absolute;bottom:6%;left:15%;right:15%;display:flex;gap:4px;justify-content:center">';
-  for(let i=0;i<5;i++) html += `<div id="dsl${i}" style="width:16px;height:16px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1)"></div>`;
-  html += '</div>';
-  el.innerHTML = html;
-  
-  const state = { paused:false, raf:0 };
-  let step = 0, slotIdx = 0, removedCount = 0;
-  
-  function drawFn(frame) {
-    if (frame % 90 !== 0) return;
-    // Find next non-removed screw
-    let found = -1;
-    for (let i = 0; i < screwData.length; i++) {
-      const idx = (step + i) % screwData.length;
-      if (!screwData[idx].removed) { found = idx; break; }
-    }
-    if (found < 0) {
-      // Reset all
-      screwData.forEach((s,i) => {
-        s.removed = false;
-        const e = el.querySelector('#dsc'+i);
-        if(e) { e.style.transform='rotate(0) scale(1)'; e.style.opacity='1'; }
-      });
-      for(let i=0;i<5;i++) { const e=el.querySelector('#dsl'+i); if(e) e.style.background='rgba(255,255,255,0.05)'; }
-      slotIdx = 0; removedCount = 0; step = 0;
-      return;
-    }
-    
-    screwData[found].removed = true;
-    const e = el.querySelector('#dsc'+found);
-    if(e) { e.style.transform='rotate(540deg) scale(0)'; e.style.opacity='0'; }
-    
-    // Fill slot
-    if (slotIdx < 5) {
-      const slot = el.querySelector('#dsl'+slotIdx);
-      if(slot) slot.style.background = COLORS[screwData[found].c];
-      slotIdx++;
-    }
-    
-    removedCount++;
-    // Clear slots every 3
-    if (slotIdx >= 3) {
-      setTimeout(() => {
-        for(let i=0;i<5;i++) { const e=el.querySelector('#dsl'+i); if(e) { e.style.background='rgba(255,255,255,0.05)'; } }
-        slotIdx = 0;
-      }, 600);
-    }
-    
-    step = found + 1;
-  }
-  
-  _demoLoop(state, drawFn);
-  
-  return {
-    el,
-    pause() { state.paused=true; },
-    resume() { if(state.paused){ state.paused=false; _demoLoop(state,drawFn); } },
-    destroy() { state.paused=true; cancelAnimationFrame(state.raf); el.innerHTML=''; }
-  };
-};
-
-
 // ———————— 8. İksir Sıralama Demo ————————
 MiniDemos.demo_waterSort = function(gradient) {
   const el = document.createElement('div');
@@ -1111,96 +935,324 @@ MiniDemos.demo_arrowPuzzle = function(gradient) {
   return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
 };
 
-// ———————— 10. Akış Bağlantı Demo ————————
+// ———————— 10. Akış Bağlantı — GERÇEKTEN OYNANABİLİR ÖNİZLEME ————————
+// 2026-08-09'da tamamen değiştirildi. Öncesi sahte bir oynanıştı: beş sabit
+// yolu sırayla çizip 200 karede sıfırlayan bir animasyon. Oyuncu dokunamıyor,
+// hiçbir kural işlemiyordu.
+//
+// ÜÇ ŞEY YÜKLÜ TAŞIYOR:
+//  1. KURALLAR BURADA YAZILI DEĞİL. Tahta `PuzzleGames.flowConnect.engine`
+//     üzerinden kuruluyor; bitişiklik, geri sarma, başka rengin yolunu
+//     kesme, tam kaplama — hepsi oyunun kendi kodundan geliyor. İkinci bir
+//     kural uygulaması, iki uygulamanın sessizce ayrışması demek olurdu.
+//  2. touch-action:none YALNIZCA TUVALDE. Keşfet dikey kayan bir akış;
+//     tahtanın dışındaki her yerde kaydırma aynen çalışmaya devam ediyor.
+//     Katmanın tamamına koymak kartı akışta kilitlerdi.
+//  3. rAF DÖNGÜSÜ YALNIZCA nabız varken çalışıyor (dokunulmamış tahtanın
+//     davetkâr nabzı, ya da bağlanma nabzı) ve biter bitmez duruyor.
+//     Keşfet'te aynı anda birkaç kart yaşıyor; boşta dönen bir döngü
+//     akışın kaydırma akıcılığını doğrudan yerdi.
 MiniDemos.demo_flowConnect = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const state = { paused:false, raf:0 };
-  const G=6;
-  const FLOWS = [
-    {c:'#ef4444',path:[[0,0],[0,1],[0,2],[1,2],[2,2],[2,1],[2,0]]},   // Kırmızı: L şekli
-    {c:'#3b82f6',path:[[1,0],[1,1],[1,2],[1,3],[1,4],[1,5]]},          // Mavi: düz çizgi
-    {c:'#22c55e',path:[[3,0],[3,1],[4,1],[5,1],[5,2],[5,3]]},          // Yeşil: merdiven
-    {c:'#eab308',path:[[0,4],[0,5],[1,5],[2,5],[3,5],[4,5],[5,5]]},    // Sarı: kenar
-    {c:'#a855f7',path:[[4,0],[5,0],[5,1],[4,2],[3,2],[3,3],[4,3],[4,4],[5,4]]}, // Mor: yılan
-  ];
-  
-  const scene = document.createElement('div');
-  scene.style.cssText = 'width:85%;max-width:260px;display:flex;flex-direction:column;align-items:center;gap:8px;';
-  
-  // Header
-  const header = document.createElement('div');
-  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;';
-  header.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:700;">6x6</span><span style="font-size:12px;color:rgba(255,255,255,0.3);font-weight:600;">Akış: 0/5</span><span style="font-size:12px;color:rgba(255,255,255,0.25);">Boru: 0%</span>';
-  scene.appendChild(header);
-  
-  const gridEl = document.createElement('div');
-  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat('+G+',1fr);gap:2px;width:100%;aspect-ratio:1;background:rgba(255,255,255,0.03);border-radius:10px;padding:3px;border:1px solid rgba(255,255,255,0.06);';
-  const cells = [];
-  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
-    const c = document.createElement('div');
-    c.style.cssText = 'border-radius:4px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;transition:all 0.3s;aspect-ratio:1;position:relative;';
-    gridEl.appendChild(c);cells.push(c);
+
+  const eng = (typeof PuzzleGames !== 'undefined' && PuzzleGames.flowConnect)
+    ? PuzzleGames.flowConnect.engine : null;
+  // Motor yoksa (yükleme sırası bozulmuşsa) kart boş kalmasın.
+  if (!eng) {
+    el.innerHTML = '<div style="color:rgba(255,255,255,.5);font-size:13px">Akış Bağlantı</div>';
+    return { el, pause(){}, resume(){}, destroy(){ el.innerHTML=''; } };
   }
-  scene.appendChild(gridEl);
+
+  // Önizleme tahtaları: oyunun öğretici üçlüsü (4x4, 3 renk). Ayrı bir
+  // havuz yazmadık — bunlar zaten "1-2 saniyede anlaşılsın" diye elle
+  // tasarlanmış tahtalar ve tools/flow-levels-test.js onları da doğruluyor.
+  const POOL = eng.LEVELS.slice(0, 3);
+  let poolIdx = Math.floor(Math.random() * POOL.length);
+  let board = null;
+
+  const scene = document.createElement('div');
+  scene.style.cssText = 'width:86%;max-width:250px;display:flex;flex-direction:column;align-items:center;gap:10px';
+
+  const cap = document.createElement('div');
+  cap.style.cssText = 'font:800 11px/1 var(--ph-font-display,inherit);letter-spacing:.10em;color:rgba(255,255,255,.55);text-align:center';
+  cap.textContent = 'PARMAĞINLA BAĞLA';
+  scene.appendChild(cap);
+
+  const panel = document.createElement('div');
+  panel.style.cssText =
+    'position:relative;padding:8px;border-radius:18px;box-sizing:border-box;' +
+    'background:linear-gradient(180deg,#ffffff,#eef5fd);border:2px solid #8fbdf0;' +
+    'box-shadow:0 10px 26px rgba(4,9,32,.5),inset 0 2px 0 rgba(255,255,255,.9)';
+  const cv = document.createElement('canvas');
+  cv.style.cssText = 'display:block;border-radius:10px;touch-action:none';
+  panel.appendChild(cv);
+  scene.appendChild(panel);
+
+  const cta = document.createElement('button');
+  cta.style.cssText =
+    'display:none;padding:9px 18px;border:none;border-radius:999px;cursor:pointer;' +
+    'font:800 12px/1 var(--ph-font-display,inherit);color:#fff;' +
+    'background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,0) 26%),' +
+    'linear-gradient(135deg,'+gradient[0]+','+gradient[1]+');' +
+    'box-shadow:0 6px 16px rgba(0,0,0,.42)';
+  cta.textContent = '▶  TAM OYUNU AÇ';
+  scene.appendChild(cta);
   el.appendChild(scene);
-  
-  // Place dots
-  FLOWS.forEach(f=>{
-    const start=f.path[0], end=f.path[f.path.length-1];
-    [start,end].forEach(([y,x])=>{
-      const c=cells[y*G+x];
-      const dot=document.createElement('div');
-      dot.style.cssText='width:70%;height:70%;border-radius:50%;background:'+f.c+';box-shadow:0 0 8px '+f.c+'80;position:absolute;';
-      c.appendChild(dot);
-      c.dataset.dot='1';
-    });
-  });
-  
-  let step=0, flowIdx=0, pathStep=0;
-  function drawFn(){
-    step++;
-    if(flowIdx<FLOWS.length){
-      if(step%8===0){ // Draw path step by step (fast)
-        const f=FLOWS[flowIdx];
-        if(pathStep<f.path.length){
-          const [y,x]=f.path[pathStep];
-          const c=cells[y*G+x];
-          if(!c.dataset.dot){
-            c.style.background=f.c+'30';
-            c.style.boxShadow='inset 0 0 8px '+f.c+'20';
-            // Add pipe segment
-            const pipe=document.createElement('div');
-            pipe.style.cssText='width:60%;height:60%;border-radius:3px;background:'+f.c+'90;position:absolute;transition:all 0.2s;transform:scale(0);';
-            c.appendChild(pipe);
-            setTimeout(()=>{pipe.style.transform='scale(1)'},30);
+
+  const ctx = cv.getContext('2d');
+  let cell = 0, dpr = 1, active = -1, touched = false, solved = false;
+  let pulses = [], hintT0 = performance.now();
+
+  function size() {
+    // YEDEK DEĞER YOK, VE BU BİR SADELEŞTİRME DEĞİL — hatanın kendisiydi.
+    // Fabrika çağrıldığında `el` henüz belgeye EKLENMEMİŞ oluyor
+    // (_startDemo önce factory()'yi çalıştırıp sonra insertBefore ediyor),
+    // yani clientWidth 0. `|| 260` yedeği bunu gizliyor: size() başarılı
+    // dönüyor, tahta 260'a göre ölçekleniyor ve load()'un rAF ile yeniden
+    // deneme yolu hiç çalışmıyordu. Cihazda ölçüldü — hücre tam olarak
+    // 260'tan çıkan 41 CSS px'ti, gerçek genişlikten değil. Bir sonraki
+    // sonuç da bundan: closest('.reel-card') null döndüğü için bilgi
+    // panelinin yüksekliği okunamıyor ve çakışma düzelmiyordu.
+    // Ölçemiyorsak ölçmeyi ERTELERİZ; uydurmayız.
+    const availW = el.clientWidth, availH = el.clientHeight;
+    if (!availW || !availH) return false;
+    // BİLGİ PANELİ DEMO ALANINI ÖRTÜYOR (position:absolute, kartın alt
+    // ~%40'ı). Sahne demo alanının TAMAMINDA ortalanırsa tahtanın alt kenarı
+    // oyun adının üstüne biner — cihazda ölçüldü: Galaxy A51'de 34 CSS px
+    // çakışma. Masaüstünün uzun ekranında görünmüyordu, çünkü orada serbest
+    // bölge tahtayı zaten sığdırıyordu.
+    //
+    // Çözüm ortalamayı SERBEST BÖLGEYE hapsetmek: sahneye panel yüksekliği
+    // kadar alt boşluk verilir, böylece flex ortalaması kalan alanda çalışır.
+    // Yüksekliği sabit yazmak yerine ölçmek şart — panel oyun adının
+    // uzunluğuna ve rekor satırının olup olmamasına göre değişiyor.
+    const card = el.closest && el.closest('.reel-card');
+    const info = card && card.querySelector('.reel-info');
+    const infoH = info ? Math.round(info.getBoundingClientRect().height) : 0;
+    scene.style.marginBottom = infoH + 'px';
+    // 96: başlık (~14) + iki boşluk (20) + çözüldüğünde beliren CTA (~34) +
+    // nefes payı. CTA payı BAŞTAN ayrılıyor; sonradan ayırmak tahtayı
+    // çözüm anında zıplatırdı.
+    const freeH = availH - infoH;
+    // Tavan 54'tü ve SINIRLAYAN oydu: cihazda serbest yükseklik 81,
+    // genişlik 77 px hücreye izin verirken tahta 54'te tutuluyordu.
+    // 68 ikisinin de altında kalıyor, yani gerçek sınır artık ölçülen
+    // alan — keyfi bir sayı değil.
+    const c = Math.min(
+      Math.floor((availW * 0.86 - 20) / board.W),
+      Math.floor((freeH - 96) / board.H),
+      68
+    );
+    if (c < 12) return false;
+    cell = c;
+    const W = cell * board.W, H = cell * board.H;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return true;
+  }
+
+  const cx = c => (c % board.W + 0.5) * cell;
+  const cy = c => ((c / board.W | 0) + 0.5) * cell;
+
+  function paint() {
+    if (!cell) return;
+    const W = board.W * cell, H = board.H * cell;
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(120,160,205,.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i < board.W; i++) { ctx.moveTo(i*cell+0.5, 0); ctx.lineTo(i*cell+0.5, H); }
+    for (let i = 1; i < board.H; i++) { ctx.moveTo(0, i*cell+0.5); ctx.lineTo(W, i*cell+0.5); }
+    ctx.stroke();
+
+    const lw = cell * 0.40, now = performance.now();
+    for (let i = 0; i < board.K; i++) {
+      const p = board.paths[i];
+      if (p.length < 2) continue;
+      const col = eng.PALETTE[i % eng.PALETTE.length];
+      [[lw + cell*0.22, col.soft], [lw, col.base]].forEach(([w, s]) => {
+        ctx.strokeStyle = s; ctx.lineWidth = w;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(cx(p[0]), cy(p[0]));
+        for (let j = 1; j < p.length; j++) ctx.lineTo(cx(p[j]), cy(p[j]));
+        ctx.stroke();
+      });
+    }
+    for (let i = 0; i < board.K; i++) {
+      const col = eng.PALETTE[i % eng.PALETTE.length];
+      let grow = 0;
+      pulses.forEach(pu => {
+        if (pu.i !== i) return;
+        grow = Math.sin(Math.min(1, (now - pu.t0) / 380) * Math.PI) * 0.16;
+      });
+      // Davet nabzı: oyuncu HENÜZ dokunmadıysa ilk rengin uçları nefes
+      // alır. İlk dokunuşta anında biter — "yardımı dokununca kaldır"
+      // kuralı, oyuncunun üstüne konuşmamak için.
+      if (!touched && i === 0) grow += Math.sin((now - hintT0) / 380) * 0.05 + 0.05;
+      board.pairs[i].forEach(c2 => {
+        const x = cx(c2), y = cy(c2), r = cell * (0.31 + grow);
+        ctx.fillStyle = col.deep;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = col.base;
+        ctx.beginPath(); ctx.arc(x, y, r*0.84, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.36)';
+        ctx.beginPath(); ctx.arc(x - r*0.26, y - r*0.30, r*0.30, 0, Math.PI*2); ctx.fill();
+      });
+    }
+  }
+
+  function tick() {
+    state.raf = 0;
+    if (state.paused) return;
+    const now = performance.now();
+    pulses = pulses.filter(p => now - p.t0 < 380);
+    paint();
+    // Nabız yoksa dur. Dokunulmamış tahtanın daveti de bir nabız sayılır.
+    if (pulses.length || (!touched && !solved)) state.raf = requestAnimationFrame(tick);
+  }
+  function kick() { if (!state.raf && !state.paused) state.raf = requestAnimationFrame(tick); }
+
+  function cellAt(clientX, clientY) {
+    const r = cv.getBoundingClientRect();
+    if (!r.width || !cell) return -1;
+    const x = (clientX - r.left) * (board.W*cell) / r.width;
+    const y = (clientY - r.top) * (board.H*cell) / r.height;
+    let c = Math.floor(x/cell), rw = Math.floor(y/cell);
+    if (c < -1 || c > board.W || rw < -1 || rw > board.H) return -1;
+    c = Math.max(0, Math.min(board.W-1, c));
+    rw = Math.max(0, Math.min(board.H-1, rw));
+    return rw*board.W + c;
+  }
+
+  // Ara hücreleri tek tek yürüme — oyundakiyle aynı gerekçe: doğrudan
+  // hedefe atlamak çapraz kayma ve hücre atlama demek olurdu.
+  function dragTo(target) {
+    if (active < 0 || target < 0) return;
+    let guard = 0;
+    while (guard++ < 48) {
+      const h = board.head(active);
+      if (h < 0 || h === target) break;
+      const hr = h/board.W|0, hc = h%board.W, tr = target/board.W|0, tc = target%board.W;
+      const dr = tr-hr, dc = tc-hc;
+      const hz = dc !== 0 ? h + Math.sign(dc) : -1;
+      const vt = dr !== 0 ? h + Math.sign(dr)*board.W : -1;
+      const order = Math.abs(dc) >= Math.abs(dr) ? [hz, vt] : [vt, hz];
+      let moved = false;
+      for (let k = 0; k < order.length; k++) {
+        if (order[k] < 0) continue;
+        const res = board.extend(active, order[k]);
+        if (res) {
+          moved = true;
+          if (res === 'done') {
+            pulses.push({ i: active, t0: performance.now() });
+            kick();
+            if (typeof GameAudio !== 'undefined') { GameAudio.play('match'); GameAudio.haptic(12); }
           }
-          pathStep++;
-        } else {
-          flowIdx++;pathStep=0;
-          // Update header
-          header.children[1].textContent='Akış: '+flowIdx+'/5';
-          header.children[2].textContent='Boru: '+Math.round(flowIdx*20)+'%';
+          break;
         }
       }
+      if (!moved) break;
     }
-    // Reset after all drawn
-    if(flowIdx>=FLOWS.length && step%200===0){
-      cells.forEach(c=>{
-        while(c.children.length>0){
-          if(c.children[0].style.borderRadius==='50%'){break;} // Keep dots
-          if(c.children.length<=1 && c.dataset.dot) break;
-          c.removeChild(c.lastChild);
-        }
-        if(!c.dataset.dot){c.style.background='rgba(255,255,255,0.03)';c.style.boxShadow='none';c.innerHTML='';}
-      });
-      flowIdx=0;pathStep=0;step=0;
-      header.children[1].textContent='Akış: 0/5';
-      header.children[2].textContent='Boru: 0%';
+    paint();
+  }
+
+  function onDown(e) {
+    if (solved) return;
+    const c = cellAt(e.clientX, e.clientY);
+    if (c < 0) return;
+    const i = board.startDrag(c);
+    if (i < 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    active = i;
+    touched = true;
+    cap.textContent = 'AYNI RENKLERİ BİRLEŞTİR';
+    if (typeof GameAudio !== 'undefined') { GameAudio.play('tap'); GameAudio.haptic('micro'); }
+    paint();
+  }
+  function onMove(e) {
+    if (active < 0) return;
+    e.preventDefault();
+    dragTo(cellAt(e.clientX, e.clientY));
+  }
+  function onUp() {
+    if (active < 0) return;
+    active = -1;
+    paint();
+    if (board.isComplete()) win();
+  }
+
+  function win() {
+    solved = true;
+    cap.textContent = 'ÇÖZDÜN!';
+    cta.style.display = '';
+    if (typeof GameAudio !== 'undefined') { GameAudio.play('win'); GameAudio.haptic('win'); }
+    if (typeof phParticleBurst === 'function') {
+      const r = panel.getBoundingClientRect();
+      phParticleBurst(document.body, r.left + r.width/2, r.top + r.height/2,
+        eng.PALETTE[1].base, 12);
     }
   }
-  _demoLoop(state,drawFn);
-  return {el,pause(){state.paused=true},resume(){if(state.paused){state.paused=false;_demoLoop(state,drawFn)}},destroy(){state.paused=true;cancelAnimationFrame(state.raf);el.innerHTML=''}};
+
+  function load() {
+    board = eng.createBoard(POOL[poolIdx % POOL.length]);
+    poolIdx++;
+    active = -1; touched = false; solved = false; pulses = [];
+    hintT0 = performance.now();
+    cap.textContent = 'PARMAĞINLA BAĞLA';
+    cta.style.display = 'none';
+    boot();
+  }
+
+  // Ölçü alma DENEMESİ load()'tan ayrı: aynı fonksiyon hem tahtayı kurup
+  // hem yeniden denerse, her denemede yeni bir tahta kurulur ve havuz
+  // indisi ilerler — oyuncu tahtanın birkaç kez değiştiğini görürdü.
+  // Tahta bir kez kurulur, ölçü hazır olana kadar beklenir.
+  function boot() {
+    if (state.paused) return;
+    if (!size()) { state.raf = requestAnimationFrame(boot); return; }
+    paint();
+    kick();
+  }
+
+  cv.addEventListener('pointerdown', onDown);
+  cv.addEventListener('pointermove', onMove);
+  cv.addEventListener('pointerup', onUp);
+  cv.addEventListener('pointercancel', onUp);
+  cv.addEventListener('pointerleave', onUp);
+  cta.addEventListener('click', (e) => {
+    e.stopPropagation();
+    incPlayCount('flowConnect');
+    _recordInteraction('flowConnect', 'play');
+    if (typeof playGame === 'function') playGame(GAME_NAME_MAP.flowConnect);
+  });
+
+  load();
+
+  return {
+    el,
+    pause() { state.paused = true; if (state.raf) { cancelAnimationFrame(state.raf); state.raf = 0; } },
+    // Kart görüş alanına geri girdiğinde tahta OLDUĞU GİBİ kalır —
+    // oyuncunun yarım bıraktığı çizimi silmek, akışta yukarı-aşağı
+    // gezinen birinin ilerlemesini cezalandırmak olurdu.
+    resume() { if (state.paused) { state.paused = false; paint(); kick(); } },
+    destroy() {
+      state.paused = true;
+      if (state.raf) cancelAnimationFrame(state.raf);
+      cv.removeEventListener('pointerdown', onDown);
+      cv.removeEventListener('pointermove', onMove);
+      cv.removeEventListener('pointerup', onUp);
+      cv.removeEventListener('pointercancel', onUp);
+      cv.removeEventListener('pointerleave', onUp);
+      board = null;
+      el.innerHTML = '';
+    },
+  };
 };
 
 // ———————— 11. Resim Kaydır (Photo Slider Puzzle) Demo ————————
@@ -1637,13 +1689,11 @@ MiniDemos.demo_flappyUfo = function(gradient) {
 
 function getDemoFactory(game) {
   switch(game.id) {
-    case 'screwPuzzle': return MiniDemos.demo_screw;
     case 'blockPuzzle': return MiniDemos.demo_blockPuzzle;
     case 'game2048':    return MiniDemos.demo_2048;
     case 'memoryGame':  return MiniDemos.demo_memory;
     case 'wordSearch':  return MiniDemos.demo_wordSearch;
     case 'sudoku':      return MiniDemos.demo_sudoku;
-    case 'mazeGame':    return MiniDemos.demo_maze;
     case 'waterSort':   return MiniDemos.demo_waterSort;
     case 'arrowPuzzle': return MiniDemos.demo_arrowPuzzle;
     case 'flowConnect': return MiniDemos.demo_flowConnect;

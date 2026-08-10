@@ -201,7 +201,7 @@ function testSource() {
 
   // Kapsam: SADECE Su Sıralama. Başka oyuna limit sızmamalı.
   const others = ['game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',
-                  'mazeGame', 'screwPuzzle', 'arrowPuzzle', 'jigsawCard'];
+                  'arrowPuzzle', 'jigsawCard'];
   const leaked = others.filter(g => {
     const s = SRC.indexOf('PuzzleGames.' + g + ' = ');
     if (s < 0) return false;

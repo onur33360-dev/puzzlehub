@@ -33,7 +33,7 @@ const APP_SRC = fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8');
 
 const GAMES = [
   'game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',
-  'mazeGame', 'screwPuzzle', 'waterSort', 'arrowPuzzle', 'jigsawCard',
+  'waterSort', 'arrowPuzzle', 'jigsawCard',
 ];
 
 let failures = 0;
@@ -138,7 +138,7 @@ function testContract() {
   eq('game_started sayacı artırıyor', DQ.rows()[0].progress, 1);
   check('tamamlanmamış görev ödenmiyor', DS.get() === base, 'bakiye ' + base + ' → ' + DS.get());
 
-  GE.emit('game_started', { gameId: 'mazeGame' });     // açık turu quit'ler
+  GE.emit('game_started', { gameId: 'memoryGame' });     // açık turu quit'ler
   GE.emit('game_started', { gameId: 'game2048' });
   eq('3 tur → "3 oyun oyna" tamam', [DQ.rows()[0].progress, DQ.rows()[0].done], [3, true]);
   eq('ödül anında ödendi (+10💎)', DS.get() - base, 10);
@@ -278,7 +278,7 @@ function testLive() {
   console.log('\n   3 farklı oyun arka arkaya:');
   const { DQ, DS, PG } = boot();
   const base = DS.get();
-  ['game2048', 'memoryGame', 'mazeGame'].forEach(id => {
+  ['game2048', 'memoryGame', 'wordSearch'].forEach(id => {
     try { PG[id].init(stubEl(), undefined); } catch (e) {}
   });
   eq('3 farklı oyun → görev tamam', [DQ.rows()[0].progress, DQ.rows()[0].done], [3, true]);

@@ -499,7 +499,7 @@ function phCamera(viewport, stage, opts) {
 }
 
 // ───────── Kaydırma (Swipe) ─────────
-// Oyun-bağımsız yön algılama. 2048 ve Labirent bunu ayrı ayrı, ham
+// Oyun-bağımsız yön algılama. 2048 ve Yılan bunu ayrı ayrı, ham
 // biçimde yazıyordu (sabit 30px eşik, eksen kilidi yok); ortak hâle
 // getirilirken üç şey düzeltildi:
 //

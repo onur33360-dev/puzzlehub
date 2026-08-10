@@ -6,7 +6,7 @@ Permanent instruction manual for everyone working on SlySwipe — human or AI. R
 
 ## 1. Project Snapshot
 
-SlySwipe is a Turkish-language, mobile-first casual game hub: a tab-based shell (Home / Discover / Progress / Profile) around 12 playable games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top. Ten of the twelve are puzzles; **Yılan (Snake) is the first arcade title** (2026-08-08) and its `REEL_GAMES` entry is the first to carry `category:'arcade'`. **Flappy UFO is the second** (same day). That field is currently unread by any code, so the word is a description, not a switch.
+SlySwipe is a Turkish-language, mobile-first casual game hub: a tab-based shell (Home / Discover / Progress / Profile) around 11 playable games, a TikTok-style infinite-scroll Discover feed, and the live-ops scaffolding of a mobile game (diamonds, streaks, ads, subscription) built on top. Nine of the eleven are puzzles; **Yılan (Snake) is the first arcade title** (2026-08-08) and its `REEL_GAMES` entry is the first to carry `category:'arcade'`. **Flappy UFO is the second** (same day). **Akış Bağlantı (Flow Connect) was the thirteenth game built** (2026-08-09) and it emptied the "unbuilt Discover games" list from four to three. The `category` field is no longer unread — the Discover chips consume it (see the shuffled-bag bullet in §5).
 
 **The app is SlySwipe, package id `com.skyroonlabs.slyswipe`, since 2026-08-03.** It was
 called PuzzleHub (`com.puzzlehub.app`) from the start of the project until then, so anything
@@ -260,7 +260,51 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   invalidates a run is *instrument* error, not device state: the in-app FPS
   overlay runs its own rAF loop and a `backdrop-filter`, so it must be off while
   measuring. See `docs/03_PERFORMANCE_RULES.md`.
-- **A new game must be registered in four places:** `PUZZLE_GAMES` and `GAME_MAP` (`app.js`), `REEL_GAMES` and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or visible-but-broken.
+- **Labirent (mazeGame) and Vida Ustası (screwPuzzle) were DELETED on 2026-08-09 (owner request).**
+  Both game modules, both Discover demos (`demo_maze`, `demo_screw`) and every registration
+  are gone: `GAME_MAP` and `PUZZLE_GAMES` (`app.js`), `REEL_GAMES`, `GAME_NAME_MAP` and the
+  `getDemoFactory` cases (`reels.js`). games.js shrank by 566 lines, reels.js by 174.
+  Two leftovers are deliberate, not oversights:
+  1. **`ph_screw_level` in localStorage is not migrated or cleared.** Same rule as every other
+     storage key here — that is `DATA_AND_STORAGE.md`'s job. It is now dead data on the
+     devices of anyone who played, and harmless.
+  2. **`tools/music-test.html` still names both games.** It is a standalone dev page for
+     auditing the synth, not part of the app, and its tags describe sounds rather than games.
+  The four Node harnesses that hardcoded the ids were updated, and `game-events-test.js`
+  failing on the stale list is exactly what that list is for. Its fixtures now emit
+  `memoryGame` where they used to emit `mazeGame` (same reason: it is a 'won'-only game).
+
+- **A new game must be registered in THREE live places:** `GAME_MAP` (`app.js`), `REEL_GAMES`
+  and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or
+  visible-but-broken. **A fourth place is a test, not the app:** `GAMES` in
+  `tools/game-events-test.js` is a hardcoded list, so adding a game makes that tool fail until
+  it is updated — which is the point, not a defect.
+- **`PUZZLE_GAMES` (`app.js`) IS DEAD DATA — it has no reader anywhere in the repo, and this
+  file used to claim otherwise.** The rule above said "four places" and named it first;
+  verified 2026-08-09 by grepping the whole tree: the array is defined at `app.js:81` and
+  never read. It stopped being rendered when Home was rebuilt to the owner's mockup
+  (`38b352a`, 2026-07-29) — that screen now shows the daily challenge, missions, streak,
+  weekly chest and the **favourites** grid (`gh_fav`), not a game catalogue.
+  Two consequences worth knowing before "fixing" anything:
+  1. **İksir Sıralama and Ok Bulmaca are absent from `PUZZLE_GAMES` and that hides nothing.**
+     They are in `GAME_MAP` and `REEL_GAMES` (both `playable:true`), so they are reachable
+     exactly like every other game. Adding them to the dead array would change no pixel.
+  2. **Discover is currently the only game-catalogue surface.** All 13 games are `playable`
+     there, so "will every game show up at launch" is a question about `REEL_GAMES`, not about
+     Home. Whether Home should get a catalogue back is a product decision, not a bug.
+  The array is kept rather than deleted because it still carries per-game presentation data
+  (emoji, rating, gradient, blurb) that a future Home catalogue would want — but nothing reads
+  it today, so **do not treat adding an entry there as registering a game.**
+- **`offerRewardChoice()` threw a `TypeError` on every open until 2026-08-09, so the shared
+  "ad or diamonds?" modal never appeared for anyone.** The daily-budget row was removed from
+  its markup on 2026-08-07, but the line that filled it
+  (`panel.querySelector('[data-ph-ad-budget]').textContent = …`) stayed, and `querySelector`
+  returns `null`. Every consumer was dead: Arrow's hint, 2048's offer. Browser-verified in
+  both directions — the element genuinely is absent, and re-running the old line still throws.
+  **The Node harness cannot catch this class of bug**: `tools/dom-sandbox.js`'s
+  `querySelector` never returns `null`, it always hands back a stub. That is exactly why the
+  line survived for two days of green test runs, and it is worth remembering before trusting
+  a harness pass on anything DOM-shaped.
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; SlySwipe is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked. **"PuzzleHub" is now a third historical layer** (see the rebrand bullet below) — unlike GameHup it was swept out of the source, but it survives in git history and in the `ph_` storage prefix.
@@ -388,7 +432,171 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   migration is still open. Removal is the **last step of the migration**, gated on the
   checklist in `docs/04_CANVAS_POLICY.md` — of which step 3 (DOM vs Canvas benchmark) is
   **not yet done**. Same rule applies to any future migration.
-- **`flowConnect` has a polished demo animation but no real game behind it.** Marked `playable:false` on purpose — a backlog item, not an oversight to quietly complete. (`waterSort` and `arrowPuzzle` were built earlier; `jigsawCard` is in progress, see below.)
+- **`flowConnect` (Akış Bağlantı, 2026-08-09) is now a real game — the "polished demo, no
+  game behind it" note is history.** It was never a rewrite: `PuzzleGames.flowConnect` did
+  not exist, the card was `playable:false`, and `app.js`'s `PUZZLE_GAMES`/`GAME_MAP` never
+  mentioned it. The old `MiniDemos.demo_flowConnect` — five fixed paths drawn in sequence and
+  reset every 200 frames — was replaced, not upgraded.
+  **FULL-BOARD COVERAGE IS NOT THE WIN CONDITION — a level ends when every pair is connected
+  (owner decision, 2026-08-09).** It shipped the other way for a few hours and that was a
+  defect, not a variant: the player connected every colour, the board refused to advance, and
+  the hint said "hepsi zaten bağlı" at the same moment. The game held **two definitions of
+  done** and showed both. The goal is to connect without crossing; leftover empty cells are
+  fine. `isComplete()` = all pairs connected; `isPerfect()` (all connected **and** board full)
+  survives only as the star criterion. Do not restore coverage as a gate.
+  **Levels are still generated as full-coverage partitions and that must not change** — it is
+  what makes solvability structural and what the hint reads from. What changed is that the
+  covering solution is no longer *demanded* of the player.
+  **There is deliberately NO lose state.** Moves are counted but running out of anything is
+  impossible, so there is no continue economy here.
+  **Stars therefore moved from move-efficiency to COVERAGE** (3★ = full board, 2★ ≥ 85 %,
+  1★ below). Forced, not preferred: once coverage stopped being required, drawing K short
+  paths scored 3★ every time, i.e. stars would have measured nothing — the same failure mode
+  CLAUDE.md already records for Water Sort's undo-based stars. Two consequences: the HUD shows
+  the fill percentage next to the connected count (grading on a hidden criterion is worse than
+  not grading), and the star row stays **blank until the first move** — at level start the only
+  filled cells are the endpoints (~38 %), so a live grade read "★☆☆" before the player had
+  touched anything. This follows the platform's
+  flow-not-stress principle; Water Sort's lose state came from a *measured* move optimum and
+  no such basis exists in this genre. Controls are Undo (free, unlimited), Reset (free) and
+  Hint (10💎 or one rewarded ad, same price as Arrow) — owner decision, chosen over the design
+  image's 💎15 undo / 💎30 reset because no other game charges for correcting a mistake.
+  Nine things are load-bearing:
+  0. **The board is a PORTRAIT RECTANGLE, not a square (owner request, 2026-08-09: "oyun
+     alanını boyuna uzat").** A square grid can only grow by getting *wider*, and it was
+     already at 97 % of the screen width — so on a 384×774 phone it left ~200 px of unusable
+     vertical space and could not be enlarged at all. The rows:columns ratio comes from the
+     screen, not from taste: usable area ≈ 362×548 px → 548/362 ≈ 1.51. Tiers run 4×6 → 8×12,
+     and the measured result is a board of **374×554 px, i.e. 97 % of the width and 72 % of
+     the height** (it was 48 % when square). The engine always carried `W` and `H` separately;
+     only the *data* was square.
+     **Coordinates are base-36, and that is a bug fix, not compactness.** Rows now exceed 9
+     (7×11, 8×12) and in decimal `"101"` is ambiguous — row 10 col 1, or row 1 col 0 followed
+     by a direction `1`? Six levels' stored solutions were unplayable before this was caught
+     by the test tool. In base 36 a row and a column are always one character; direction
+     letters are uppercase and coordinates lowercase, so they cannot collide.
+  1. **The level table stores the SOLUTION, not the endpoints.** Format
+     `"WxH|rc<dirs>,rc<dirs>,…"` (R/L/D/U); the puzzle the player sees is *derived* from it
+     (first and last cell of each path). This is the data flow the genre requires — solved
+     layout first, endpoints derived, path information withheld — and it buys three things:
+     the hint knows a correct route without running a solver on the device, the test tool can
+     check the stored solution **and** independently search for one, and a direction letter
+     costs one byte (70 levels ≈ 4.5 KB).
+  2. **Levels are generated by cutting a random Hamiltonian path, never by placing endpoints
+     and hoping.** `tools/flow-levels-test.js --gen` builds a full-coverage path with backbite
+     shuffling, then cuts it into K segments. Full coverage and solvability are therefore
+     *structural*, not checked.
+  3. **Difficulty is measured as the GREEDY PLAYER'S SUCCESS RATE, not as a structural score.**
+     A novice connects each colour by its shortest visible route in whatever order they notice
+     the dots; `greedySuccessRate()` simulates exactly that over random colour orders. If it
+     succeeds, the level plays itself. Since the win condition is "all pairs connected", this
+     *is* the difficulty — how ornate the full-coverage solution happens to be does not reach
+     the player.
+     **This replaced a structural score after the owner played it and said levels stopped
+     getting harder around 10-15.** Measurement confirmed it exactly: greedy success by
+     ten-level block was **95 → 66 → 73 → 76 → 76 → 80 → 71 %** — flat after level 10, and
+     levels 40, 50, 60 and 70 were *all* 100 % greedy-solvable. The old score (path length,
+     turns, coverage share) rose steadily the whole time, so it looked fine; it was measuring
+     properties of the covering solution, which stopped being what the player does the moment
+     coverage stopped being required (point 0 of the win-condition bullet). **A difficulty
+     metric has to be defined against the actual win condition.**
+     Levels are now selected by aiming at a per-level target greedy rate that falls across each
+     tier (`g0`→`g1` in `TIERS`). Measured result: **90 → 61 → 44 → 30 → 21 → 10 → 5 %**.
+     Two supporting facts: hard boards are **rare** in the candidate pool (2-18 % below a 20 %
+     greedy rate, depending on config), which is why the pool is now ~260 candidates per level
+     instead of ~120; and the expensive full solver no longer runs on every candidate, only on
+     the 70 that get selected — greedy scoring is a handful of BFS runs, the full solver is
+     ~200 ms on 8×12, and that ordering is what makes a large pool affordable.
+  4. **Solution count is NOT a filter, and this was measured before it was decided.** The
+     first design demanded unique solutions on hard boards; measurement showed that is
+     impossible: 5×5/3 median 10 solutions, 6×6/4 → 22, 7×7/6 → 150, 8×8+ → the 400 counting cap, and raising the colour count does not help (9×9 was tried at 9/10/11/12 colours, all
+     400+). Full-coverage flow puzzles simply have many valid tilings as the grid grows;
+     reference games are no different. So it became a **logarithmic score component** instead —
+     a linear penalty would let 400 solutions dominate every other term.
+  5. **Levels 1–3 are handcrafted 4×4 boards** (two straight rows + a snake; then a turn in
+     every colour; then a board where the obvious short route breaks full coverage). Same
+     reasoning as Arrow's `HAND_LEVELS`: a generator makes good boards but cannot *teach*.
+     They still go through the solver — being handwritten is a reason for more scrutiny, not
+     less.
+  6. **After level 70 levels are generated ON DEVICE, and no solver runs there.** Solvability
+     is structural (rule 2), so there is nothing to verify; measured at **6.3 ms** for 9×9/9
+     colours (`--bench`), well under the main-thread budget that Arrow's `staleMax` lesson
+     established. Generation is seeded from the level number, so the same level always yields
+     the same board — otherwise "restart" would hand the player a different puzzle. The board
+     stays 9×9/9 colours forever: the palette has nine colours and reusing one would not make
+     the puzzle harder, only unreadable. Difficulty therefore **plateaus** at expert; that is
+     a deliberate ceiling, not an oversight.
+  7. **All game rules live in `engine.createBoard()` and nothing else implements them.** The
+     Discover preview drives the same factory, so adjacency, backtracking, cutting another
+     colour's path and the full-coverage win condition cannot drift between the two surfaces.
+  8. **The Discover preview is genuinely playable, and `touch-action:none` is on the CANVAS
+     ONLY.** Discover is a vertically scrolling feed; putting it on the card would lock the
+     feed. Device-verifiable property: the 160×160 board blocks scrolling, every layer around
+     it stays `auto`. The preview's rAF loop runs only while a pulse is alive and stops
+     otherwise — several cards are alive at once and an idle loop would eat the feed's
+     scrolling smoothness.
+  9. **The hint clears the undo stack, and that is a fix, not tidiness.** Snapshots predate the
+     hint, so undoing after a hint would erase the route the player just paid for.
+  10. **The grid and the endpoint dots are cached in offscreen canvases, rebuilt only when the
+     layout, the board, or the *connected set* changes.** At 9 colours a naive repaint costs
+     54 filled arcs plus the grid **per frame**, all of it static — the same trap Block Puzzle
+     documents as "never repaint the whole board". The cache invalidation keys on a 9-bit
+     connectivity **mask**, not a count: a cut move can connect one colour while breaking
+     another, leaving the count unchanged.
+  **Device-verified on a Galaxy A51 (Android 13), and two real defects only appeared there:**
+   - **The Discover preview board overlapped the card's game title by 34 CSS px.** The card's
+     `.reel-info` is `position:absolute` over the bottom ~40% of the demo area, so centring the
+     preview in the *full* area pushes it under the title. The preview now measures the info
+     panel and reserves it. Invisible on desktop, where the taller viewport happened to fit.
+   - **The root cause behind it is the more instructive one: `size()` ran before the demo
+     element was in the DOM.** `_startDemo` calls the factory and only *then* inserts the
+     element, so `clientWidth` is 0 — and the original `el.clientWidth || 260` fallback made
+     `size()` *succeed* with invented numbers, so `load()`'s rAF retry never ran and
+     `closest('.reel-card')` kept returning null. Measured proof: the cell came out at exactly
+     41 CSS px, the value derived from 260, not from the real width. The fallback was deleted;
+     when the measurement isn't available yet the code now waits instead of guessing. **Any
+     other reel demo written against `el.clientWidth` has the same latent bug.**
+  **The board fills the screen width, and that took reclaiming the shell's padding.**
+  `#screen-game` has a 12 px inline padding shared by every game, so `.fc-wrap` cancels it with
+  `margin-inline:-12px` — scoped to this game, nothing else touched. Width is the binding axis
+  on a phone, so every pixel reclaimed goes straight into the cell. With `PAD` 7 and `EDGE` 4
+  the board measures **374 × 554 px in a 384 × 774 viewport** (97 % width, 72 % height); the
+  Discover preview went **54 → 68 px** per cell. `CELL_MAX` (96) is a tablet ceiling only; no
+  phone board reaches it. Width was the binding axis while boards were square (measured: 9×9
+  allowed 36 px from width but 58 px from height) — that measurement is what proved a square
+  grid could not use the vertical space and led to the portrait boards in point 0.
+  Two traps, both of which produced a silently-too-small board:
+  1. **`layout()` must measure `.fc-wrap` (`boardAreaEl`), not the outer column (`wrapEl`).**
+     The negative margin is on the inner box, so the two differ by 24 px. Measuring the wrong
+     box is not an error — it returns a perfectly valid number for the wrong element, and the
+     board just comes out one step smaller (40 → 38 px, observed).
+  2. **`.fc-wrap` is `flex:0 0 auto`, and `layout()` takes the available HEIGHT from the
+     siblings rather than from that box.** With `flex:1` the wrapper swallowed all spare
+     height and centred the board inside it, leaving two ~104 px dead bands above and below —
+     the owner's "too much empty space top and bottom". The board is square and width-capped
+     so it cannot grow into that space; the only fix is to stop spreading the space *around*
+     it. HUD, board and controls now pack as one centred block (measured gaps: 4 px and 2 px).
+     Because the wrapper's height is then content-driven, reading it for the size calculation
+     would be circular — height is `wrapEl.clientHeight − HUD − controls`.
+  3. **A single measurement at load is not enough; there is a `ResizeObserver` on the board
+     area.** The first `layout()` can run before the box has settled (observed reading 360 px
+     where the real value was 384), and `window.resize` never fires for that — the window did
+     not change, the element did. The observer also covers rotation and late-applied CSS. It is
+     **not** collected by `clearEvs()`; `cleanup()` disconnects it by hand.
+  **Rendering measured at a locked 60 fps** while drawing continuously on the 9×9 board: 240
+  frames, one cell per frame — **P50 16.7 ms · P90 16.7 ms · P95 16.8 ms · P99 33.4 ms**
+  (a single doubled frame). Recorded with the device **thermally throttled** (`SKIN` 41.9 °C,
+  `mStatus=2`) per §5's record-don't-normalize rule.
+  **Measurement trap worth keeping:** `dumpsys gfxinfo` around `adb shell input swipe` is
+  **not** a usable number for this game — it reported P90 42→48 ms and 38→90 % janky across
+  the optimisation, i.e. it appeared to get *worse*. The runs were not comparable (1876 vs 686
+  frames, 39.1 vs 41.9 °C, different board state) and the dominant term was the injection
+  itself (`Number High input latency: 3027`). Drive the real handlers from inside the page and
+  sample rAF deltas instead.
+  `tools/flow-levels-test.js` validates all of it in four layers, the strongest being that it
+  **replays every level's stored solution through the game's own `createBoard`** and asserts
+  `isComplete()` — data and engine verified together, since either could be right while the
+  pair is broken.
 - **`jigsawCard` is ENDLESS since 2026-08-07 — completing a picture is a level, not the end
   of the game.** The `▸` next button was deleted and the game-over box no longer appears on
   a win; `finish()` runs the completion animation, adds score, toasts, then auto-advances
@@ -1627,7 +1835,7 @@ Beyond that:
   `buyPackage()`, `purchasePlus()`), but the **economy rules around them are now real** —
   daily ad budget, diamond prices, Plus benefits. Treat the two halves differently: don't
   build payment SDKs, but do keep the rules honest (see the economy bullets in §5).
-- The four unbuilt Discover games are intentionally unbuilt. Building one is a real feature request, not a bug fix — confirm scope before starting.
+- The remaining unbuilt Discover games are intentionally unbuilt. Building one is a real feature request, not a bug fix — confirm scope before starting. (`flowConnect` left this list on 2026-08-09; it was built as a requested feature, with the scope confirmed first.)
 - Don't assume test coverage or a release process exists. `TESTING.md` and `RELEASE.md` are intentionally deferred until closer to launch.
 
 ---

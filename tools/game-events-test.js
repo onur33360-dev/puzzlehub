@@ -35,8 +35,8 @@ const SRC = fs.readFileSync(path.join(ROOT, 'games/games.js'), 'utf8');
 // olmalı; bu liste aynı zamanda "hiçbir oyun unutulmadı" kontrolüdür.
 const GAMES = [
   'game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',
-  'mazeGame', 'screwPuzzle', 'waterSort', 'arrowPuzzle', 'jigsawCard',
-  'snakeGame', 'flappyUfo',
+  'waterSort', 'arrowPuzzle', 'jigsawCard',
+  'snakeGame', 'flappyUfo', 'flowConnect',
 ];
 const N = GAMES.length;
 
@@ -259,7 +259,7 @@ function testContract() {
   GE.abandon();                                       // açık turu temizle
   const before = GE.stats().totalGamesWon;
   seen.length = 0;
-  GE.emit('game_ended', { gameId: 'mazeGame', result: 'won' });
+  GE.emit('game_ended', { gameId: 'memoryGame', result: 'won' });
   check('başlangıçsız bitiş won sayacını artırmıyor', GE.stats().totalGamesWon === before,
         'won ' + before + ' → ' + GE.stats().totalGamesWon);
   check('başlangıçsız bitiş stray olarak işaretleniyor',
@@ -272,13 +272,13 @@ function testContract() {
         st.totalGamesWon + ' > ' + st.totalGamesStarted);
 
   // ── durationMs ──
-  GE.emit('game_started', { gameId: 'mazeGame' });
+  GE.emit('game_started', { gameId: 'memoryGame' });
   let dur = null;
   const off = GE.on('game_ended', e => { dur = e.durationMs; });
-  GE.emit('game_ended', { gameId: 'mazeGame', result: 'won' });
+  GE.emit('game_ended', { gameId: 'memoryGame', result: 'won' });
   check('durationMs merkezde türetiliyor', typeof dur === 'number' && dur >= 0, 'gelen: ' + dur);
-  GE.emit('game_started', { gameId: 'mazeGame' });
-  GE.emit('game_ended', { gameId: 'mazeGame', result: 'won', durationMs: 12345 });
+  GE.emit('game_started', { gameId: 'memoryGame' });
+  GE.emit('game_ended', { gameId: 'memoryGame', result: 'won', durationMs: 12345 });
   eq('oyunun verdiği durationMs türetilene üstün geliyor', dur, 12345);
   off();
 
@@ -404,7 +404,7 @@ function testSource(calls) {
   // sağladı — testin varlık sebebi tam olarak buydu.
   eq('waterSort hem \'won\' hem \'lost\' yayınlıyor (hamle limiti)',
      [...new Set(resultsOf('waterSort'))].sort(), ['lost', 'won']);
-  eq('mazeGame yalnızca \'won\' yayınlıyor', [...new Set(resultsOf('mazeGame'))], ['won']);
+  eq('memoryGame yalnızca \'won\' yayınlıyor', [...new Set(resultsOf('memoryGame'))], ['won']);
   eq('blockPuzzle yalnızca \'lost\' yayınlıyor (kazanma durumu yok)',
      [...new Set(resultsOf('blockPuzzle'))], ['lost']);
 }
@@ -437,7 +437,7 @@ function testLive() {
 // Her oyunun kaynakta BULUNAN yükleriyle bir tur oynatılıyor; amaç
 // sayaçların uçtan uca doğru birikmesi. Seviyeli oyunlar (tur = seviye)
 // üst üste iki seviye oynuyor, tek turlu oyunlar bir tur.
-const LEVELED = ['screwPuzzle', 'waterSort', 'arrowPuzzle', 'jigsawCard'];
+const LEVELED = ['waterSort', 'arrowPuzzle', 'jigsawCard'];
 
 function testSimulation(calls) {
   console.log('\n4. SİMÜLASYON — uçtan uca sayaç birikimi');
