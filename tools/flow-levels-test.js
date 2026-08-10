@@ -398,6 +398,86 @@ function greedySuccessRate(W, H, pairs, trials, rnd) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  3c. PLAN YAPAN OYUNCU — "bağlamak" ne zaman gerçekten zorlaşır
+// ═══════════════════════════════════════════════════════════════
+// greedySuccessRate RASTGELE sırayla oynuyor; insan öyle oynamıyor.
+// Oyuncu tahtaya bakar, sıkışık olanı önce bağlar, tıkanırsa geri alıp
+// başka sıra dener. Yani rastgele sıranın başarısızlığı insanın
+// zorlandığı anlamına GELMEZ — ölçütün fazla iyimser görünmesinin sebebi
+// bu (ve sahibin "zorluk hâlâ belirleyici değil" demesinin de).
+//
+// Asıl ayrım şu: oyuncu her rengi EN KISA yoldan bağlayabiliyor mu?
+//  • Bağlayabiliyorsa seviye kolaydır — parmağını iki nokta arasında
+//    doğal biçimde gezdirmek yetiyor, tıkanırsa sırayı değiştiriyor.
+//  • Bağlayamıyorsa en az bir rengi BİLE BİLE uzun yoldan dolaştırmak
+//    zorunda. "Bağlantıyı kurmak" işte orada zorlaşıyor.
+//
+// Bu fonksiyon sıralar üzerinde geri izlemeli arama yapıyor: her adımda
+// kalan renklerden birini en kısa yoldan bağlamayı deniyor, tıkanınca
+// geri alıyor. Bir sıra bulursa "dolambaç GEREKMİYOR" der.
+// Her renk için birkaç FARKLI en kısa yol deneniyor (komşu sırası
+// karıştırılarak); tek bir en kısa yola bakmak, başka bir en kısa yolun
+// işe yarayacağı tahtaları yanlışlıkla "zor" saydırırdı.
+function shortestPlanExists(W, H, pairs, cap, rnd, variants) {
+  const N = W * H, K = pairs.length;
+  const nb = buildNb(W, H);
+  const occ = new Int8Array(N).fill(-1);
+  for (let i = 0; i < K; i++) { occ[pairs[i][0]] = i; occ[pairs[i][1]] = i; }
+  const done = new Uint8Array(K);
+  const prev = new Int32Array(N);
+  const q = new Int32Array(N);
+  let nodes = 0;
+
+  // c rengi için bir en kısa yol; komşu sırası karıştırıldığı için aynı
+  // renk farklı çağrılarda farklı (ama yine en kısa) yol verebilir.
+  function bfsPath(c) {
+    const s = pairs[c][0], tg = pairs[c][1];
+    prev.fill(-2); prev[s] = -1;
+    let qh = 0, qt = 0, found = false;
+    q[qt++] = s;
+    while (qh < qt && !found) {
+      const x = q[qh++], a = nb[x];
+      const idx = [0, 1, 2, 3].slice(0, a.length);
+      for (let i = idx.length - 1; i > 0; i--) {
+        const j = (rnd() * (i + 1)) | 0; const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+      }
+      for (let k = 0; k < idx.length; k++) {
+        const y = a[idx[k]];
+        if (prev[y] !== -2) continue;
+        if (y === tg) { prev[y] = x; found = true; break; }
+        if (occ[y] !== -1) continue;
+        prev[y] = x; q[qt++] = y;
+      }
+    }
+    if (!found) return null;
+    const path = [];
+    let cur = prev[tg];
+    while (cur !== s && cur >= 0) { path.push(cur); cur = prev[cur]; }
+    return path;                       // yalnızca ARA hücreler
+  }
+
+  function rec(depth) {
+    if (++nodes > cap) return false;
+    if (depth === K) return true;
+    for (let c = 0; c < K; c++) {
+      if (done[c]) continue;
+      for (let v = 0; v < variants; v++) {
+        const path = bfsPath(c);
+        if (!path) break;              // bu renk şu an hiç bağlanamıyor
+        done[c] = 1;
+        for (let i = 0; i < path.length; i++) occ[path[i]] = c;
+        if (rec(depth + 1)) return true;
+        for (let i = 0; i < path.length; i++) occ[path[i]] = -1;
+        done[c] = 0;
+      }
+    }
+    return false;
+  }
+  const found = rec(0);
+  return { found, nodes, timeout: nodes > cap };
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  4. ZORLUK SKORU
 // ═══════════════════════════════════════════════════════════════
 // Yalnızca tahta boyutuna bakmak yetmez (prompt'un açık uyarısı): 6x6'da
@@ -490,33 +570,73 @@ const HAND_LEVELS = [
   '4x6|00DDDDDRU,01RRDLLDD,22RDLDRDL',     // 3 — yollar birbirinin önünü keser
 ];
 
-// SATIR ≈ 1.5 × SÜTUN. Oran keyfi değil, ekrandan çıkıyor: kullanılabilir
-// alan ~362x548 px, yani 548/362 ≈ 1.51. Bu orandaki tahtalar hem
-// genişliği hem yüksekliği dolduruyor (6x9 → 60 px hücre, 360x540 px;
-// 8x12 → 45 px hücre, 360x540 px). Kare tahtalar dikeyde ~200 px boş
-// bırakıyordu — sahibin "oyun alanını boyuna uzat" dediği şey buydu.
-// `g0`/`g1`: bandın başındaki ve sonundaki HEDEF AÇGÖZLÜ BAŞARI oranı.
-// Seviye bu hedefe göre seçiliyor — tahta boyutuna ya da yapısal skora
-// göre DEĞİL. Sebep ölçüm: eski seçim, açgözlü başarıyı 10. seviyeden
-// sonra %66-80 arasında DÜZ bırakıyordu (seviye 40, 50, 60 ve 70'in
-// dördü de %100 açgözlü çözülebilirdi), yani "zorlaşma" hissedilmiyordu.
-// Hedef eğri artık %100'den %0'a iniyor: oyuncunun plansız oynayarak
-// kazanma ihtimali seviye ilerledikçe düşüyor.
+// ZORLUK = "BAĞLAMAK ZOR MU", tahta doldurmak değil. İki bileşen:
+//
+//  1. DOLAMBAÇ GEREKİYOR MU (baskın terim, 1.0 puan). shortestPlanExists
+//     yanlış dönüyorsa oyuncu en az bir rengi bile bile uzun yoldan
+//     dolaştırmak zorunda — "bağlantıyı kurmak" işte orada zorlaşır.
+//  2. DİKKATSİZ OYUNCU TAKILIYOR MU (0.6 puan). Dolambaç gerekmese bile
+//     yanlış sırayla başlayan oyuncu tıkanabiliyorsa seviye düşünmeyi
+//     gerektirir.
+//
+// ÖLÇÜM, ÖNCEKİ 70 SEVİYENİN NEDEN KOLAY OLDUĞUNU AÇIKLADI: 70 tahtanın
+// 66'sında oyuncu HER rengi en kısa yoldan bağlayıp bitirebiliyordu, yani
+// hiç dolambaç yoktu. Eski ölçüt (rastgele sıralı açgözlü) bunu göremez,
+// çünkü insan rastgele sırayla oynamıyor — sıkışanı önce bağlıyor.
+//
+// YOĞUNLUK ŞART, VE ÖLÇÜLDÜ: seyrek tahtada dolambaç gerektiren tahta
+// ÜRETİLEMİYOR (4x6/4, 5x8/5, 6x9/6 → 60 adayda 0). Boş alan varken en
+// kısa yol hep bulunuyor. 60 adaylık örneklemde oranlar:
+//   5x7/7 %3 · 6x8/8 %8 · 6x9/9 %8 · 7x9/9 %12 · 7x11/9 %12 · 8x11/9 %17
+// Bu yüzden bantlar hem büyüyor hem SIKLAŞIYOR; palet 9 renkte kalıyor
+// (12 renk denenebilirdi ama beyaz tahtada 12 rengi ayırt etmek okunurluğu
+// bozar — zorluk okunmazlıktan gelmemeli).
+//
+// h0/h1: bandın başındaki ve sonundaki HEDEF ZORLUK (0 = kolay,
+// 1.0+ = dolambaç gerekli, 1.6 = tavan).
 const TIERS = [
-  { from: 4,  to: 10, W: 4, H: 6,  K: 4, minLen: 3, g0: 1.00, g1: 0.80, label: 'Başlangıç' },
-  { from: 11, to: 18, W: 5, H: 8,  K: 4, minLen: 4, g0: 0.75, g1: 0.55, label: 'Kolay' },
-  { from: 19, to: 26, W: 5, H: 8,  K: 5, minLen: 3, g0: 0.55, g1: 0.42, label: 'Kolay+' },
-  { from: 27, to: 34, W: 6, H: 9,  K: 5, minLen: 4, g0: 0.42, g1: 0.32, label: 'Orta' },
-  { from: 35, to: 42, W: 6, H: 9,  K: 6, minLen: 3, g0: 0.32, g1: 0.22, label: 'Orta+' },
-  { from: 43, to: 50, W: 7, H: 10, K: 6, minLen: 4, g0: 0.22, g1: 0.14, label: 'İleri' },
-  { from: 51, to: 58, W: 7, H: 11, K: 8, minLen: 3, g0: 0.14, g1: 0.07, label: 'Zor' },
-  // 8x12'de RENK SAYISI ÖLÇÜMLE seçildi, eğriden değil: 8 renkle çözücü
-  // aday başına 1428 ms harcıyor ve 6 tahtanın 3'ünde bütçesi doluyor
-  // (96 hücreye 8 renk = ortalama 12 hücrelik yollar, arama patlıyor).
-  // 9 renk aynı tahtada 200 ms ve 8/8 başarı veriyor. Daha çok renk =
-  // daha kısa yollar = daha kısıtlı arama.
-  { from: 59, to: 70, W: 8, H: 12, K: 9, minLen: 3, g0: 0.07, g1: 0.00, label: 'Uzman' },
+  { from: 4,  to: 10, W: 4, H: 6,  K: 5, minLen: 3, h0: 0.05, h1: 0.25, label: 'Başlangıç' },
+  { from: 11, to: 18, W: 5, H: 7,  K: 6, minLen: 3, h0: 0.25, h1: 0.40, label: 'Kolay' },
+  { from: 19, to: 26, W: 5, H: 8,  K: 7, minLen: 3, h0: 0.40, h1: 0.52, label: 'Kolay+' },
+  // Bu bandın tavanı 0.60: dolambaç terimi olmadan zorluk en fazla
+  // (1 - açgözlü) * 0.6 kadar olabiliyor ve bu boyutta dolambaçlı tahta
+  // neredeyse hiç yok (6x9/8 → %5). Hedefi 0.75 bırakmak, ulaşılamayan
+  // bir sayıyı kovalayıp eğride çukur açıyordu (ölçüldü: 0.50 → 0.46).
+  { from: 27, to: 34, W: 6, H: 9,  K: 8, minLen: 3, h0: 0.52, h1: 0.60, label: 'Orta' },
+  // GEÇİŞ BANDI: dolambaç burada başlıyor (6x9/9 → %8).
+  { from: 35, to: 44, W: 6, H: 9,  K: 9, minLen: 3, h0: 0.62, h1: 1.10, label: 'Orta+' },
+  { from: 45, to: 54, W: 7, H: 9,  K: 9, minLen: 3, h0: 1.10, h1: 1.28, label: 'İleri' },
+  { from: 55, to: 62, W: 7, H: 11, K: 9, minLen: 3, h0: 1.28, h1: 1.40, label: 'Zor' },
+  { from: 63, to: 70, W: 8, H: 11, K: 9, minLen: 3, h0: 1.40, h1: 1.55, label: 'Uzman' },
 ];
+
+// Bir tahtanın zorluğu. `screen` true iken ucuz ayarlarla (havuz taraması),
+// false iken daha geniş bütçeyle (seçilen tahtanın doğrulanması) ölçülür.
+// PLANLAYICI RASTGELE VE BÜTÇELİ, yani asimetrik: "plan bulundu" KESİN
+// (elde bir tanık var), "plan bulunamadı" ise BÜTÇEYE bağlı. Dolayısıyla
+// tek yönde yanılıyor — kolay bir tahtayı zor sanabilir, tersini asla.
+//
+// Bütçenin gerçekten belirleyici olduğu ölçüldü (aynı tahta, artan bütçe):
+//   seviye 45 → 1 deneme/15k: DOLAMBAÇ · 3/60k: plan VAR (55 ms)
+//                             8/150k: plan VAR · 16/300k: plan VAR
+//   seviye 65 → dördünde de DOLAMBAÇ (16/300k'da 6.8 s arama)
+// Yani ucuz ayar YANLIŞ POZİTİF üretiyor, güçlü ayar gerçek zoru ayırt
+// ediyor. Doğrulama 8 deneme × 150k düğüm × 4 yol çeşidi: 45'i doğru
+// çözüyor (137 ms), 65'te kararlı kalıyor (1.9 s). 16/300k'ya çıkmanın
+// tek etkisi süreyi 3-4 katlamak oldu, karar değişmedi.
+//
+// `screen` kipi yalnızca HAVUZ TARAMASI için: ucuz, gürültülü, sıralama
+// yapmaya yeter. Tabloya yazılan karar her zaman doğrulama kipinden gelir.
+function hardnessOf(W, H, pairs, rnd, screen) {
+  const tries = screen ? 1 : 8;
+  const cap = screen ? 15000 : 150000;
+  let plan = false;
+  for (let t = 0; t < tries && !plan; t++) {
+    if (shortestPlanExists(W, H, pairs, cap, rnd, screen ? 2 : 4).found) plan = true;
+  }
+  const greedy = greedySuccessRate(W, H, pairs, screen ? 100 : 300, rnd);
+  return { detour: !plan, greedy, h: (plan ? 0 : 1) + (1 - greedy) * 0.6 };
+}
 // Çözüm sayımı tavanı: gerçek sayı değil, "bu kadar çoktan sonrası
 // zaten bağışlayıcı" eşiği. Tavansız sayım 9x9'da dakikalar sürer.
 const SOL_CAP = 64;
@@ -595,8 +715,8 @@ function generate(seed) {
       // veriyor ve daha kötüsü, "öğretici seviyeler gerçekten kolay mı"
       // sorusu cevapsız kalıyor — elle yazılmış olmak kolay olduklarını
       // kanıtlamaz.
-      greedy: greedySuccessRate(W, H, pairs, 400, rng(9001 + i)),
-      hedef: 1,
+      ...hardnessOf(W, H, pairs, rng(9001 + i), false),
+      hedef: 0,
     });
   });
 
@@ -606,16 +726,12 @@ function generate(seed) {
     const pool = [];
     const seen = new Set();
     const area = t.W * t.H;
-    // ADAY HAVUZU BÜYÜK, çünkü aranan tahta SEYREK: ölçüldü, açgözlü
-    // başarısı %20'nin altındaki adaylar yapılandırmaya göre havuzun
-    // yalnızca %2-18'i. Bunu karşılamanın yolu çok aday üretmek.
-    //
-    // Pahalı olan tam çözücü BURADA ÇALIŞMIYOR. Açgözlü ölçüm bir avuç
-    // BFS, tam çözücü ise 8x12'de ~200 ms; seçim ucuz ölçüyle yapılıp
-    // doğrulama yalnızca SEÇİLEN tahtaya uygulanıyor. Eskiden her aday
-    // çözücüden geçiyordu ve bu, aday sayısını büyütmeyi imkânsız
-    // kılıyordu — asıl darboğaz oydu.
-    const tries = need * 260;
+    // Aranan tahta SEYREK: dolambaç gerektirenler en iyi yapılandırmada
+    // bile adayların %8-17'si (ölçüldü). Havuz bu yüzden büyük.
+    // Tarama ucuz ayarlarla yapılıyor (hardnessOf'un `screen` kipi);
+    // pahalı olan tam çözücü ve geniş bütçeli planlayıcı yalnızca SEÇİLEN
+    // tahtaya uygulanıyor.
+    const tries = need * 220;
     for (let i = 0; i < tries; i++) {
       const p = backbite(t.W, t.H, rnd, area * 26);
       const segs = cutPath(p, t.K, rnd, t.minLen);
@@ -624,37 +740,53 @@ function generate(seed) {
       if (seen.has(key)) continue;
       seen.add(key);
       const pairs = segs.map((s) => [s[0], s[s.length - 1]]);
-      pool.push({ key, segs, pairs, greedy: greedySuccessRate(t.W, t.H, pairs, 140, rnd) });
+      const m = hardnessOf(t.W, t.H, pairs, rnd, true);
+      pool.push({ key, segs, pairs, h: m.h, detour: m.detour, greedy: m.greedy });
     }
     if (pool.length < need) {
       console.error('  UYARI: ' + t.label + ' bandında yalnızca ' + pool.length + '/' + need + ' tahta bulundu');
     }
-    // Her seviyenin bir HEDEF açgözlü başarısı var; band boyunca g0'dan
-    // g1'e doğrusal iniyor ve havuzdan hedefe en yakın kullanılmamış aday
-    // seçiliyor. Eski yöntem havuzu yapısal skora göre sıralayıp eşit
-    // aralıklı dilim alıyordu; sorun şuydu ki o skor TAM KAPLAMALI
-    // çözümün özelliklerini ölçüyordu, oysa oyuncu artık kaplama
-    // yapmıyor. Hedefe nişan almak, oyuncunun yaşayacağı şeyi doğrudan
-    // tarif ediyor.
+    // Her seviyenin HEDEF zorluğu var; band boyunca h0'dan h1'e çıkıyor ve
+    // havuzdan hedefe en yakın kullanılmamış aday seçiliyor.
+    // SEÇİM DOĞRULANMIŞ DEĞERE GÖRE, taranmış değere göre DEĞİL.
+    // Tarama ucuz bütçeyle çalışıyor ve "plan bulamadım" ile "plan yok"u
+    // ayıramıyor; geniş bütçeli doğrulama çoğu zaman planı buluyor ve
+    // aday kolaya düşüyor. İlk sürüm taranmış değere göre seçiyordu ve
+    // sonuç ölçüldü: son iki bantta hedef 1.40-1.55 iken gerçekleşen
+    // ortalama 1.06, dolambaç gerektiren seviye 10'da 4-6 çıkıyordu.
+    // Şimdi aday doğrulanıyor, hedeften uzaksa REDDEDİLİP sıradaki
+    // deneniyor. Doğrulama pahalı (~60 ms) ama seviye başına birkaç kez
+    // çalışıyor, havuzun tamamına değil.
     const used = new Set();
     for (let i = 0; i < need; i++) {
-      const target = t.g0 + (t.g1 - t.g0) * (need === 1 ? 0 : i / (need - 1));
-      let best = -1, bestD = Infinity;
-      for (let j = 0; j < pool.length; j++) {
-        if (used.has(j)) continue;
-        const d = Math.abs(pool[j].greedy - target);
-        if (d < bestD) { bestD = d; best = j; }
+      const target = t.h0 + (t.h1 - t.h0) * (need === 1 ? 0 : i / (need - 1));
+      let cand = null, m = null;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        let best = -1, bestD = Infinity;
+        for (let j = 0; j < pool.length; j++) {
+          if (used.has(j)) continue;
+          const d = Math.abs(pool[j].h - target);
+          if (d < bestD) { bestD = d; best = j; }
+        }
+        if (best < 0) break;
+        used.add(best);
+        const c2 = pool[best];
+        const m2 = hardnessOf(t.W, t.H, c2.pairs, rnd, false);
+        // İlk aday her hâlükârda yedek: hiçbiri hedefi tutturamazsa
+        // seviye boş kalmasın.
+        if (!cand) { cand = c2; m = m2; }
+        // Hedefe yeterince yakınsa kabul. 0.35 eşiği, "dolambaç gerekli"
+        // teriminin 1.0 olmasından türüyor: bu eşik altında bir sapma
+        // dolambaç kararını asla ters çeviremez.
+        if (Math.abs(m2.h - target) <= 0.35) { cand = c2; m = m2; break; }
+        if (m2.h > (cand ? m.h : -1) && target > 1) { cand = c2; m = m2; }
       }
-      if (best < 0) continue;
-      used.add(best);
-      const cand = pool[best];
-      // Seçilen tahta ŞİMDİ tam çözücüden geçiyor: çözülebilirlik yapısal
-      // bir garanti ama sınanmadan tabloya girmemeli.
+      if (!cand) continue;
       const r = makeSolver(t.W, t.H, cand.pairs)(SOL_CAP, 1200000);
       if (r.solutions === 0) console.error('  UYARI: seviye ' + (t.from + i) + ' çözücüden geçemedi');
       out.push({
         level: t.from + i, tier: t.label, key: cand.key, segs: cand.segs,
-        sol: r.solutions, greedy: cand.greedy, hedef: target,
+        sol: r.solutions, greedy: m.greedy, detour: m.detour, h: m.h, hedef: target,
         score: scoreOf(t.W, t.H, cand.segs, Math.max(1, r.solutions)),
         W: t.W, H: t.H, K: t.K,
       });
@@ -776,7 +908,7 @@ function bench() {
 // Araç bir CLI ama parçaları require ile de alınabilsin: üreteci ayarlarken
 // tek tek ölçmenin (ve ileride başka bir aracın çözücüyü kullanmasının)
 // başka yolu yok.
-module.exports = { buildNb, rng, backbite, cutPath, makeSolver, scoreOf, encode, decode, TIERS, greedySuccessRate };
+module.exports = { buildNb, rng, backbite, cutPath, makeSolver, scoreOf, encode, decode, TIERS, greedySuccessRate, shortestPlanExists };
 
 // ═══════════════════════════════════════════════════════════════
 //  ÇALIŞTIR
@@ -801,22 +933,27 @@ if (argv.includes('--gen')) {
   const blocks = [];
   for (let i = 0; i < rows.length; i += 10) {
     const b = rows.slice(i, i + 10);
-    blocks.push(b.reduce((a, x) => a + x.greedy, 0) / b.length);
+    blocks.push(b.reduce((a, x) => a + x.h, 0) / b.length);
   }
   let mono = true;
-  for (let i = 1; i < blocks.length; i++) if (blocks[i] >= blocks[i - 1]) mono = false;
+  for (let i = 1; i < blocks.length; i++) if (blocks[i] <= blocks[i - 1]) mono = false;
   console.log('  // Üretildi: tools/flow-levels-test.js --gen --seed=' + seed);
   console.log('  const LEVELS = [');
   let tier = '';
   rows.forEach((r) => {
     if (r.tier !== tier) { tier = r.tier; console.log('    // ── ' + tier + ' — ' + r.W + 'x' + r.H + ', ' + r.K + ' renk'); }
     console.log("    '" + r.key + "',   // " + String(r.level).padStart(2) +
-      '  açgözlü %' + String(Math.round(r.greedy * 100)).padStart(3) +
-      '  (hedef %' + Math.round(r.hedef * 100) + ')  çözüm ' + r.sol);
+      '  zorluk ' + r.h.toFixed(2) + (r.detour ? ' DOLAMBAÇ' : '        ') +
+      '  açgözlü %' + String(Math.round(r.greedy * 100)).padStart(3) + '  çözüm ' + r.sol);
   });
   console.log('  ];');
-  console.log('\n  Açgözlü başarı (= KOLAYLIK), onluk blok ortalaması — DÜŞMELİ:');
-  console.log('  ' + blocks.map((b) => '%' + Math.round(b * 100)).join(' → '));
+  const dol = [];
+  for (let i = 0; i < rows.length; i += 10) {
+    dol.push(rows.slice(i, i + 10).filter((x) => x.detour).length);
+  }
+  console.log('\n  Dolambaç GEREKEN seviye (10 üzerinden): ' + dol.join(' → '));
+  console.log('  Zorluk, onluk blok ortalaması — ARTMALI:');
+  console.log('  ' + blocks.map((b) => b.toFixed(2)).join(' → '));
   console.log('  ' + rows.length + ' seviye · eğri ' +
     (mono ? 'MONOTON ZORLAŞIYOR' : 'DÜZENSİZ — hedef eğriye bakılmalı') + '\n');
 } else if (argv.includes('--bench')) {
@@ -853,31 +990,33 @@ if (argv.includes('--gen')) {
   // Oran KOLAYLIK olduğu için DÜŞMESİ gerekiyor. Nokta nokta değil onluk
   // ortalamalarda: aynı banttaki iki tahta birbirine yakın olabilir,
   // aranan şey eğilim.
-  const greedy = levels.map((s) => {
+  const rnd = rng(20260809);
+  const hard = levels.map((s) => {
     const { W, H, pairs } = decode(s);
-    // 400 deneme: %3'lük bir oranı ±%1 içinde ölçmeye yetiyor, aksi
-    // hâlde gürültü eğilim testini rastgele düşürüp kaldırırdı.
-    return greedySuccessRate(W, H, pairs, 400, rng(20260809));
+    return hardnessOf(W, H, pairs, rnd, false);
   });
-  const blocks = [];
-  for (let i = 0; i < greedy.length; i += 10) {
-    const b = greedy.slice(i, i + 10);
-    blocks.push(b.reduce((a, x) => a + x, 0) / b.length);
+  const blocks = [], dol = [];
+  for (let i = 0; i < hard.length; i += 10) {
+    const b = hard.slice(i, i + 10);
+    blocks.push(b.reduce((a, x) => a + x.h, 0) / b.length);
+    dol.push(b.filter((x) => x.detour).length);
   }
   for (let i = 1; i < blocks.length; i++) {
-    ok(blocks[i] < blocks[i - 1],
-      'Zorluk ' + (i * 10) + '. seviyeden sonra ARTMIYOR — açgözlü başarı %' +
-      Math.round(blocks[i - 1] * 100) + ' → %' + Math.round(blocks[i] * 100));
+    ok(blocks[i] > blocks[i - 1],
+      'Zorluk ' + (i * 10) + '. seviyeden sonra ARTMIYOR (' +
+      blocks[i - 1].toFixed(2) + ' → ' + blocks[i].toFixed(2) + ')');
   }
-  // İki uç nokta ayrıca sabitleniyor: başlangıç plansız oynanabilmeli,
-  // son bant oynanamamalı. Yalnızca "düşüyor" demek, %90'dan %80'e inen
-  // düz bir eğriyi de geçirirdi.
-  ok(blocks[0] >= 0.80, 'İlk 10 seviye plansız oynanabilmeli (ölçülen %' +
-    Math.round(blocks[0] * 100) + ')');
-  ok(blocks[blocks.length - 1] <= 0.15, 'Son bant plansız oynanabiliyor (ölçülen %' +
-    Math.round(blocks[blocks.length - 1] * 100) + ') — zorluk hedefi tutmamış');
-  console.log('  Açgözlü başarı (= kolaylık), onluk blok: ' +
-    blocks.map((b) => '%' + Math.round(b * 100)).join(' → '));
+  // ASIL ŞART BU: son bantlarda oyuncu en kısa yollarla bitiremiyor olmalı.
+  // Yalnızca "zorluk artıyor" demek yetmez — eski tablo da artıyordu ama
+  // 70 tahtanın 66'sı en kısa yollarla bitiyordu, yani hiçbiri gerçekten
+  // zor değildi. Dolambaç sayısı o boşluğu kapatan denetim.
+  ok(dol[0] === 0, 'İlk 10 seviye dolambaç istememeli (ölçülen ' + dol[0] + ')');
+  ok(dol[dol.length - 1] >= 8,
+    'Son 10 seviyenin en az 8\'i dolambaç gerektirmeli (ölçülen ' + dol[dol.length - 1] + ')');
+  ok(dol[dol.length - 2] >= 6,
+    'Sondan bir önceki bantta en az 6 dolambaçlı seviye olmalı (ölçülen ' + dol[dol.length - 2] + ')');
+  console.log('  Dolambaç GEREKEN seviye (10 üzerinden): ' + dol.join(' → '));
+  console.log('  Zorluk, onluk blok: ' + blocks.map((b) => b.toFixed(2)).join(' → '));
 
   // Kodlama/çözme simetrisi: tablo dizgisi tek gerçek kaynak, oyun da
   // aynı ayrıştırıcıyı kullanmalı. İkisi ayrışırsa oyun bambaşka bir
