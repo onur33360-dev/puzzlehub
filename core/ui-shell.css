@@ -608,12 +608,16 @@ body {
   50%      { box-shadow: 0 0 0 8px rgba(var(--sly-violet-rgb),.05), 0 0 26px 0 rgba(var(--sly-violet-rgb),.95); }
 }
 
-/* Gelecek gün — yalnızca çerçeve. */
+/* GİRİLMEYEN gün — boş ve soluk. İçinde işaret YOK (gün numarası da
+   yok): bir rakam, o gün bir şey olmuş gibi okunuyordu. Daire yerinde
+   duruyor ki hafta ritmi bozulmasın, sadece soluklaşıyor. Bu hem
+   geçmişte kaçırılmış günler hem de haftanın geri kalanı için aynı —
+   ikisi de "girilmedi" demek. */
 .sly-day.is-future .sly-day-dot {
-  background: rgba(255,255,255,.03);
-  border: 1.5px solid rgba(255,255,255,.10);
-  color: var(--sly-text-3);
+  background: rgba(255,255,255,.02);
+  border: 1.5px solid rgba(255,255,255,.07);
 }
+.sly-day.is-future { opacity: .55; }
 
 /* ============================================================
    9) PROMO SATIRI  —  .sly-promo

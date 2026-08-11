@@ -31,7 +31,8 @@ const GAMES = [
   'game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',
   'waterSort', 'arrowPuzzle', 'jigsawCard',
 ];
-const IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30'];
+const IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30',
+                       'streak_50', 'streak_100', 'streak_250', 'streak_500'];
 
 let failures = 0;
 function ok(name)       { console.log('  ✓ ' + name); }
@@ -74,6 +75,13 @@ function boot(store) {
 
 const earnedIds = (B) => B.getData().earned.map(e => e.id);
 
+// Seri kilometre taşı miktarı (yoksa 0). Sayı teste ELLE yazılmıyor —
+// EconomyConfig tek kaynak.
+function milestone(ECON, days) {
+  const m = (ECON.STREAK_MILESTONES || []).find(x => x.days === days);
+  return m ? m.amount : 0;
+}
+
 // N tur oynat (her tur bir game_started).
 function playRounds(GE, n, gameId) {
   for (let i = 0; i < n; i++) {
@@ -97,12 +105,13 @@ function testContract() {
   const b = boot();
   const { B, GE, DS, SS, ECON, s, store } = b;
 
-  eq('beş rozet tanımlı', B.total(), 5);
+  eq('dokuz rozet tanımlı', B.total(), 9);
   eq('rozet kimlikleri', b.BADGES.map(x => x.id), IDS);
   eq('taze kayıtta hiç rozet yok', B.count(), 0);
   eq('totalReward EconomyConfig toplamı', B.totalReward(),
      ECON.BADGE_FIRST_GAME + ECON.BADGE_10_GAMES + ECON.BADGE_STREAK_7 +
-     ECON.BADGE_STREAK_30 + ECON.BADGE_DIAMONDS_500);
+     ECON.BADGE_STREAK_30 + ECON.BADGE_DIAMONDS_500 + ECON.BADGE_STREAK_50 +
+     ECON.BADGE_STREAK_100 + ECON.BADGE_STREAK_250 + ECON.BADGE_STREAK_500);
 
   // ── "İlk Oyun" ──
   const base = DS.get();
@@ -133,7 +142,12 @@ function testContract() {
   setStreak(s, store, 7);
   eq('StreakSystem 7 gün', SS.getCount(), 7);
   check('checkIn() 7 Gün Seri rozetini veriyor', B.has('streak_7'));
-  eq('7 Gün Seri ödülü', DS.get() - before7, ECON.BADGE_STREAK_7);
+  // 2026-08-11: checkIn() artık seri kilometre taşını da ödüyor (7 gün →
+  // +50💎). Delta bu yüzden rozet ödülü DEĞİL, rozet + kilometre taşı.
+  // İkisi ayrı eksen: rozet tek seferlik, kilometre taşı seri her o
+  // sayıya ulaştığında yeniden ödenir.
+  eq('7 Gün Seri ödülü + kilometre taşı', DS.get() - before7,
+     ECON.BADGE_STREAK_7 + milestone(ECON, 7));
   check('30 gün henüz kazanılmamış', !B.has('streak_30'));
 
   // ── Yaşam boyu elmas: BAKİYE DEĞİL ──
@@ -216,7 +230,21 @@ function testSource() {
   check('DiamondSystem.add() rozet kontrolü tetikliyor',
         /_animateAdd\(\);[\s\S]{0,400}Badges\.check\(\)/.test(APP_SRC));
   check('StreakSystem.checkIn() rozet kontrolü tetikliyor',
-        /saveData\(data\);[\s\S]{0,200}Badges\.check\(\)/.test(APP_SRC));
+        /saveData\(data\);[\s\S]{0,900}Badges\.check\(\)/.test(APP_SRC));
+  // Serinin ACILISTA ilerlemesi bu sistemin can damari: 2026-08-11 oncesi
+  // checkIn()in tek cagirani claimDailyReward() idi, yani oyuncu odule
+  // dokunmadikca seri hic artmiyor ve seri rozetleri kazanilamiyordu.
+  check('checkIn() acilista cagriliyor (seri = uygulamayi acmak)',
+        /initApp[\s\S]{0,1500}StreakSystem\.checkIn\(\)/.test(APP_SRC));
+  // Bosluk = SIFIRLAMA. Eski davranis "bir azalt" idi ve "ust uste kac
+  // gun" ifadesini olcmuyordu.
+  check('seri boslukta 1e sifirlaniyor, azaltilmiyor',
+        /data\.count = 1;/.test(APP_SRC) &&
+        !/Math\.max\(1, \(data\.count \|\| 1\) - 1\)/.test(APP_SRC));
+  // Odul ve seri AYRI kayit: ayni alanda tutulsalardi acilistaki checkIn
+  // gunluk odulu "alinmis" yapar ve oyuncu odulunu hic alamazdi.
+  check('gunluk odul seriden ayri kayitta (rewardDate)',
+        /rewardClaimedToday/.test(APP_SRC) && /markRewardClaimed/.test(APP_SRC));
 
   // Ödüller EconomyConfig'te
   ['BADGE_FIRST_GAME','BADGE_10_GAMES','BADGE_STREAK_7','BADGE_STREAK_30','BADGE_DIAMONDS_500']
@@ -261,17 +289,21 @@ function testLive() {
 //  4. UÇTAN UCA
 // ───────────────────────────────────────────────────────────────
 function testEndToEnd() {
-  console.log('\n4. UÇTAN UCA — beş rozet, Plus, UI');
+  console.log('\n4. UÇTAN UCA — dokuz rozet, Plus, UI');
 
   // ── Ücretsiz oyuncu: hepsini kazan ──
   const a = boot();
   const base = a.DS.get();
   playRounds(a.GE, 10, 'game2048');            // first_game + games_10
   setStreak(a.s, a.store, 7);                  // streak_7
-  setStreak(a.s, a.store, 30);                 // streak_30
+  setStreak(a.s, a.store, 30);                 // streak_30  (+ kilometre taşı)
+  setStreak(a.s, a.store, 500);                // 50/100/250/500 hepsi birden
   a.DS.add(500, null);                         // diamonds_500 (kazanım sayacı)
-  eq('beş rozetin beşi de kazanıldı', a.B.count(), 5);
-  eq('rozet ödülleri toplamı', a.DS.get() - base - 500, a.B.totalReward());
+  eq('dokuz rozetin dokuzu da kazanıldı', a.B.count(), 9);
+  // Kilometre taşları rozet ödülü DEĞİL, çıkarılıyor. 14 gün atlandı
+  // (7'den 30'a sıçrandı), yani yalnızca 7 ve 30 ödendi.
+  const msPaid = milestone(a.ECON, 7) + milestone(a.ECON, 30);
+  eq('rozet ödülleri toplamı', a.DS.get() - base - 500 - msPaid, a.B.totalReward());
 
   // ── UI: dört nokta ──
   a.renderProgress();
@@ -283,7 +315,7 @@ function testEndToEnd() {
   // Profil vitrininde ve kutlama katmanında kullanılıyor, rozet ızgarası
   // sly-badge-card + sly-t-<tone> kullanıyor.
   check('Rozetler ekranı ilerleme halkasında gerçek sayıyı gösteriyor',
-        prg.indexOf('sly-ring-n">5<') >= 0 && prg.indexOf('/ 5<') >= 0,
+        prg.indexOf('sly-ring-n">9<') >= 0 && prg.indexOf('/ 9<') >= 0,
         prg.slice(0, 400));
   check('Rozetler ekranı gerçek rozet kartlarını çiziyor',
         prg.indexOf('30 Gün Seri') >= 0 && prg.indexOf('500 Elmas') >= 0);
@@ -312,11 +344,19 @@ function testEndToEnd() {
   const pBase = p.DS.get();
   playRounds(p.GE, 10, 'game2048');
   setStreak(p.s, p.store, 30);
+  setStreak(p.s, p.store, 500);
   p.DS.add(500, null);
-  eq('Plus: beş rozet de kazanıldı', p.B.count(), 5);
+  eq('Plus: dokuz rozet de kazanıldı', p.B.count(), 9);
   // Her ödül ayrı ayrı Math.round(x*1.5) — toplamı yuvarlamak yanlış olurdu.
   const plusTotal = p.s.get('BADGES').reduce((s, b) => s + Math.round(b.reward * 1.5), 0);
-  eq('Plus: rozet ödülleri +%50', p.DS.get() - pBase - 500, plusTotal);
+  // Kilometre taşları add() ile ödeniyor, addReward() ile DEĞİL — yani
+  // Plus çarpanı onlara UYGULANMAZ. Bu iddia o ayrımı da sabitliyor:
+  // çarpan kilometre taşına da uygulansaydı delta tutmazdı.
+  // YALNIZCA 30: setStreak(30) seriyi doğrudan 30'a kuruyor, 7'den
+  // GEÇMİYOR — dolayısıyla 7 kilometre taşı hiç ödenmiyor.
+  const pMs = milestone(p.ECON, 30);
+  eq('Plus: rozet ödülleri +%50 (kilometre taşı çarpansız)',
+     p.DS.get() - pBase - 500 - pMs, plusTotal);
   check('Plus toplamı ücretsizden yüksek', plusTotal > a.B.totalReward(),
         plusTotal + ' vs ' + a.B.totalReward());
 
@@ -327,12 +367,12 @@ function testEndToEnd() {
   const sc2 = q.el('pf-showcase').innerHTML;
   eq('1 rozetle vitrinde 2 kilitli yuva', (sc2.match(/bdg-locked/g) || []).length, 2);
   q.renderShop();
-  check('mağaza satırı 1/5 gösteriyor',
-        q.el('shop-free').innerHTML.indexOf('1/5 rozet') >= 0);
+  check('mağaza satırı 1/9 gösteriyor',
+        q.el('shop-free').innerHTML.indexOf('1/9 rozet') >= 0);
 
   // ── Kapat/aç ──
   const r = boot(a.store);
-  eq('kapat/aç: rozetler korunuyor', r.B.count(), 5);
+  eq('kapat/aç: rozetler korunuyor', r.B.count(), 9);
   const rBefore = r.DS.get();
   r.B.check();
   playRounds(r.GE, 5, 'game2048');
@@ -343,9 +383,13 @@ function testEndToEnd() {
   const s2Base = s2.DS.get();
   playRounds(s2.GE, 40, 'game2048');
   setStreak(s2.s, s2.store, 30);
+  setStreak(s2.s, s2.store, 500);
   s2.DS.add(500, null);
   for (let i = 0; i < 10; i++) s2.B.check();
-  eq('değişmez: rozet ödülleri en fazla bir kez', s2.DS.get() - s2Base - 500, s2.B.totalReward());
+  // Yukarıdakiyle aynı: 7 basamağından geçilmiyor.
+  const s2Ms = milestone(s2.ECON, 30);
+  eq('değişmez: rozet ödülleri en fazla bir kez',
+     s2.DS.get() - s2Base - 500 - s2Ms, s2.B.totalReward());
 }
 
 // ───────────────────────────────────────────────────────────────

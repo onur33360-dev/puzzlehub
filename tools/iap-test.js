@@ -112,7 +112,8 @@ function fakePlugin(cfg) {
 }
 
 // Rozet/görev sistemleri elmas ödüyor; izole ediliyor (kardeş araç dersi).
-const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30'];
+const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30',
+                       'streak_50', 'streak_100', 'streak_250', 'streak_500'];
 
 function boot(cfg) {
   cfg = cfg || {};

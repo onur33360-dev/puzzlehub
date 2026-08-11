@@ -39,7 +39,8 @@ function eq(name, actual, expected) {
 // Görev ve rozet sistemleri de aynı olaylardan besleniyor ve elmas ödüyor;
 // izole edilmezse buradaki bakiye ölçümleri kirlenir (bkz. badges-test.js'te
 // öğrenilen ders). İkisi de "bitmiş" tohumlanıyor.
-const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30'];
+const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30',
+                       'streak_50', 'streak_100', 'streak_250', 'streak_500'];
 function boot(store) {
   store = store || {};
   if (!store['ph_badges']) {

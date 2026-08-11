@@ -1086,6 +1086,46 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   `APP_VERSION` is bumped — while `index.html` is network-first and updates immediately.
   The symptom is "my HTML change landed, my CSS change didn't", which reads like a
   specificity bug. Unregister the worker and clear `caches` before re-reading the page.
+- **The login streak DID NOT WORK until 2026-08-11, and the cause was a single missing
+  call site.** `StreakSystem.checkIn()`'s only caller in the whole app was
+  `claimDailyReward()` — so the streak advanced *only if the player tapped today's circle*.
+  Device-verified: an account with 248 recorded rounds showed **"0 gün seri"**. The streak
+  is now what its name says: `initApp()` calls `checkIn()` on every launch, before any
+  screen renders.
+  Four things are load-bearing:
+  1. **A gap RESETS the streak to 1** (owner decision). The old code did
+     `count = Math.max(1, count - 1)` — "go back one day instead of reset" — which meant
+     the number never answered "how many consecutive days", so it measured nothing.
+     100 consecutive opens now reads 100; miss one day and the next open reads 1.
+  2. **The daily diamond reward moved to its OWN field, `rewardDate`.** It had to: streak
+     and reward shared `lastDate`, so once check-in became automatic the app would mark
+     the reward claimed the instant it launched and the player could never collect it.
+     `checkIn()` migrates old records (`rewardDate = lastDate || null`) **before** touching
+     `lastDate` — do it after and every upgrading player loses one day's reward.
+     **The `|| null` is not defensive noise:** without it a *fresh* record leaves
+     `rewardDate` undefined forever, the reader falls back to `lastDate` (= today), and a
+     brand-new player is told they already claimed. That exact bug was caught on device,
+     not in the harness. `rewardClaimedToday()` therefore reads `rewardDate` **only** and
+     never falls back.
+  3. **Streak milestones (7/14/30 → 50/100/200💎) moved from `claimDailyReward()` into
+     `checkIn()`**, and their amounts moved into `EconomyConfig.STREAK_MILESTONES` (they
+     were bare literals, against the "every economy number in EconomyConfig" rule). Keying
+     them on `streak === 7` inside the claim path was correct only while the streak *was*
+     the claim; with check-in automatic they would have paid only if the player happened to
+     collect the reward on exactly that day. They are paid with `add()`, not `addReward()`
+     — Plus's +50% is for ad/daily-reward earnings, not for the player's own consistency.
+  4. **The week row's mark comes from ONE question: was that day entered?** Entered → ★,
+     not entered → **empty** and dimmed. The old row had three different marks and drew a
+     *day number* on days that were never entered, i.e. it showed something for nothing.
+  Streak badges now go 7 / 30 / 50 / 100 / 250 / 500 (owner request), all reading the same
+  `ph_streak` counter — no new tracking. **`Badges.total()` is 9, not 5**, and the badge-id
+  list is hardcoded in **six** harnesses (`badges-test`, `daily-quests-test`, `iap-test`,
+  `interstitial-test`, `ad-consent-test`, `ad-release-test` siblings) — adding a badge fails
+  them until updated, which is the point.
+  **Harness trap worth knowing:** `makeSandbox()` evaluates `app.js`, which runs the
+  `initApp` IIFE — so the boot-time `checkIn()` (and any milestone it pays) has *already
+  happened* by the time a test takes its "before" reading. Measure against the known
+  starting balance, not a before/after delta.
 - **The palette lives in THREE `:root` blocks and they do NOT talk to each other.**
   `style.css` owns the **legacy app shell** tokens — `--bg-body`, `--accent`, `--text`,
   `--radius-*` — still consumed by Plus, Shop, the game header and the avatar picker.

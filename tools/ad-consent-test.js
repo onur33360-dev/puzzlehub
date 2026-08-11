@@ -57,7 +57,8 @@ function fakePlugin(cfg) {
 
 // Rozet/görev sistemleri elmas ödediği için izole ediliyor (kardeş
 // araçlarda öğrenilen ders).
-const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30'];
+const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30',
+                       'streak_50', 'streak_100', 'streak_250', 'streak_500'];
 function boot(cfg) {
   const store = {
     ph_badges: JSON.stringify({ earned: ALL_BADGE_IDS.map(id => ({ id, earnedAt: 1 })) }),

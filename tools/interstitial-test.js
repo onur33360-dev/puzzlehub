@@ -67,7 +67,8 @@ function fakePlugin(cfg) {
 // Rozet ve görev sistemleri AYNI oyun olaylarından besleniyor ve ikisi de
 // elmas ödüyor. İzole edilmezlerse buradaki olay akışı onların ödüllerini
 // tetikler ve gürültü yaratır (kardeş araçlarda öğrenilen ders).
-const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30'];
+const ALL_BADGE_IDS = ['first_game', 'games_10', 'streak_7', 'diamonds_500', 'streak_30',
+                       'streak_50', 'streak_100', 'streak_250', 'streak_500'];
 
 function boot(cfg) {
   cfg = cfg || {};

@@ -68,8 +68,28 @@ const EconomyConfig = {
   BADGE_FIRST_GAME: 5,
   BADGE_10_GAMES: 15,
   BADGE_STREAK_7: 20,
-  BADGE_STREAK_30: 50,        // en zoru, en yüksek
+  BADGE_STREAK_30: 50,
   BADGE_DIAMONDS_500: 25,
+  // Uzun seri rozetleri (2026-08-11, sahibinin isteği). Ödüller kabaca
+  // iki katlanarak gidiyor: 7→20, 30→50, 50→75, 100→150, 250→300,
+  // 500→600. Bir rozet ödülsüz tanımlanamadığı için bu sayıları ben
+  // seçtim; ekonomi kararı sahibinin (§7), rahatça değiştirilebilir —
+  // hiçbir metin bu sayıları elle yazmıyor, hepsi buradan okunuyor.
+  BADGE_STREAK_50: 75,
+  BADGE_STREAK_100: 150,
+  BADGE_STREAK_250: 300,
+  BADGE_STREAK_500: 600,      // en zoru, en yüksek
+
+  // Seri kilometre taşları. Rozetlerden AYRI bir ödül ekseni: rozet tek
+  // seferlik ve kalıcı, bu ise seri her o sayıya ulaştığında ödenir
+  // (seri kırılıp yeniden kurulursa tekrar). Değerler 2026-08-11'e kadar
+  // claimDailyReward() içinde ÇIPLAK SAYI olarak duruyordu; buraya
+  // taşındı, çünkü kural "her ekonomi sayısı EconomyConfig'te".
+  STREAK_MILESTONES: [
+    { days: 7,  amount: 50,  label: '7 gün seri bonusu! 🔥' },
+    { days: 14, amount: 100, label: '14 gün seri! 🎉' },
+    { days: 30, amount: 200, label: '30 gün seri! 👑' },
+  ],
 
   // --- Premium (PlusSystem) ---
   PLUS_DAILY_DIAMONDS: 20,    // günlük ödülün ÜSTÜNE, ayrı satır
@@ -359,22 +379,52 @@ const StreakSystem = {
     localStorage.setItem(this._key, JSON.stringify(data));
   },
   
+  // ───── GİRİŞ SERİSİ ─────
+  // UYGULAMA HER AÇILDIĞINDA çağrılır (initApp), ödül almaya BAĞLI DEĞİL.
+  // 2026-08-11'e kadar tek çağıranı claimDailyReward() idi, yani seri
+  // ancak oyuncu bugünün dairesine DOKUNURSA ilerliyordu; cihazda 248 tur
+  // oynamış bir hesap "0 gün seri" gösteriyordu. Seri artık "uygulamayı
+  // açtın mı" sorusunun cevabı, ki adı da bunu söylüyor.
   checkIn() {
     const data = this.getData();
     const today = new Date().toDateString();
 
-    if (data.lastDate === today) return false; // Already checked in
+    // GEÇİŞ (2026-08-11): rewardDate'ten önce lastDate İKİ anlamı birden
+    // taşıyordu — "giriş yaptı" ve "günlük ödülü aldı" tek eylemdi.
+    // Alan yoksa eski anlamı ödül tarafına taşı.
+    //
+    // İKİ ŞEY LOAD-BEARING:
+    // 1. lastDate GÜNCELLENMEDEN ÖNCE çalışmalı. Sonra yapılsaydı, bugün
+    //    ödülünü henüz almamış her oyuncu almış sayılır ve ödülünü bir
+    //    gün kaybederdi.
+    // 2. `|| null` ŞART, `&& data.lastDate` koşulu DEĞİL. Alan her
+    //    hâlükârda YAZILMALI: yazılmasaydı taze bir kayıtta rewardDate
+    //    sonsuza dek undefined kalır, okuyucu da lastDate'e düşerdi — ve
+    //    lastDate iki satır sonra BUGÜN olacağı için yeni oyuncuya
+    //    "bugünkü ödülü zaten aldın" denirdi. Cihazda bu şekilde
+    //    yakalandı; null "hiç alınmadı" demenin açık yolu.
+    if (data.rewardDate === undefined) {
+      data.rewardDate = data.lastDate || null;
+    }
+
+    if (data.lastDate === today) {
+      this.saveData(data);   // geçiş yazılmış olabilir
+      return false;          // bugün zaten sayıldı
+    }
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
     if (data.lastDate === yesterday.toDateString()) {
-      // Streak continues
+      // Dün de girilmiş — seri sürüyor. 100 gün üst üste = 100.
       data.count = (data.count || 0) + 1;
-    } else if (data.lastDate) {
-      // Streak broken — go back 1 day instead of reset
-      data.count = Math.max(1, (data.count || 1) - 1);
     } else {
+      // BOŞLUK VAR (ya da ilk giriş) → SERİ SIFIRLANIR, bugünle 1'den
+      // başlar. Eskiden bir azaltılıyordu ("go back 1 day instead of
+      // reset"); sahibinin kararıyla değişti (2026-08-11): bir gün
+      // atlayan oyuncu seriyi kuramamıştır, seri de bunu söylemeli.
+      // Azaltma, "üst üste kaç gün" ifadesini ölçmediği için sayıyı
+      // anlamsızlaştırıyordu.
       data.count = 1;
     }
 
@@ -393,9 +443,44 @@ const StreakSystem = {
     data.days = days.slice(-21);
 
     this.saveData(data);
-    // Seri uzadı — 7/30 gün rozetlerinin koşulu tam olarak bu.
+
+    // ───── SERİ KİLOMETRE TAŞLARI ─────
+    // 2026-08-11'de claimDailyReward()'dan BURAYA taşındı. Orada
+    // `streak === 7` koşulu, seri ödül almaya bağlıyken doğruydu; seri
+    // artık açılışta ilerlediği için orada kalsaydı yalnızca oyuncu
+    // ödülü tam o gün almayı hatırlarsa ödenirdi — yani sessizce
+    // güvenilmez olurdu. Kilometre taşı seriye aittir, ödüle değil.
+    // add() ile, addReward() ile DEĞİL: Plus çarpanı reklam ve günlük
+    // ödül kazançlarına uygulanıyor; bu ise oyuncunun kendi
+    // sürekliliğinin karşılığı, aboneliğin değil.
+    if (typeof DiamondSystem !== 'undefined') {
+      const ms = EconomyConfig.STREAK_MILESTONES.find(m => m.days === data.count);
+      if (ms) DiamondSystem.add(ms.amount, ms.label);
+    }
+
+    // Seri uzadı — seri rozetlerinin (7/30/50/100/250/500) koşulu tam
+    // olarak bu.
     if (typeof Badges !== 'undefined') Badges.check();
     return true;
+  },
+
+  // ───── GÜNLÜK ELMAS ÖDÜLÜ ─────
+  // Giriş serisinden AYRI kayıt (`rewardDate`). Ayrılmak ZORUNDAYDI:
+  // seri artık açılışta ilerliyor, yani ikisi tek alanda tutulsaydı
+  // uygulama açılır açılmaz ödül "alınmış" sayılır ve oyuncu ödülünü
+  // hiç alamazdı.
+  // SADECE rewardDate'e bakar, lastDate'e DÜŞMEZ. Düşseydi, alanı henüz
+  // yazılmamış bir kayıtta lastDate (= bugün) okunur ve ödül alınmış
+  // sanılırdı. Belirsizliği geçiş çözüyor: checkIn() her açılışta ve her
+  // render'dan ÖNCE çalışıp alanı mutlaka yazıyor.
+  rewardClaimedToday() {
+    return this.getData().rewardDate === new Date().toDateString();
+  },
+
+  markRewardClaimed() {
+    const d = this.getData();
+    d.rewardDate = new Date().toDateString();
+    this.saveData(d);
   },
 
   // YEREL takvim günü — UTC olsaydı gün bazı bölgelerde gün ortasında
@@ -439,12 +524,15 @@ const DAILY_REWARD_TABLE = [
   { day: 'Paz', amount: 100, icon: '👑', label: '100 Elmas!' },
 ];
 
+// Yalnızca ELMAS ödülünü öder. Seriyi ARTIRMAZ — seri açılışta
+// ilerliyor (bkz. StreakSystem.checkIn). İkisi 2026-08-11'e kadar aynı
+// eylemdi ve seri de bu yüzden çalışmıyordu.
 function claimDailyReward() {
-  const isNew = StreakSystem.checkIn();
-  if (!isNew) {
+  if (StreakSystem.rewardClaimedToday()) {
     showToast('✅ Bugünkü ödülü zaten aldın!');
     return;
   }
+  StreakSystem.markRewardClaimed();
   const dayIdx = StreakSystem.getDayInWeek();
   const reward = DAILY_REWARD_TABLE[dayIdx];
   // addReward: günlük ödül Plus'ın +%50 çarpanına TABİ (bkz. 4d).
@@ -460,12 +548,9 @@ function claimDailyReward() {
     DiamondSystem.add(EconomyConfig.PLUS_DAILY_DIAMONDS, 'Plus günlük bonusu 👑');
   }
 
-  // Streak milestones
-  const streak = StreakSystem.getCount();
-  if (streak === 7) DiamondSystem.add(50, '7 gün streak bonusu! 🔥');
-  if (streak === 14) DiamondSystem.add(100, '14 gün streak! 🎉');
-  if (streak === 30) DiamondSystem.add(200, '30 gün streak! 👑');
-  
+  // Seri kilometre taşları (7/14/30) BURADAN KALDIRILDI —
+  // StreakSystem.checkIn()'e taşındı; gerekçe orada yazılı.
+
   renderDailyRewards();
   // Seri kartı da tazelenmeli: #hdr-streak onun içinde ve ilerleme
   // çubuğu da seriden hesaplanıyor. renderHomeStats() elemanı yeniden
@@ -926,6 +1011,24 @@ const BADGES = [
   { id:'streak_30',     icon:'👑', tone:'gold',   group:'seri',    name:'30 Gün Seri',
     desc:'30 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_30,
     test: () => StreakSystem.getCount() >= 30 },
+
+  // Uzun seri basamakları (2026-08-11). Hepsi AYNI sayaçtan okuyor
+  // (ph_streak), yani yeni bir takip yazılmadı — bu bölümün kuralı.
+  { id:'streak_50',     icon:'⚡', tone:'purple', group:'seri',    name:'50 Gün Seri',
+    desc:'50 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_50,
+    test: () => StreakSystem.getCount() >= 50 },
+
+  { id:'streak_100',    icon:'🌟', tone:'cyan',   group:'seri',    name:'100 Gün Seri',
+    desc:'100 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_100,
+    test: () => StreakSystem.getCount() >= 100 },
+
+  { id:'streak_250',    icon:'💫', tone:'blue',   group:'seri',    name:'250 Gün Seri',
+    desc:'250 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_250,
+    test: () => StreakSystem.getCount() >= 250 },
+
+  { id:'streak_500',    icon:'🏆', tone:'gold',   group:'seri',    name:'500 Gün Seri',
+    desc:'500 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_500,
+    test: () => StreakSystem.getCount() >= 500 },
 ];
 
 // Rozet `tone` değerleri (blue/purple/red/cyan/gold) ile kabuk tasarım
@@ -2967,9 +3070,10 @@ function showStreakInfo() {
 
 function renderDailyRewards() {
   const container = document.getElementById('daily-rewards');
-  const streakData = StreakSystem.getData();
-  const today = new Date().toDateString();
-  const alreadyClaimed = streakData.lastDate === today;
+  // Ödül alındı mı — SERİDEN AYRI kayıt (bkz. rewardClaimedToday).
+  // Eskiden `lastDate === today` okunuyordu; seri açılışta ilerlemeye
+  // başlayınca bu, uygulama açılır açılmaz "ödül alındı" demek olurdu.
+  const alreadyClaimed = StreakSystem.rewardClaimedToday();
   const currentDayIdx = StreakSystem.getDayInWeek();
   
   // Mockup panel 1 "7 Günlük Seri": alınmış günler yeşil ✓, bugün dolu mor
@@ -2996,11 +3100,20 @@ function renderDailyRewards() {
     // ekranda "şu an yapılabilecek bir şey" olduğunu söyleyen tek işaret.
     const claimable = !alreadyClaimed && isToday;
 
+    // İŞARET TEK KURALDAN: girilen gün ★, girilmeyen gün BOŞ.
+    // Eskiden üç ayrı işaret vardı (✓ alınmış, ★ bugün, gün numarası
+    // gelecek) ve "gün numarası" girilmemiş bir günü DOLU gösteriyordu —
+    // yani satır, girilmeyen günleri de bir şey olmuş gibi çiziyordu.
+    // Artık tek soru var: o gün girildi mi?
+    const mark = done ? '★' : '';
+
+    // Sınıf sırası önemli: bugün girilmiş olsa bile (açılışta checkIn
+    // çalıştığı için neredeyse her zaman öyle) menekşe "bugün" vurgusunu
+    // almalı, geçmiş günlerin yeşilini değil.
     let cls = 'sly-day';
-    let mark;
-    if (done)          { cls += ' is-done';   mark = '✓'; }
-    else if (isToday)  { cls += ' is-today';  mark = '★'; }
-    else               { cls += ' is-future'; mark = String(i + 1); }
+    if (isToday)    cls += ' is-today';
+    else if (done)  cls += ' is-done';
+    else            cls += ' is-future';
     if (claimable) cls += ' is-claimable';
 
     return `<div class="${cls}">
@@ -3859,6 +3972,11 @@ function showToast(msg) {
   // Reklam bütçesi rozetleri açılışta doğru dolsun; gün değiştiyse
   // sayaç ilk okumada zaten sıfırdan başlar (tembel sıfırlama).
   AdBudget.updateUI();
+  // GİRİŞ SERİSİ — uygulamayı açmak serinin TANIMI. Ekranlar
+  // çizilmeden ÖNCE çalışmalı, yoksa bugünün yıldızı ve seri sayısı
+  // bir açılış geriden gelirdi. Aynı gün tekrar açılışta hiçbir şey
+  // yapmaz (lastDate === today).
+  StreakSystem.checkIn();
   renderHome();
   // renderLeaderboard() değil: 'lider' sekmesi artık İlerleme ekranını
   // gösteriyor. Eskisi açılışta GİZLİ kapsayıcılara boşuna çiziyordu.
