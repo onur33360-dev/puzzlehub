@@ -70,15 +70,20 @@ const EconomyConfig = {
   BADGE_STREAK_7: 20,
   BADGE_STREAK_30: 50,
   BADGE_DIAMONDS_500: 25,
-  // Uzun seri rozetleri (2026-08-11, sahibinin isteği). Ödüller kabaca
-  // iki katlanarak gidiyor: 7→20, 30→50, 50→75, 100→150, 250→300,
-  // 500→600. Bir rozet ödülsüz tanımlanamadığı için bu sayıları ben
-  // seçtim; ekonomi kararı sahibinin (§7), rahatça değiştirilebilir —
-  // hiçbir metin bu sayıları elle yazmıyor, hepsi buradan okunuyor.
-  BADGE_STREAK_50: 75,
-  BADGE_STREAK_100: 150,
-  BADGE_STREAK_250: 300,
-  BADGE_STREAK_500: 600,      // en zoru, en yüksek
+  // Uzun seri rozetleri (2026-08-11, sahibinin isteği).
+  // ÖLÇEK SAHİBİNİN KENDİ ÇİZGİSİNDEN GELİYOR, uydurulmadı: yukarıdaki
+  // 7→20 ve 30→50 zaten "bir aylık sadakat ≈ 50💎" diyor. Bu dördü o
+  // oranı sürdürüyor, katlayarak değil.
+  // İlk sürümde 75/150/300/600 yazılmıştı ve sahibi "çok fazla" dedi —
+  // haklıydı: yalnız 500 gün rozeti 600💎, yani mağazanın "Popüler"
+  // paketinden (550💎) fazlaydı ve dört rozet toplamı ücretli orta
+  // paketin iki katını bedavaya veriyordu. Ölçüt şu: rozet havuzunun
+  // TAMAMI (500💎) en küçük paketin (100💎) birkaç katında kalmalı,
+  // paketlerin yerine geçmemeli.
+  BADGE_STREAK_50: 60,
+  BADGE_STREAK_100: 75,
+  BADGE_STREAK_250: 100,
+  BADGE_STREAK_500: 150,      // en zoru, en yüksek (≈ 5 devam hakkı)
 
   // Seri kilometre taşları. Rozetlerden AYRI bir ödül ekseni: rozet tek
   // seferlik ve kalıcı, bu ise seri her o sayıya ulaştığında ödenir

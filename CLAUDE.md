@@ -1118,7 +1118,17 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      not entered → **empty** and dimmed. The old row had three different marks and drew a
      *day number* on days that were never entered, i.e. it showed something for nothing.
   Streak badges now go 7 / 30 / 50 / 100 / 250 / 500 (owner request), all reading the same
-  `ph_streak` counter — no new tracking. **`Badges.total()` is 9, not 5**, and the badge-id
+  `ph_streak` counter — no new tracking.
+  **Their rewards were set by EXTRAPOLATING THE OWNER'S OWN SCALE, not invented.** The
+  pre-existing 7→20 and 30→50 already say "about a month of loyalty ≈ 50💎"; the four new
+  ones continue that line (60 / 75 / 100 / 150) instead of doubling. A first attempt used
+  75/150/300/600 and the owner rejected it as too generous — correctly: the 500-day badge
+  alone (600💎) beat the shop's "Popüler" pack (550💎), and the four together handed out
+  more than twice a paid mid-tier pack for free. **The test to apply when adding any badge:
+  the WHOLE badge pool (now 500💎) must stay a small multiple of the cheapest pack (100💎)
+  and must never substitute for buying one.** The streak *milestones* (7/14/30 → 50/100/200,
+  350💎 total) were deliberately left untouched by the same owner decision — they predate
+  this change. **`Badges.total()` is 9, not 5**, and the badge-id
   list is hardcoded in **six** harnesses (`badges-test`, `daily-quests-test`, `iap-test`,
   `interstitial-test`, `ad-consent-test`, `ad-release-test` siblings) — adding a badge fails
   them until updated, which is the point.
