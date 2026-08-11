@@ -128,31 +128,68 @@ const LEADERBOARD = [
   { name:'Acemi', avatar:'🐣', score:500 },
 ];
 
-// Profil satırları. İlk üçü mockup panel 4'ten; ardından Plus ve Mağaza
-// geliyor — ikisi de header'dan KALDIRILDIĞI için (mockup'ta yoklar)
-// uygulamadaki tek erişim kapıları burası. Kalanlar mevcut ayarlar.
-// `fn` verilirse çalıştırılır, verilmezse `action` toast olarak gösterilir.
-const SETTINGS = [
-  { icon:'👤', label:'Avatarını Düzenle', fn:'openAvatarPicker()' },
-  // TODO: profil çerçevesi sistemi kurulunca gerçek ekrana bağlanacak
-  { icon:'🖼️', label:'Profil Çerçevesi', action:'Profil çerçeveleri yakında!' },
-  // Tema seçici bu turda kurulmadı; tek tema var ve "Özel Temalar" Plus'ın
-  // reklam ettiği bir avantaj — bu yüzden satır Plus sayfasına yönlendiriyor.
-  { icon:'🎨', label:'Tema Seçimi', fn:'showPlusPage()' },
-  { icon:'👑', label:"Plus'a Geç", fn:'showPlusPage()' },
-  { icon:'💎', label:'Elmas Mağazası', fn:'openShop()' },
-  // Cihaz değiştiren / uygulamayı silip kuran kullanıcı için ZORUNLU:
-  // abonelik satan her uygulamanın sunması gereken standart yol.
-  { icon:'🔄', label:'Satın Almaları Geri Yükle', fn:'restorePurchases()' },
-  { icon:'🔔', label:'Bildirimler', action:'Bildirimler yakında!' },
-  { icon:'🔊', label:'Ses Ayarları', action:'Ses ayarları yakında!' },
-  { icon:'🌐', label:'Dil', action:'Dil: Türkçe' },
-  { icon:'⭐', label:'Puanla', action:'Uygulama puanlama yakında!' },
-  { icon:'📤', label:'Paylaş', action:'Paylaşım yakında!' },
-  // Sürüm tek kaynaktan (index.html APP_VERSION) okunur; burada sabit
-  // yazmak bump'ta kaydırır. typeof guard'ı app.js'in izole yüklendiği
-  // (test) durumda ReferenceError'ı önler.
-  { icon:'ℹ️', label:'Hakkında', action:'SlySwipe v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0') },
+// ── AYARLAR ─────────────────────────────────────────────────────
+// Düz bir liste DEĞİL, gruplu bölümler. Sebep tasarımsal değil bilgi
+// mimarisi: on iki satırın tek bir yığın hâlinde durması, "Plus'a Geç"
+// ile "Paylaş"ı aynı ağırlıkta gösteriyordu.
+//
+// Satır sözleşmesi:
+//   fn      → doğrudan çalıştırılır
+//   action  → toast olarak gösterilir (henüz kurulmamış sistemler)
+//   value   → sağda okunur bir değer (ok yerine)
+//   note    → etiketin altında ikinci satır
+//   toggle  → anahtar; state/fn ÇALIŞMA ZAMANINDA okunur (aşağıya bak)
+//   tone    → 'accent' | 'gold' (öne çıkan satırlar)
+//
+// PLUS ve MAĞAZA satırları burada KALIYOR. Üst bara geri konmuş olmaları
+// bu satırları gereksiz yapmıyor: eskiden sorun tek kapının kapanmasıydı,
+// iki kapının açık olması değil.
+//
+// "Oturumu kapat" BİLEREK YOK: uygulamada hesap/oturum kavramı yok
+// (giriş yapılmıyor, veri localStorage'da). Çalışmayan bir satır koymak,
+// olmayan bir sistemi vaat etmek olurdu — "Özel Görevler"in Plus
+// listesinden çıkarılmasıyla aynı gerekçe.
+const SETTING_GROUPS = [
+  { title:'Hesap', rows: [
+    { icon:'👤', label:'Avatarını Düzenle', note:'Profilinde görünen karakter', fn:'openAvatarPicker()' },
+    // TODO: profil çerçevesi sistemi kurulunca gerçek ekrana bağlanacak
+    { icon:'🖼️', label:'Profil Çerçevesi', value:'Yakında', action:'Profil çerçeveleri yakında!' },
+    // Cihaz değiştiren / uygulamayı silip kuran kullanıcı için ZORUNLU:
+    // abonelik satan her uygulamanın sunması gereken standart yol.
+    { icon:'🔄', label:'Satın Almaları Geri Yükle', note:'Aboneliğini yeni cihaza taşı', fn:'restorePurchases()' },
+  ]},
+
+  { title:'Premium ve Elmas', rows: [
+    { icon:'👑', label:"Plus'a Geç", note:'Reklamsız deneyim, her gün +20💎', tone:'gold', fn:'showPlusPage()' },
+    { icon:'💎', label:'Elmas Mağazası', note:'Paket satın al veya ücretsiz kazan', tone:'accent', fn:'openShop()' },
+    // Tema seçici bu turda kurulmadı; tek tema var ve "Özel Temalar"
+    // Plus'ın reklam ettiği bir avantaj — satır Plus sayfasına gidiyor.
+    { icon:'🎨', label:'Tema', value:'Gece Menekşesi', fn:'showPlusPage()' },
+  ]},
+
+  { title:'Tercihler', rows: [
+    // GERÇEK anahtar: GameAudio.muted okunuyor, toggleMute() yazıyor.
+    // `state` bir FONKSİYON, düz bir boolean DEĞİL — bu dizi modül
+    // yüklenirken kuruluyor ve o an okunan bir değer ilk açılıştaki
+    // durumda donardı. renderSettings her çizimde yeniden çağırıyor.
+    { icon:'🔊', label:'Ses Efektleri', toggle:true,
+      state: () => (typeof GameAudio !== 'undefined') && !GameAudio.muted,
+      fn:'toggleSoundSetting()' },
+    { icon:'🔔', label:'Bildirimler', value:'Yakında', action:'Bildirimler yakında!' },
+    { icon:'🌐', label:'Dil', value:'Türkçe', action:'Şu an yalnızca Türkçe destekleniyor.' },
+  ]},
+
+  { title:'Destek', rows: [
+    { icon:'❓', label:'Yardım', action:'Yardım merkezi yakında!' },
+    { icon:'⭐', label:'Puanla', action:'Uygulama puanlama yakında!' },
+    { icon:'📤', label:'Paylaş', action:'Paylaşım yakında!' },
+    // Sürüm tek kaynaktan (index.html APP_VERSION) okunur; burada sabit
+    // yazmak bump'ta kaydırır. typeof guard'ı app.js'in izole yüklendiği
+    // (test) durumda ReferenceError'ı önler.
+    { icon:'ℹ️', label:'Hakkında',
+      value:'v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0'),
+      action:'SlySwipe v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0') },
+  ]},
 ];
 
 const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
@@ -430,6 +467,11 @@ function claimDailyReward() {
   if (streak === 30) DiamondSystem.add(200, '30 gün streak! 👑');
   
   renderDailyRewards();
+  // Seri kartı da tazelenmeli: #hdr-streak onun içinde ve ilerleme
+  // çubuğu da seriden hesaplanıyor. renderHomeStats() elemanı yeniden
+  // yarattığı için updateStreakUI() ONDAN SONRA çağrılmalı — tersi
+  // olsaydı sayı yazılır, hemen ardından üzerine eski değer basılırdı.
+  renderHomeStats();
   updateStreakUI();
 }
 
@@ -845,34 +887,57 @@ GameEvents.on('game_ended', function (ev) { DailyQuests.onRoundEnded(ev); });
 // rozet koşulu). Korumasız bu sonsuz özyineleme demek. `_checking`
 // bayrağı iç içe çağrıyı yutuyor; dıştaki döngü zaten yeni durumu
 // yeniden değerlendiriyor, dolayısıyla hiçbir rozet kaçmıyor.
+// KOLEKSİYONLAR — Rozetler ekranının çipleri bunları okuyor.
+// UYDURULMUŞ bir taksonomi DEĞİL: her rozetin zaten hangi sayaçtan
+// beslendiği belli (oyun sayacı / seri / elmas), gruplar tam olarak o
+// üç kaynak. Yeni bir rozet eklendiğinde `group` alanı verilir; çip
+// listesi buradan türediği için ekran kodu dokunulmadan büyür.
+const BADGE_GROUPS = [
+  { id:'all',     label:'Tümü' },
+  { id:'oyun',    label:'Oyun' },
+  { id:'seri',    label:'Seri' },
+  { id:'ekonomi', label:'Ekonomi' },
+];
+
 const BADGES = [
   // Sıra ZORLUĞA GÖRE ARTAN. Vitrin "en değerli 3"ü seçerken ödülü
   // ölçüt alıyor, yani ödül miktarları aynı zamanda zorluk sıralaması.
-  { id:'first_game',    icon:'🎮', tone:'blue',   name:'İlk Oyun',
+  { id:'first_game',    icon:'🎮', tone:'blue',   group:'oyun',    name:'İlk Oyun',
     desc:'İlk oyununu başlat',        reward:EconomyConfig.BADGE_FIRST_GAME,
     test: () => GameEvents.stats().totalGamesStarted >= 1 },
 
-  { id:'games_10',      icon:'🔟', tone:'purple', name:'10 Oyun',
+  { id:'games_10',      icon:'🔟', tone:'purple', group:'oyun',    name:'10 Oyun',
     desc:'10 oyun oyna',              reward:EconomyConfig.BADGE_10_GAMES,
     test: () => GameEvents.stats().totalGamesStarted >= 10 },
 
   // ph_streak: uygulamayı AÇMA serisi. DailyChallenge'ın "günlüğü çözme"
   // serisi DEĞİL — ikisi farklı davranışı ödüllendiriyor (katılım vs
   // başarı) ve karıştırılmamalı (bkz. core/daily.js başlığı).
-  { id:'streak_7',      icon:'🔥', tone:'red',    name:'7 Gün Seri',
+  { id:'streak_7',      icon:'🔥', tone:'red',    group:'seri',    name:'7 Gün Seri',
     desc:'7 gün üst üste giriş yap',  reward:EconomyConfig.BADGE_STREAK_7,
     test: () => StreakSystem.getCount() >= 7 },
 
-  { id:'diamonds_500',  icon:'💎', tone:'cyan',   name:'500 Elmas',
+  { id:'diamonds_500',  icon:'💎', tone:'cyan',   group:'ekonomi', name:'500 Elmas',
     desc:'Toplam 500💎 kazan',        reward:EconomyConfig.BADGE_DIAMONDS_500,
     // BAKİYE değil, YAŞAM BOYU kazanım. Bakiyeyle yazılsaydı oyuncu
     // elmasını harcadığı an rozet geri alınırdı.
     test: () => DiamondSystem.earned() >= 500 },
 
-  { id:'streak_30',     icon:'👑', tone:'gold',   name:'30 Gün Seri',
+  { id:'streak_30',     icon:'👑', tone:'gold',   group:'seri',    name:'30 Gün Seri',
     desc:'30 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_30,
     test: () => StreakSystem.getCount() >= 30 },
 ];
+
+// Rozet `tone` değerleri (blue/purple/red/cyan/gold) ile kabuk tasarım
+// sisteminin ton aileleri (sly-t-*) arasındaki tek eşleme noktası.
+// İki isim seti var çünkü rozet tonları bu sistemden ÖNCE yazılmıştı ve
+// depoda `bdg-<tone>` sınıflarıyla da kullanılıyor; ikisini birden
+// yeniden adlandırmak bu turun konusu değil.
+const SLY_TONE = {
+  blue:'blue', purple:'violet', red:'rose', cyan:'cyan', gold:'gold',
+  green:'green', amber:'gold',
+};
+function slyTone(t) { return SLY_TONE[t] || 'violet'; }
 
 const Badges = {
   _key: 'ph_badges',
@@ -1016,9 +1081,19 @@ const Badges = {
       if (row) row.classList.toggle('sfi-off', this.count() >= this.total());
     });
     if (typeof renderShowcase === 'function') renderShowcase();
-    // İlerleme ekranı yalnızca görünürken yeniden çizilsin — gizli bir
+    // Rozetler ekranı yalnızca görünürken yeniden çizilsin — gizli bir
     // ekranı her rozet için baştan kurmak boşa iş.
     if (currentScreen === 'screen-lider' && typeof renderProgress === 'function') renderProgress();
+    // Ana sayfadaki "Rozet İlerlemesi" kartı da bu sayacı gösteriyor.
+    // Onsuz, oyundan çıkıp ana sayfaya dönmeden kart eski sayıda kalırdı
+    // — kutlama katmanı "rozet kazandın" derken kartın 0/5 demesi, aynı
+    // gerçeğin iki farklı hikâyesi olurdu.
+    if (currentScreen === 'screen-home' && typeof renderHomeStats === 'function') {
+      renderHomeStats();
+      // #hdr-streak yeniden yaratıldı; seri sayısını geri yaz.
+      if (typeof updateStreakUI === 'function') updateStreakUI();
+      if (typeof renderHomePromo === 'function') renderHomePromo();
+    }
   },
 
   shopLabel() {
@@ -2672,9 +2747,13 @@ function switchTab(tabName) {
   // buraya düşüyor ve "günlük meydan okuma" görevinin ödemesi tam olarak
   // burada gerçekleşiyor (bkz. DailyQuests: ÖDÜL ANI). renderHome()
   // TAMAMI çağrılmıyor — günlük bulmaca kartı ve favoriler değişmedi.
-  if (tabName === 'home') DailyQuests.refresh();
+  // Ana sekmedeki özet kartlar görev/rozet/seri sayaçlarını okuyor;
+  // oyundan dönen oyuncu buraya düşüyor, dolayısıyla kartlar da
+  // tazelenmeli — yoksa görev satırı ilerlerken üstündeki "Aktif Görev"
+  // kartı eski sayıyı gösterirdi (aynı gerçeğin iki farklı hikâyesi).
+  if (tabName === 'home') { DailyQuests.refresh(); renderHomeStats(); renderHomePromo(); }
   if (tabName === 'lider') renderProgress();
-  if (tabName === 'profil') { renderSettings(); renderFavorites(); renderShowcase(); }
+  if (tabName === 'profil') { renderSettings(); renderFavorites(); renderShowcase(); renderProfileHero(); }
 }
 
 function showScreen(screenId) {
@@ -2750,11 +2829,140 @@ function updateStreakUI() {
   if (el) el.textContent = n || '0';
 }
 
+// ── OYUNCU SEVİYESİ ─────────────────────────────────────────────
+// UYDURULMUŞ bir sayı DEĞİL. Referans tasarımdaki "Seviye" kartını
+// karşılamak için iki yol vardı: sabit bir placeholder yazmak (bu
+// dosyadaki TODO'ların yaptığı şey) ya da mevcut gerçek bir sayaçtan
+// türetmek. İkincisi seçildi çünkü kaynak zaten var: GameEvents
+// `totalGamesWon` tutuyor ve o sayı "ne kadar ilerledin"in en dürüst
+// karşılığı. Yeni bir depolama anahtarı YAZILMADI — aynı gerçeğin
+// ikinci kaydı olurdu (DailyQuests'in üçüncü göreviyle aynı gerekçe).
+//
+// Eğri bilerek DÜZ: her WINS_PER_LEVEL kazanım bir seviye. Artan bir
+// eğri (her seviye daha çok kazanım ister) daha "oyunumsu" olurdu ama
+// dengelenmesi gereken bir sayı daha demek; ekonomi kararları sahibinin
+// (CLAUDE.md §7) ve böyle bir talep yok.
+const PlayerLevel = {
+  WINS_PER_LEVEL: 5,
+  get() {
+    let won = 0;
+    // GameEvents app.js içinde tanımlı ama harness'ler bu dosyayı
+    // parça parça yükleyebiliyor; okuma hiçbir ekranı düşürmemeli.
+    try { won = (GameEvents.stats().totalGamesWon) || 0; } catch (e) { won = 0; }
+    const per = this.WINS_PER_LEVEL;
+    return { level: Math.floor(won / per) + 1, into: won % per, need: per, won: won };
+  },
+};
+
 function renderHome() {
   if (typeof renderDailyChallenge === 'function') renderDailyChallenge();
+  renderHomeStats();
   renderDailyRewards();
   renderFavorites();
   renderMissions();
+  renderHomePromo();
+}
+
+// ── Özet kartlar ────────────────────────────────────────────────
+// Dördü de GERÇEK veriden geliyor: rozet sayacı, günlük görevler, seri
+// ve türetilmiş seviye. Referans görseldeki dört kartın karşılığı, ama
+// hiçbirinin altında sahte bir sayı yok.
+function renderHomeStats() {
+  const el = document.getElementById('home-stats');
+  if (!el) return;
+
+  const badgeN = Badges.count(), badgeT = Badges.total();
+  const quests = DailyQuests.rows();
+  const questDone = quests.filter(q => q.done).length;
+  const streak = StreakSystem.getCount();
+  const lv = PlayerLevel.get();
+
+  const cards = [
+    { tone:'violet', icon:'🛡️', label:'Rozet İlerlemesi',
+      value: badgeN + '<small> / ' + badgeT + '</small>',
+      pct: badgeT ? (badgeN / badgeT) * 100 : 0,
+      onclick: "switchTab('lider')" },
+    { tone:'gold', icon:'🎯', label:'Aktif Görev',
+      value: (quests.length - questDone) + ' aktif',
+      pct: quests.length ? (questDone / quests.length) * 100 : 0 },
+    // Seri kartı #hdr-streak'i TAŞIYOR: updateStreakUI() o id'yi arıyor
+    // ve ödül alındığı an sayıyı tazeliyor. Element başka bir yere
+    // taşınırsa o tazeleme sessizce ölür.
+    { tone:'green', icon:'🔥', label:'Seri',
+      value: '<span id="hdr-streak">' + streak + '</span><small> gün</small>',
+      // Haftanın kaçı tamamlandı: 7 günlük satırla aynı ölçek.
+      pct: Math.min(100, (streak % 7 || (streak ? 7 : 0)) / 7 * 100) },
+    { tone:'cyan', icon:'📈', label:'Seviye',
+      value: String(lv.level),
+      pct: (lv.into / lv.need) * 100 },
+  ];
+
+  el.innerHTML = cards.map((c, i) => `
+    <div class="sly-stat sly-t-${c.tone} sly-in" style="animation-delay:${i * 55}ms"
+         ${c.onclick ? 'onclick="' + c.onclick + '"' : ''}>
+      <div class="sly-stat-top">
+        <span class="sly-stat-ico">${c.icon}</span>
+        <span class="sly-stat-txt">
+          <span class="sly-stat-lbl">${c.label}</span>
+          <span class="sly-stat-val">${c.value}</span>
+        </span>
+      </div>
+      <div class="sly-bar"><div class="sly-bar-fill" style="width:${Math.max(0, Math.min(100, c.pct))}%"></div></div>
+    </div>
+  `).join('');
+}
+
+// ── Alt promo satırı ────────────────────────────────────────────
+// Solda son kazanılan rozet (GERÇEK — Badges.recent), sağda Plus.
+// Hiç rozet yoksa sol hücre "ilk rozetini kazan" diyor: boş bir kutu
+// göstermek yerine bir sonraki adımı öneriyor.
+function renderHomePromo() {
+  const el = document.getElementById('home-promo');
+  if (!el) return;
+  const last = Badges.recent(1)[0] || null;
+
+  const leftIcon = last ? last.icon : '🎖️';
+  const leftTone = last ? slyTone(last.tone) : 'violet';
+  const leftKicker = last ? 'Son Rozetin' : 'Henüz rozet yok';
+  const leftTitle = last ? last.name : 'İlk rozetini kazan';
+  const leftNote = last ? _agoText(last.earnedAt) : 'Bir oyun başlat, hemen açılır';
+
+  el.innerHTML = `
+    <div class="sly-promo-cell sly-t-${leftTone}" onclick="switchTab('lider')">
+      <span class="sly-promo-ico sly-stat-ico">${leftIcon}</span>
+      <span class="sly-promo-txt">
+        <span class="sly-promo-kicker">${leftKicker}</span>
+        <span class="sly-promo-title">${leftTitle}</span>
+        <span class="sly-promo-note">${leftNote}</span>
+      </span>
+    </div>
+    <!-- Chevron YOK: hücrenin tamamı zaten tıklanabilir ve ok, başlığın
+         tek satırda durması için gereken ~25px'i yiyordu. -->
+    <div class="sly-promo-cell is-plus" onclick="showPlusPage()">
+      <span class="sly-promo-ico">👑</span>
+      <span class="sly-promo-txt">
+        <span class="sly-promo-title">PLUS Avantajları</span>
+        <span class="sly-promo-note">Reklamsız deneyim ve her gün +20💎</span>
+      </span>
+    </div>
+  `;
+}
+
+// "1 gün önce kazandın" gibi bir ifade. Tam saat göstermek bu bağlamda
+// bilgi değil gürültü; gün çözünürlüğü yeterli.
+function _agoText(ts) {
+  if (!ts) return 'Kazanıldı';
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  if (days <= 0) return 'Bugün kazandın';
+  if (days === 1) return '1 gün önce kazandın';
+  return days + ' gün önce kazandın';
+}
+
+// Haftalık seri kartındaki "Nasıl Çalışır?" bağlantısı. Ayrı bir ekran
+// açmıyor: anlatılacak şey iki cümle ve bir ekran geçişi o iki cümleden
+// pahalı olurdu.
+function showStreakInfo() {
+  showToast('🔥 Her gün uygulamayı aç, seri büyüsün — bir gün kaçırırsan sıfırlanır.');
 }
 
 function renderDailyRewards() {
@@ -2784,24 +2992,20 @@ function renderDailyRewards() {
     d.setDate(monday.getDate() + i);
     const done = claimed.has(StreakSystem.dayKey(d));
     const isToday = i === currentDayIdx;
-    let cls = 'sw-day';
-    let mark;
-
-    if (done) {
-      cls += ' sw-done';
-      mark = '✓';
-    } else if (isToday) {
-      cls += ' sw-today';
-      mark = String(i + 1);
-    } else {
-      cls += ' sw-future';
-      mark = String(i + 1);
-    }
-
+    // Bugün ve ödül henüz alınmadıysa daire TIKLANABİLİR ve nabız atıyor —
+    // ekranda "şu an yapılabilecek bir şey" olduğunu söyleyen tek işaret.
     const claimable = !alreadyClaimed && isToday;
-    return `<div class="sw-cell">
-      <div class="${cls}" ${claimable ? 'onclick="claimDailyReward()"' : ''}>${mark}</div>
-      <span class="sw-label">${reward.day}</span>
+
+    let cls = 'sly-day';
+    let mark;
+    if (done)          { cls += ' is-done';   mark = '✓'; }
+    else if (isToday)  { cls += ' is-today';  mark = '★'; }
+    else               { cls += ' is-future'; mark = String(i + 1); }
+    if (claimable) cls += ' is-claimable';
+
+    return `<div class="${cls}">
+      <div class="sly-day-dot" ${claimable ? 'onclick="claimDailyReward()"' : ''}>${mark}</div>
+      <span class="sly-day-lbl">${reward.day}</span>
     </div>`;
   }).join('');
 }
@@ -2882,28 +3086,56 @@ function renderMissions() {
   renderMissionList('daily-missions', DailyQuests.rows());
 }
 
+// Görev satırı — ana sayfa ve Rozetler ekranı AYNI işleyiciyi kullanıyor.
+// İkinci bir kopya, ödül rozetinin bir ekranda güncellenip diğerinde
+// kalmasının en kısa yolu olurdu.
 function renderMissionList(containerId, missions) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.innerHTML = missions.map((m, i) => `
-    <div class="ms-row anim-in" style="animation-delay:${i * 60}ms">
-      <span class="ms-icon ms-${m.tone}">${m.icon}</span>
-      <div class="ms-body">
-        <span class="ms-name">${m.name}</span>
-        <div class="ms-bar"><div class="ms-fill" style="width:${(m.progress / m.total) * 100}%"></div></div>
+    <div class="sly-task sly-t-${slyTone(m.tone)} ${m.done ? 'is-done' : ''} sly-in"
+         style="animation-delay:${i * 60}ms">
+      <span class="sly-task-ico">${m.icon}</span>
+      <div class="sly-task-body">
+        <div class="sly-task-line">
+          <span class="sly-task-name">${m.name}</span>
+          <span class="sly-task-count">${m.progress} / ${m.total}${
+            m.done ? '<span class="sly-task-tick">✓</span>' : ''}</span>
+        </div>
+        <div class="sly-bar"><div class="sly-bar-fill" style="width:${(m.progress / m.total) * 100}%"></div></div>
       </div>
-      <span class="ms-count">${m.progress} / ${m.total}</span>
+      <span class="sly-task-reward">
+        <span class="sly-task-reward-ico">💎</span>${m.reward}
+      </span>
     </div>
   `).join('');
 }
 
-// TODO: görev takibi kurulunca "tüm görevler tamamlandı mı" koşuluna ve
-// gerçek ödül verme akışına bağlanacak. Bugün sandık dekoratif.
+// ARTIK ÇAĞRILMIYOR. Haftalık ödül sandığı ana sayfadan kaldırıldı
+// (sahibinin isteği, 2026-08-10) — haftalık seri kartı yalnızca günleri
+// gösteriyor. Fonksiyon renderLeaderboard() ile aynı gerekçeyle duruyor:
+// haftalık ödülün geri gelip gelmeyeceği bir ürün kararı ve geri dönüşün
+// ucuz kalması isteniyor. WEEKLY_MISSIONS dizisi de aynı sebeple yerinde.
 function claimWeeklyReward() {
   showToast('🎁 Haftalık ödül yakında!');
 }
 
-// ==================== RENDER: İLERLEME ====================
+// ==================== RENDER: ROZETLER ====================
+//
+// 2026-08-10: bu ekran "İlerleme"den "Rozetler"e dönüştü ve mockup'tan
+// kalan STATİK değerlerin tamamı kaldırıldı. Artık ekrandaki her sayı
+// gerçek bir sayaçtan geliyor:
+//   • rozet ilerlemesi  → Badges.count()/total()
+//   • oynanan/kazanılan → GameEvents.stats()
+//   • seri              → StreakSystem
+//   • seviye            → PlayerLevel (totalGamesWon'dan türetilmiş)
+// Kaldırılan placeholder'lar: "Oyun Denedi 10/10" (gh_plays_* yalnızca
+// Keşfet'ten artıyor, yani toplam yanlıştı) ve "Koleksiyon %72" (böyle
+// bir sistem yok). ACHIEVEMENT_CARDS de artık çizilmiyor — üç oyunun
+// uydurma başarım çubuklarıydı. Dizi renderLeaderboard() ile aynı
+// gerekçeyle duruyor: oyun-özel rozetler kurulunca tüketilecek kaynak o.
+//
+// ESKİ BAŞLIK: RENDER: İLERLEME
 //
 // Mockup panel 3'ün birebir karşılığı. Ekrandaki değerlerin ÇOĞU şu an
 // STATİK — arkalarındaki sistemler (rozet, koleksiyon, başarım) henüz
@@ -2939,86 +3171,125 @@ const ACHIEVEMENT_CARDS = [
 // RECENT_BADGES statik dizisi KALDIRILDI (2026-08-01) — "Son Kazanılan
 // Rozetler" artık Badges.recent()'ten geliyor, gerçek veriye bağlı.
 
+// Seçili koleksiyon çipi. Ekran her yeniden çizildiğinde (rozet
+// kazanıldığında Badges.updateUI() çağırıyor) seçim korunmalı, bu yüzden
+// render fonksiyonunun dışında.
+let _badgeFilter = 'all';
+
+function setBadgeFilter(id) {
+  _badgeFilter = id;
+  if (typeof GameAudio !== 'undefined') { GameAudio.play('tab'); GameAudio.haptic('micro'); }
+  renderProgress();
+}
+
 function renderProgress() {
   const container = document.getElementById('progress-content');
   if (!container) return;
 
+  const earnedIds = new Set(Badges.getData().earned.map(e => e.id));
+  const n = Badges.count(), total = Badges.total();
+  const pct = total ? Math.round((n / total) * 100) : 0;
+  const stats = (function () {
+    try { return GameEvents.stats(); } catch (e) { return { totalGamesStarted:0, totalGamesWon:0 }; }
+  })();
+  const lv = PlayerLevel.get();
   const streak = StreakSystem.getCount();
 
+  // ── Özet kartlar: ana sayfayla AYNI bileşen (.sly-stat). Aynı bilginin
+  // iki ekranda farklı görünmesi, tasarım sisteminin ilk kaybettiği yer.
   const tiles = [
-    // TODO: oynanan oyun takibi kurulunca gerçek veriye bağlanacak
-    { icon:'🎮', value:'10/10',        label:'Oyun Denedi' },
-    // Gerçek veri: kazanılan/toplam rozet. Paydası da gösteriliyor —
-    // çıplak bir sayı kaç rozet olduğunu söylemiyordu.
-    { icon:'🛡️', value:Badges.count() + '/' + Badges.total(), label:'Rozet' },
-    { icon:'🔥', value:streak + ' Gün', label:'Seri' },
-    // TODO: koleksiyon tanımı + sistemi kurulunca gerçek veriye bağlanacak
-    { icon:'🧩', value:'%72',          label:'Koleksiyon' },
+    { tone:'blue',   icon:'🎮', label:'Oynanan Tur', value:String(stats.totalGamesStarted || 0) },
+    { tone:'green',  icon:'🏆', label:'Kazanılan',   value:String(stats.totalGamesWon || 0) },
+    { tone:'gold',   icon:'🔥', label:'Seri',        value:streak + '<small> gün</small>' },
+    { tone:'cyan',   icon:'📈', label:'Seviye',      value:String(lv.level) },
   ];
-
   const tilesHTML = tiles.map((t, i) => `
-    <div class="prg-tile anim-in" style="animation-delay:${i*50}ms">
-      <span class="prg-tile-icon">${t.icon}</span>
-      <span class="prg-tile-val">${t.value}</span>
-      <span class="prg-tile-lbl">${t.label}</span>
-    </div>
-  `).join('');
-
-  const achHTML = ACHIEVEMENT_CARDS.map((a, i) => `
-    <div class="ach-card anim-in" style="animation-delay:${i*60}ms">
-      <span class="ach-icon" style="background:linear-gradient(135deg,${a.grad[0]},${a.grad[1]})">${a.emoji}</span>
-      <div class="ach-body">
-        <span class="ach-name">${a.name}</span>
-        <div class="ach-chips">
-          ${a.chips.map(c => `
-            <span class="ach-chip">
-              <span class="ach-chip-icon">${c.icon}</span>
-              <span class="ach-chip-text">
-                <span class="ach-chip-label">${c.label}</span>
-                <span class="ach-chip-val">${c.val}</span>
-              </span>
-            </span>`).join('')}
-        </div>
-        <div class="ach-bar"><div class="ach-fill" style="width:${a.pct}%"></div></div>
+    <div class="sly-stat sly-t-${t.tone} sly-in" style="animation-delay:${i*50}ms">
+      <div class="sly-stat-top">
+        <span class="sly-stat-ico">${t.icon}</span>
+        <span class="sly-stat-txt">
+          <span class="sly-stat-lbl">${t.label}</span>
+          <span class="sly-stat-val">${t.value}</span>
+        </span>
       </div>
     </div>
   `).join('');
 
-  // Kazanılan rozetler (en yeni başta) + kalanlar KİLİTLİ olarak. Kilitli
-  // olanları göstermek bir tercih: boş bir satır "burada bir şey yok" der,
-  // soluk siluetler "kazanılacak dört şey daha var" der.
-  const recent = Badges.recent(4);
-  const lockedCount = Math.max(0, Math.min(4 - recent.length, Badges.total() - Badges.count()));
-  const badgesHTML =
-    recent.map((b, i) => `
-      <span class="rb-badge bdg-${b.tone} anim-in" style="animation-delay:${i*60}ms"
-            title="${b.name}">${b.icon}</span>
-    `).join('') +
-    Array.from({ length: lockedCount }, (_, i) => `
-      <span class="rb-badge bdg-locked anim-in" style="animation-delay:${(recent.length+i)*60}ms">🔒</span>
-    `).join('');
+  // ── Koleksiyon çipleri. Sayılar BADGES'ten sayılıyor, elle yazılmıyor —
+  // yeni bir rozet eklemek burada hiçbir şeye dokunmayı gerektirmiyor.
+  const chipsHTML = BADGE_GROUPS.map(g => {
+    const list = g.id === 'all' ? BADGES : BADGES.filter(b => b.group === g.id);
+    const got = list.filter(b => earnedIds.has(b.id)).length;
+    return `<button class="sly-chip ${_badgeFilter === g.id ? 'on' : ''}"
+              onclick="setBadgeFilter('${g.id}')">${g.label}
+              <span class="sly-chip-n">${got}/${list.length}</span></button>`;
+  }).join('');
+
+  // ── Rozet kartları. Kilitli olanlar GİZLENMİYOR: boş bir ızgara
+  // "burada bir şey yok" der, soluk madalyonlar "kazanılacak dört şey
+  // daha var" der. Aynı gerekçe boş favori çipinde de yazılı.
+  const shown = _badgeFilter === 'all' ? BADGES : BADGES.filter(b => b.group === _badgeFilter);
+  const badgesHTML = shown.map((b, i) => {
+    const got = earnedIds.has(b.id);
+    return `
+    <div class="sly-badge-card sly-t-${slyTone(b.tone)} ${got ? 'is-earned' : ''} sly-in"
+         style="animation-delay:${i*55}ms">
+      <span class="sly-badge-medal">${b.icon}</span>
+      <span class="sly-badge-name">${b.name}</span>
+      <span class="sly-badge-desc">${b.desc}</span>
+      <span class="sly-badge-foot">${got ? 'Kazanıldı' : '+' + b.reward + '💎'}</span>
+    </div>`;
+  }).join('');
 
   container.innerHTML = `
-    <div class="prg-hero">
-      <div class="prg-avatar" data-ph-avatar></div>
-      <span class="prg-hero-name">Oyuncu</span>
+    <div class="sly-screen-head">
+      <h2 class="sly-screen-title">Rozetler
+        <span class="sly-screen-sub">Koleksiyonun ve ilerlemen</span>
+      </h2>
     </div>
 
-    <div class="prg-stats">${tilesHTML}</div>
-
-    <div class="section">
-      <h3 class="section-title">Oyun Başarımları</h3>
-      ${achHTML}
+    <div class="sly-ring-card">
+      <div class="sly-ring" style="--sly-ring-pct:${pct}">
+        <span class="sly-ring-txt">
+          <span class="sly-ring-n">${n}</span>
+          <span class="sly-ring-of">/ ${total}</span>
+        </span>
+      </div>
+      <div class="sly-ring-body">
+        <span class="sly-ring-title">Koleksiyon %${pct}</span>
+        <span class="sly-ring-desc">${
+          n >= total
+            ? 'Tüm rozetleri topladın. Yeni rozetler yolda.'
+            : 'Görevleri tamamla, serini sürdür ve elmas kazan — rozetler kendiliğinden açılır.'
+        }</span>
+        <div class="sly-ring-meta">
+          <span class="sly-pill is-gold">💎 ${Badges.totalReward()} toplam ödül</span>
+        </div>
+      </div>
     </div>
 
-    <div class="section">
-      <h3 class="section-title">Son Kazanılan Rozetler</h3>
-      <div class="rb-row">${badgesHTML}</div>
-    </div>
+    <div class="sly-stats">${tilesHTML}</div>
+
+    <!-- Görevler burada da var, çünkü ana sayfadaki "Tümünü Gör"
+         buraya geliyor ve rozetlerin çoğu görev tamamlayarak açılıyor. -->
+    <section class="sly-panel">
+      <div class="sly-panel-head">
+        <span class="sly-panel-title">
+          <span class="sly-panel-title-ico">📋</span>Günlük Görevler
+        </span>
+        <span class="sly-panel-link sly-muted">${DailyQuests.doneCount()}/${DailyQuests.rows().length}</span>
+      </div>
+      <div class="sly-tasks" id="progress-missions"></div>
+    </section>
+
+    <h3 class="sly-group-title">Koleksiyonlar</h3>
+    <div class="sly-chips">${chipsHTML}</div>
+    <div class="sly-badge-grid">${badgesHTML}</div>
   `;
 
-  // Hero avatarı innerHTML ile YENİ oluşturuldu — tek kaynaktan doldur.
-  AvatarSystem.updateUI();
+  // Görev satırları ana sayfayla AYNI fonksiyondan; kapsayıcı yukarıda
+  // innerHTML ile yeni oluşturuldu, o yüzden sonra dolduruluyor.
+  renderMissionList('progress-missions', DailyQuests.rows());
 }
 
 // ==================== RENDER: LİDER ====================
@@ -3058,26 +3329,92 @@ function renderLeaderboard() {
 
 // ==================== RENDER: AYARLAR ====================
 
+// Ses anahtarı. GameAudio.toggleMute() zaten kalıcı (gh_muted) — burada
+// yapılan tek şey satırı yeniden çizmek, çünkü anahtarın görünümü
+// durumdan türüyor. Oyun içi 🔊 düğmesiyle AYNI kaynağı kullanıyor;
+// ikinci bir "ses açık mı" kaydı tutulsaydı ikisi ayrışırdı.
+function toggleSoundSetting() {
+  GameAudio.toggleMute();
+  if (!GameAudio.muted) GameAudio.play('tab');
+  renderSettings();
+}
+
 function renderSettings() {
   const container = document.getElementById('settings-list');
   if (!container) return;
+
   // Gizlilik Seçenekleri satırı KOŞULLU: AB'de kullanıcının rızasını
   // sonradan değiştirebilmesi zorunlu, kapsam dışı bölgede ise böyle bir
   // satır göstermek anlamsız (ve Google formu da açılmaz). Kararı biz
   // vermiyoruz — privacyOptionsRequirementStatus veriyor.
-  const rows = (typeof AdConsent !== 'undefined' && AdConsent.privacyOptionsRequired())
-    ? SETTINGS.concat([{ icon:'🔒', label:'Gizlilik Seçenekleri',
-                         fn:'AdConsent.showPrivacyOptions()' }])
-    : SETTINGS;
-  container.innerHTML = rows.map((s, i) => {
-    // fn varsa doğrudan çalıştırılır; yoksa action toast olarak gösterilir.
-    const act = s.fn ? s.fn : `showToast('${s.action}')`;
-    return `
-    <button class="setting-row anim-in" style="animation-delay:${i*40}ms" onclick="${act}">
-      <span class="sr-left"><span class="sr-icon">${s.icon}</span>${s.label}</span>
-      <span class="sr-arrow">›</span>
-    </button>`;
+  const groups = SETTING_GROUPS.map(g => ({ title: g.title, rows: g.rows.slice() }));
+  if (typeof AdConsent !== 'undefined' && AdConsent.privacyOptionsRequired()) {
+    groups.push({ title:'Gizlilik', rows: [
+      { icon:'🔒', label:'Gizlilik Seçenekleri',
+        note:'Reklam kişiselleştirme tercihini değiştir',
+        fn:'AdConsent.showPrivacyOptions()' },
+    ]});
+  }
+
+  let idx = 0;
+  container.innerHTML = groups.map(g => {
+    const rowsHTML = g.rows.map(s => {
+      const delay = (idx++) * 32;
+      const tone = s.tone === 'gold' ? ' is-gold' : (s.tone === 'accent' ? ' is-accent' : '');
+
+      // Sağ uç: anahtar > değer > ok. Üçü birden gösterilmiyor —
+      // bir satırda tek bir "burada ne olur" işareti olmalı.
+      let right;
+      if (s.toggle) {
+        // Durum ÇALIŞMA ZAMANINDA okunuyor (tanımdaki `state` bir
+        // fonksiyon). Bir ayarın kaynağı patlarsa satır kapalı görünsün,
+        // ekranın tamamı düşmesin.
+        let on = false;
+        try { on = !!s.state(); } catch (e) { on = false; }
+        right = `<span class="sly-switch ${on ? 'on' : ''}"></span>`;
+      } else if (s.value) {
+        right = `<span class="sly-row-value">${s.value}</span>`;
+      } else {
+        right = '<span class="sly-row-chev">›</span>';
+      }
+
+      // fn varsa doğrudan çalıştırılır; yoksa action toast olarak gösterilir.
+      const act = s.fn ? s.fn : `showToast('${String(s.action).replace(/'/g, "\\'")}')`;
+      return `
+      <button class="sly-row${tone} sly-in" style="animation-delay:${delay}ms" onclick="${act}">
+        <span class="sly-row-ico">${s.icon}</span>
+        <span class="sly-row-body">
+          <span class="sly-row-label">${s.label}</span>
+          ${s.note ? `<span class="sly-row-note">${s.note}</span>` : ''}
+        </span>
+        ${right}
+      </button>`;
+    }).join('');
+
+    return `<div class="sly-group">
+      <h3 class="sly-group-title">${g.title}</h3>
+      <div class="sly-list">${rowsHTML}</div>
+    </div>`;
   }).join('');
+}
+
+// Profil başlığındaki durum çipleri — üçü de gerçek veriden.
+// Plus çipi yalnızca aboneyken çıkıyor: "Plus değilsin" demek için bir
+// çip harcamak, o alanı bilgiden çok reklama çevirirdi (Plus'a giden
+// satır zaten hemen aşağıda).
+function renderProfileHero() {
+  const el = document.getElementById('pf-tags');
+  if (!el) return;
+  const lv = PlayerLevel.get();
+  const tags = [
+    { cls:'', txt:'📈 Seviye ' + lv.level },
+    { cls:'', txt:'🔥 ' + StreakSystem.getCount() + ' gün seri' },
+    { cls:'', txt:'🛡️ ' + Badges.count() + '/' + Badges.total() + ' rozet' },
+  ];
+  if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) {
+    tags.push({ cls:' is-gold', txt:'👑 PLUS' });
+  }
+  el.innerHTML = tags.map(t => `<span class="sly-pill${t.cls}">${t.txt}</span>`).join('');
 }
 
 // renderFavorites() zaten yukarıda tek bir fonksiyon olarak tanımlandı
@@ -3529,6 +3866,9 @@ function showToast(msg) {
   renderSettings();
   renderFavorites();
   renderShowcase();
+  renderProfileHero();
+  // renderHomeStats() içindeki #hdr-streak elemanını YAZDIKTAN sonra
+  // çalışmalı — renderHome() zaten yukarıda çağrıldı, sıra doğru.
   updateStreakUI();
   // Açılışta bir kez: koşullar saf olduğu için, tetikleyicisi kaçmış bir
   // rozet (ör. sistem kurulmadan önce oynanmış oyunlar) burada verilir.

@@ -276,11 +276,23 @@ function testEndToEnd() {
   // ── UI: dört nokta ──
   a.renderProgress();
   const prg = a.el('progress-content').innerHTML;
-  check('İlerleme "Rozet" karosu gerçek sayıyı gösteriyor', prg.indexOf('5/5') >= 0,
+  // 2026-08-10: bu üç iddia, ekran "İlerleme"den "Rozetler"e dönüşünce
+  // GÜNCELLENDİ — silinmedi. Ölçtükleri şey aynı ("ekran gerçek rozet
+  // verisini çiziyor, placeholder değil"); değişen yalnızca markup.
+  // Eski hâli bdg-<tone> sınıflarına bakıyordu; o sınıflar artık sadece
+  // Profil vitrininde ve kutlama katmanında kullanılıyor, rozet ızgarası
+  // sly-badge-card + sly-t-<tone> kullanıyor.
+  check('Rozetler ekranı ilerleme halkasında gerçek sayıyı gösteriyor',
+        prg.indexOf('sly-ring-n">5<') >= 0 && prg.indexOf('/ 5<') >= 0,
         prg.slice(0, 400));
-  check('İlerleme "Son Kazanılan" gerçek rozetleri çiziyor',
-        prg.indexOf('bdg-gold') >= 0 || prg.indexOf('bdg-cyan') >= 0);
-  check('İlerleme ekranında kilitli yuva kalmadı', prg.indexOf('bdg-locked') < 0);
+  check('Rozetler ekranı gerçek rozet kartlarını çiziyor',
+        prg.indexOf('30 Gün Seri') >= 0 && prg.indexOf('500 Elmas') >= 0);
+  // Hepsi kazanıldığında her kart is-earned olmalı: kart sayısı ile
+  // is-earned sayısı eşit değilse ekran kazanılmış bir rozeti kilitli
+  // gösteriyor demektir.
+  eq('Rozetler ekranında kilitli kart kalmadı',
+     (prg.match(/sly-badge-card/g) || []).length,
+     (prg.match(/is-earned/g) || []).length);
 
   a.renderShowcase();
   const sc = a.el('pf-showcase').innerHTML;

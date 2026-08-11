@@ -35,6 +35,7 @@ const SHIP = [
   'sw.js',
   'core/design-tokens.css',
   'core/components.css',
+  'core/ui-shell.css',
   'core/rng.js',
   'core/ui-kit.js',
   'core/daily.js',

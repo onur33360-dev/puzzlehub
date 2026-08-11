@@ -44,6 +44,8 @@ const SHELL_ASSETS = [
   './core/design-tokens.css',
   './core/components.css',
   './style.css',
+  // Kabuk tasarım sistemi. style.css'ten SONRA yukleniyor.
+  './core/ui-shell.css',
   './core/rng.js',
   './games/games.js',
   './core/ui-kit.js',

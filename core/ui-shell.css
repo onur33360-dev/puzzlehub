@@ -1,0 +1,1122 @@
+/* ============================================================
+   SlySwipe — KABUK TASARIM SİSTEMİ (sly-*)
+   ============================================================
+   KAPSAM: uygulama kabuğu (Ana Sayfa / Keşfet / Rozetler / Profil-
+   Ayarlar). Oyun içi görseller BURAYA DAHİL DEĞİL — onlar
+   core/design-tokens.css'teki --ph-* sistemini kullanıyor ve o dosya
+   bilerek elle sürülmüyor (bkz. CLAUDE.md §5 "palet İKİ ayrı :root").
+
+   NEDEN AYRI DOSYA: style.css tarihsel olarak birikmiş, ekran ekran
+   yazılmış kurallardan oluşuyor. Yeni sistemi oraya karıştırmak
+   "hangi kural yeni dile ait?" sorusunu cevapsız bırakırdı. Bu dosya
+   style.css'ten SONRA yükleniyor, dolayısıyla çakışan yerlerde kazanır.
+
+   YENİ DOSYA EKLEME KURALI: bir kabuk dosyası İKİ listeye birden
+   yazılmalı — sw.js SHELL_ASSETS ve tools/build-www.js SHIP. Build
+   ikisini karşılaştırıp uyuşmazlıkta düşüyor; biri unutulursa web
+   çalışır ama APK boş ekrana açılır (CLAUDE.md §2).
+
+   İSİMLENDİRME: tüm sınıflar `sly-` önekli. Oyunların kendi kısa
+   önekleri (bp-, wsrt-, fc- …) gibi, kabuk da kendi alanında kalıyor.
+   ------------------------------------------------------------ */
+
+:root {
+  /* ── ZEMİN ──────────────────────────────────────────────────
+     Referans tasarımın zemini tek düz renk DEĞİL: yukarıda hafif
+     menekşeye çalan bir gece mavisi, aşağıda neredeyse siyah. İki
+     ayrı token, çünkü gradyan gövdede (style.css body) kuruluyor. */
+  --sly-bg-top: #10102A;
+  --sly-bg-bottom: #07071A;
+
+  /* ── YÜZEYLER ───────────────────────────────────────────────
+     Üç kademe: panel (bölüm kabı) < kart (panel içindeki satır) <
+     yükseltilmiş (öne çıkan). Hepsi YARI SAYDAM: altındaki zemin
+     gradyanı geçtiği için ekranın üstü ve altı aynı kartı biraz
+     farklı gösteriyor — "cam" hissinin ucuz ve backdrop-filter'sız
+     hâli. filter/blur BİLEREK yok: düşük uçlu WebView'de en pahalı
+     şey o (docs/03_PERFORMANCE_RULES.md). */
+  --sly-panel: rgba(255,255,255,0.045);
+  --sly-panel-2: rgba(255,255,255,0.028);
+  --sly-raise: rgba(255,255,255,0.07);
+  --sly-line: rgba(255,255,255,0.075);
+  --sly-line-soft: rgba(255,255,255,0.045);
+
+  /* ── METİN ─────────────────────────────────────────────────── */
+  --sly-text: #EEEEFA;
+  --sly-text-2: #A6A6C8;
+  --sly-text-3: #6C6C92;
+
+  /* ── VURGU ──────────────────────────────────────────────────
+     Dört aile: menekşe (marka), camgöbeği (bilgi/ilerleme), altın
+     (ödül/premium), yeşil (tamamlandı). rgb üçlüleri rgba() içindir —
+     rgba bir hex token'ı tüketemiyor (style.css --accent-rgb ile aynı
+     gerekçe). */
+  --sly-violet: #8B5CF6;      --sly-violet-rgb: 139,92,246;
+  --sly-violet-lt: #A78BFA;
+  --sly-blue: #60A5FA;        --sly-blue-rgb: 96,165,250;
+  --sly-cyan: #22D3EE;        --sly-cyan-rgb: 34,211,238;
+  --sly-gold: #FBBF24;        --sly-gold-rgb: 251,191,36;
+  --sly-green: #34D399;       --sly-green-rgb: 52,211,153;
+  --sly-rose: #F472B6;        --sly-rose-rgb: 244,114,182;
+
+  /* ── KÖŞE YARIÇAPI ──────────────────────────────────────────
+     Referans görselde iç içe geçmiş iki yarıçap var: dış panel daha
+     yuvarlak, içindeki satır daha az. Aynı değeri kullanmak iç
+     köşeleri dışarıya "yapıştırıyor". */
+  --sly-r-xs: 10px;
+  --sly-r-sm: 14px;
+  --sly-r-md: 18px;
+  --sly-r-lg: 22px;
+  --sly-r-pill: 999px;
+
+  /* ── BOŞLUK ─────────────────────────────────────────────────
+     4'ün katları. Ekran kenar boşluğu ayrı token: hem ekranlar hem
+     alt çubuk aynı hizayı kullanıyor. */
+  --sly-gap-1: 4px;
+  --sly-gap-2: 8px;
+  --sly-gap-3: 12px;
+  --sly-gap-4: 16px;
+  --sly-gap-5: 20px;
+  --sly-gap-6: 28px;
+  --sly-edge: 14px;
+
+  /* ── GÖLGE / IŞIMA ──────────────────────────────────────────
+     İki katmanlı: aşağıya düşen yumuşak gölge (derinlik) + üst
+     kenarda 1px iç ışık (yüzeyin "yakalama ışığı"). İkincisi olmadan
+     koyu kart, koyu zeminde düz bir dikdörtgen gibi duruyor. */
+  --sly-shadow: 0 10px 30px -12px rgba(0,0,0,.75);
+  --sly-shadow-lg: 0 18px 44px -16px rgba(0,0,0,.85);
+  --sly-catch: inset 0 1px 0 rgba(255,255,255,.07);
+
+  /* ── İKON ÖLÇÜLERİ ─────────────────────────────────────────── */
+  --sly-ico-sm: 18px;
+  --sly-ico-md: 22px;
+  --sly-ico-tile: 40px;
+}
+
+/* Zemin gradyanı yeni palete çekiliyor. style.css'teki body kuralının
+   üstüne yazıyor; oradaki token'lar (--bg-body) kabuğun geri kalanında
+   hâlâ kullanıldığı için DEĞİŞTİRİLMEDİ. */
+body {
+  background: linear-gradient(180deg, var(--sly-bg-top) 0%, var(--sly-bg-bottom) 62%, var(--sly-bg-bottom) 100%);
+  background-attachment: fixed;
+  color: var(--sly-text);
+}
+
+.screen { padding: 14px var(--sly-edge) 22px; }
+
+/* ============================================================
+   1) EKRAN BAŞLIĞI  —  .sly-screen-head
+   ============================================================ */
+.sly-screen-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--sly-gap-3); margin: 2px 0 var(--sly-gap-5);
+}
+.sly-screen-title {
+  font-family: var(--font-display);
+  font-size: 26px; font-weight: 800; letter-spacing: -.4px;
+  line-height: 1.1; color: var(--sly-text);
+}
+.sly-screen-sub {
+  display: block; margin-top: 4px;
+  font-size: 12.5px; font-weight: 500; color: var(--sly-text-2);
+  letter-spacing: .01em;
+}
+
+/* ============================================================
+   2) ÜST BAR  —  .sly-topbar
+   ============================================================
+   Solda marka (avatar + ad), sağda PLUS ve elmas cüzdanı.
+   PLUS ve elmas 2026-07-29'da header'dan Profil satırlarına
+   TAŞINMIŞTI; referans tasarım ikisini de geri istiyor. Profil
+   satırları KALDI — iki kapı olması bir sorun değil, tek kapının
+   kapanması sorundu. */
+.sly-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sly-gap-3); margin-bottom: var(--sly-gap-5);
+}
+.sly-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+
+/* Marka işareti = oyuncunun AVATARI (data-ph-avatar). Referansta da
+   sol üstte bir karakter portresi var. Halka, avatarın etrafında
+   ince bir menekşe kenar + dışarı doğru yumuşak ışıma. */
+.sly-brand-avatar {
+  width: 42px; height: 42px; flex-shrink: 0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 23px; line-height: 1;
+  background: linear-gradient(150deg, rgba(var(--sly-violet-rgb),.34), rgba(var(--sly-blue-rgb),.20));
+  border: 1.5px solid rgba(var(--sly-violet-rgb),.55);
+  box-shadow: 0 0 0 3px rgba(var(--sly-violet-rgb),.10), 0 4px 14px -4px rgba(var(--sly-violet-rgb),.6);
+  transition: transform .15s ease;
+}
+.sly-brand-avatar:active { transform: scale(.93); }
+.sly-brand-name {
+  font-family: var(--font-display);
+  font-size: 21px; font-weight: 800; letter-spacing: -.3px;
+  color: var(--sly-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sly-topbar-actions { display: flex; align-items: center; gap: var(--sly-gap-2); flex-shrink: 0; }
+
+/* PLUS düğmesi — altın. #plus-badge id'si ve .plus-text çocuğu
+   ZORUNLU: PlusSystem.updateUI() ikisini de arıyor (abone olunca
+   metni "PLUS ✓" yapıyor). */
+.sly-plus-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 7px 13px 7px 10px; border-radius: var(--sly-r-pill);
+  background: linear-gradient(135deg, #F7CE5B, #D99A18);
+  box-shadow: 0 4px 14px -5px rgba(var(--sly-gold-rgb),.75), inset 0 1px 0 rgba(255,255,255,.4);
+  transition: transform .15s ease;
+}
+.sly-plus-btn:active { transform: scale(.94); }
+.sly-plus-ico { font-size: 13px; line-height: 1; }
+.sly-plus-btn .plus-text {
+  font-size: 12px; font-weight: 900; letter-spacing: .06em;
+  color: #2B1A02;
+}
+/* Abone: altın dolgu yerine altın çerçeve — "satın al" değil "sahipsin". */
+.sly-plus-btn.plus-active {
+  background: rgba(var(--sly-gold-rgb),.13);
+  border: 1px solid rgba(var(--sly-gold-rgb),.55);
+  box-shadow: 0 0 16px -4px rgba(var(--sly-gold-rgb),.5);
+}
+.sly-plus-btn.plus-active .plus-text { color: var(--sly-gold); }
+
+/* Elmas cüzdanı. .diamond-display sınıfı DiamondSystem._animateAdd()
+   için, .diamond-count ise updateUI() için zorunlu. */
+.sly-wallet {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 5px 5px 11px; border-radius: var(--sly-r-pill);
+  background: var(--sly-panel);
+  border: 1px solid var(--sly-line);
+  box-shadow: var(--sly-catch);
+}
+.sly-wallet-ico { font-size: 14px; line-height: 1; }
+.sly-wallet .diamond-count {
+  font-size: 13.5px; font-weight: 800; color: var(--sly-text);
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+}
+.sly-wallet-add {
+  width: 25px; height: 25px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 700; line-height: 0;
+  color: #fff;
+  background: linear-gradient(140deg, var(--sly-violet-lt), var(--sly-violet));
+  box-shadow: 0 3px 10px -3px rgba(var(--sly-violet-rgb),.85);
+  transition: transform .15s ease;
+}
+.sly-wallet-add:active { transform: scale(.88); }
+
+/* Elmas artış animasyonu (style.css'teki .diamond-pop bu kabı hedefler) */
+.sly-wallet.diamond-pop { animation: slyPop .4s ease; }
+@keyframes slyPop { 50% { transform: scale(1.09); } }
+
+/* ============================================================
+   3) HERO KART  —  .sly-hero
+   ============================================================
+   Ana sayfanın tek büyük yüzeyi ve uygulamanın ne olduğunu anlatan
+   yer: oyunlar burada LİSTELENMİYOR, Keşfet akışında keşfediliyor.
+   Bu yüzden kartın sağındaki kompozisyon bir oyun ızgarası değil,
+   kaydırma hareketini anlatan bir kart yelpazesi. */
+.sly-hero {
+  position: relative; overflow: hidden;
+  border-radius: var(--sly-r-lg);
+  padding: 22px 20px 24px;
+  min-height: 178px;
+  background:
+    radial-gradient(120% 120% at 88% 8%, rgba(var(--sly-violet-rgb),.32) 0%, transparent 58%),
+    radial-gradient(90% 90% at 4% 96%, rgba(var(--sly-blue-rgb),.16) 0%, transparent 60%),
+    linear-gradient(150deg, #1A1740 0%, #131233 46%, #0C0B22 100%);
+  border: 1px solid rgba(var(--sly-violet-rgb),.26);
+  box-shadow: var(--sly-shadow-lg), var(--sly-catch);
+  margin-bottom: var(--sly-gap-5);
+}
+/* Sağ üst köşedeki ışık kaynağı — kartın kendi hacmini veriyor.
+   ::after değil ::before kullanmak serbest: bu öğe .ph-dais DEĞİL
+   (o çakışma games/board-wrap tarafında yaşanmıştı). */
+.sly-hero::before {
+  content: ''; position: absolute; pointer-events: none;
+  width: 240px; height: 240px; right: -70px; top: -110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--sly-violet-rgb),.30), transparent 68%);
+}
+.sly-hero-body { position: relative; z-index: 2; max-width: 60%; }
+.sly-hero-title {
+  font-family: var(--font-display);
+  font-size: 29px; font-weight: 800; line-height: 1.08;
+  letter-spacing: -.6px; color: #fff;
+}
+/* İkinci kelime camgöbeği — referanstaki "Keşfet Akışı" iki tonlu. */
+.sly-hero-title em {
+  font-style: normal;
+  background: linear-gradient(120deg, var(--sly-cyan), var(--sly-blue));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: var(--sly-cyan);
+}
+.sly-hero-desc {
+  margin: 9px 0 16px;
+  font-size: 13px; line-height: 1.5; font-weight: 500;
+  color: rgba(233,232,255,.66);
+}
+
+/* ── Hero illüstrasyonu: kart yelpazesi ──────────────────────
+   Görsel VARLIK DEĞİL, DOM. Sebep: tek bir PNG hem her sürüm
+   bump'ında yeniden inerdi (SHELL_ASSETS tuzağı) hem de tema
+   değişince bayatlardı. Beş küçük kart + bir yay. Hiçbiri
+   animasyonlu değil — sürekli dönen bir süs, altındaki Keşfet
+   demolarıyla dikkat için yarışır (§2.5 restraint). */
+/* GENİŞLİK MATEMATİĞİ, göz kararı değil: en sağdaki kartın sol kenarı
+   (104) + kart genişliği (48) = 152, yani kap 152px olunca hiçbir kart
+   dışarı taşmıyor. İlk sürümde 5. kart kabın dışına çıkıyordu ve
+   .sly-hero'nun overflow:hidden'ı onu dümdüz kesiyordu — yelpaze
+   "yarım kalmış" görünüyordu. Bir kart eklenecekse bu toplam da
+   büyümeli. */
+.sly-hero-art {
+  position: absolute; right: 6px; top: 50%;
+  transform: translateY(-50%);
+  width: 152px; height: 148px; z-index: 1;
+  pointer-events: none;
+}
+.sly-fan-card {
+  position: absolute; bottom: 16px;
+  width: 48px; height: 70px; border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 8px 18px -8px rgba(0,0,0,.9);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  transform-origin: bottom center;
+}
+.sly-fan-card:nth-child(1) {
+  left: 0;    transform: rotate(-17deg) translateY(6px);
+  background: linear-gradient(155deg, #7C3AED, #4C1D95); opacity: .72;
+}
+.sly-fan-card:nth-child(2) {
+  left: 26px; transform: rotate(-8deg) translateY(1px);
+  background: linear-gradient(155deg, #2563EB, #172554); opacity: .86;
+}
+/* Ortadaki kart öne çıkıyor: yelpazede "seçili olan" o. scale(1.1) ile
+   büyüyor ama transform-origin dip merkez olduğu için yanlara taşmıyor
+   (48 × 1.1 = 52.8, yani her yandan 2.4px — kap içinde). */
+.sly-fan-card:nth-child(3) {
+  left: 52px; transform: rotate(0deg) translateY(-9px) scale(1.1);
+  background: linear-gradient(155deg, #22D3EE, #0E7490);
+  border-color: rgba(255,255,255,.34);
+  box-shadow: 0 12px 26px -8px rgba(var(--sly-cyan-rgb),.65), 0 0 0 1px rgba(255,255,255,.10);
+  z-index: 3;
+}
+.sly-fan-card:nth-child(4) {
+  left: 78px; transform: rotate(9deg) translateY(1px);
+  background: linear-gradient(155deg, #F59E0B, #7C2D12); opacity: .82;
+}
+.sly-fan-card:nth-child(5) {
+  left: 104px; transform: rotate(18deg) translateY(7px);
+  background: linear-gradient(155deg, #EC4899, #831843); opacity: .62;
+}
+/* Kaydırma yayı — kartların ALTINDAN geçen tek bir çizgi + ok ucu.
+   Hareketi kartların üstüne çizmek onları kapatıyordu. */
+.sly-fan-arc { position: absolute; inset: 0; z-index: 4; overflow: visible; }
+
+/* ── CTA ──────────────────────────────────────────────────── */
+.sly-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 12px 18px; border-radius: var(--sly-r-pill);
+  font-family: var(--font-display);
+  font-size: 14px; font-weight: 700; letter-spacing: .01em;
+  transition: transform .14s ease, box-shadow .18s ease;
+}
+.sly-btn:active { transform: scale(.96); }
+.sly-btn-chev { font-size: 15px; line-height: 1; opacity: .9; }
+
+/* Hero'nun CTA'sı BİLEREK dolu değil, çerçeveli: hemen altında dört
+   istatistik kartı ve iki panel var; dolu bir düğme o bloğu ezerdi. */
+.sly-btn-outline {
+  color: #fff;
+  background: rgba(255,255,255,.05);
+  border: 1.5px solid rgba(var(--sly-violet-rgb),.72);
+  box-shadow: 0 0 22px -8px rgba(var(--sly-violet-rgb),.9), var(--sly-catch);
+}
+.sly-btn-primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--sly-violet-lt), var(--sly-violet) 55%, #6D28D9);
+  box-shadow: 0 8px 22px -8px rgba(var(--sly-violet-rgb),.95), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.sly-btn-ghost {
+  color: var(--sly-text-2);
+  background: var(--sly-panel);
+  border: 1px solid var(--sly-line);
+}
+.sly-btn-block { display: flex; width: 100%; justify-content: center; }
+
+/* ============================================================
+   4) İSTATİSTİK KARTLARI  —  .sly-stats / .sly-stat
+   ============================================================
+   Dördü yan yana 384px'lik bir telefonda kart başına ~84px bırakır;
+   "Rozet İlerlemesi" gibi bir etiket oraya sığmaz. Bu yüzden yatay
+   KAYAN bir şerit — referans görselde de dördüncü kart kenardan
+   taşıyor, yani şerit orada da kayıyor. */
+.sly-stats {
+  display: flex; gap: 10px;
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  /* Negatif marj + eşleşen padding: şerit ekranın kenarına kadar
+     kayabilsin ama ilk kart yine de hizada başlasın. */
+  margin: 0 calc(var(--sly-edge) * -1) var(--sly-gap-5);
+  padding: 2px var(--sly-edge) 6px;
+  scroll-snap-type: x proximity;
+}
+.sly-stats::-webkit-scrollbar { display: none; }
+
+/* GENİŞLİK CİHAZDA ÖLÇÜLDÜ ve masaüstünde yetenden GENİŞ, bilerek.
+   En uzun etiket "Rozet İlerlemesi". Galaxy A51'de ölçüm: metin 84.36px,
+   kutu 83.58px — 0.78px taşma, yani "Rozet İlerlem…".
+   ASIL SEBEP font boyutu DEĞİL, Android WebView'in metin şişirmesi:
+   CSS'te 10px yazılı, cihazda 11px hesaplanıyor (sistem yazı tipi
+   ölçeği / font boosting). Masaüstünde 10px kalıyor ve sığıyordu — bu
+   yüzden tarayıcıda görünmeyip yalnızca cihazda çıktı.
+   164px, 11px'te ~11px (%13) pay bırakıyor; kullanıcı sistem yazı
+   ölçeğini ~%124'e çıkarana kadar dayanır. `-webkit-text-size-adjust`
+   ile şişirmeyi kapatmak daha kesin bir çözüm olurdu ama kullanıcının
+   erişilebilirlik tercihini ezerdi — bu bir ürün kararı (§7).
+
+   ÖLÇÜM TUZAĞI: `scrollWidth` TAM SAYIYA yuvarlıyor, yani 0.78px'lik
+   taşma orada görünmüyor (84 == 84) ve "taşma yok" gibi okunuyor.
+   Alt-piksel taşmayı görmek için Range.getBoundingClientRect() kullan. */
+.sly-stat {
+  flex: 0 0 auto; width: 164px;
+  scroll-snap-align: start;
+  padding: 12px 13px 13px;
+  border-radius: var(--sly-r-md);
+  background: var(--sly-panel);
+  border: 1px solid var(--sly-line);
+  box-shadow: var(--sly-shadow), var(--sly-catch);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.sly-stat-top { display: flex; align-items: center; gap: 9px; }
+/* İkon karosu: rengi karta göre değişiyor, tonu .sly-t-* veriyor. */
+.sly-stat-ico {
+  width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: var(--sly-r-xs);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1;
+}
+.sly-stat-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sly-stat-lbl {
+  font-size: 10px; font-weight: 600; color: var(--sly-text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: 0;
+}
+.sly-stat-val {
+  font-family: var(--font-display);
+  font-size: 17px; font-weight: 800; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.sly-stat-val small { font-size: 11.5px; font-weight: 700; color: var(--sly-text-3); }
+
+/* ── Ton aileleri ─────────────────────────────────────────────
+   Tek yerde tanımlı; hem istatistik kartı hem görev satırı hem rozet
+   kartı aynı sınıfları kullanıyor. Bir rengi değiştirmek üç ekranda
+   birden değişiyor — kopyalanmış gradyanların olmamasının sebebi bu. */
+.sly-t-violet .sly-stat-ico, .sly-t-violet .sly-task-ico { background: linear-gradient(145deg, rgba(var(--sly-violet-rgb),.34), rgba(var(--sly-violet-rgb),.12)); box-shadow: inset 0 0 0 1px rgba(var(--sly-violet-rgb),.34); }
+.sly-t-gold   .sly-stat-ico, .sly-t-gold   .sly-task-ico { background: linear-gradient(145deg, rgba(var(--sly-gold-rgb),.32),   rgba(var(--sly-gold-rgb),.10));   box-shadow: inset 0 0 0 1px rgba(var(--sly-gold-rgb),.34); }
+.sly-t-green  .sly-stat-ico, .sly-t-green  .sly-task-ico { background: linear-gradient(145deg, rgba(var(--sly-green-rgb),.30),  rgba(var(--sly-green-rgb),.10));  box-shadow: inset 0 0 0 1px rgba(var(--sly-green-rgb),.32); }
+.sly-t-cyan   .sly-stat-ico, .sly-t-cyan   .sly-task-ico { background: linear-gradient(145deg, rgba(var(--sly-cyan-rgb),.30),   rgba(var(--sly-cyan-rgb),.10));   box-shadow: inset 0 0 0 1px rgba(var(--sly-cyan-rgb),.32); }
+.sly-t-blue   .sly-stat-ico, .sly-t-blue   .sly-task-ico { background: linear-gradient(145deg, rgba(var(--sly-blue-rgb),.30),   rgba(var(--sly-blue-rgb),.10));   box-shadow: inset 0 0 0 1px rgba(var(--sly-blue-rgb),.32); }
+.sly-t-rose   .sly-stat-ico, .sly-t-rose   .sly-task-ico { background: linear-gradient(145deg, rgba(var(--sly-rose-rgb),.30),   rgba(var(--sly-rose-rgb),.10));   box-shadow: inset 0 0 0 1px rgba(var(--sly-rose-rgb),.32); }
+
+.sly-t-violet .sly-stat-val { color: var(--sly-violet-lt); }
+.sly-t-gold   .sly-stat-val { color: var(--sly-gold); }
+.sly-t-green  .sly-stat-val { color: var(--sly-green); }
+.sly-t-cyan   .sly-stat-val { color: var(--sly-cyan); }
+.sly-t-blue   .sly-stat-val { color: var(--sly-blue); }
+.sly-t-rose   .sly-stat-val { color: var(--sly-rose); }
+
+/* ============================================================
+   5) İLERLEME ÇUBUĞU  —  .sly-bar
+   ============================================================
+   Tek bir çubuk bileşeni; istatistik kartı, görev satırı ve rozet
+   ekranı üçü de bunu kullanıyor. Dolgunun rengi kabın ton sınıfından
+   miras alınıyor (aşağıdaki .sly-t-* eşlemeleri). */
+.sly-bar {
+  height: 6px; border-radius: var(--sly-r-pill);
+  background: rgba(255,255,255,.07);
+  overflow: hidden;
+}
+.sly-bar-fill {
+  height: 100%; border-radius: var(--sly-r-pill);
+  background: linear-gradient(90deg, var(--sly-violet-lt), var(--sly-violet));
+  transition: width .55s cubic-bezier(.22,.9,.3,1);
+}
+.sly-t-gold  .sly-bar-fill { background: linear-gradient(90deg, #FCD34D, #F59E0B); }
+.sly-t-green .sly-bar-fill { background: linear-gradient(90deg, #6EE7B7, #10B981); }
+.sly-t-cyan  .sly-bar-fill { background: linear-gradient(90deg, #67E8F9, #06B6D4); }
+.sly-t-blue  .sly-bar-fill { background: linear-gradient(90deg, #93C5FD, #3B82F6); }
+.sly-t-rose  .sly-bar-fill { background: linear-gradient(90deg, #F9A8D4, #DB2777); }
+
+/* ============================================================
+   6) PANEL  —  .sly-panel  (bölüm kabı)
+   ============================================================
+   Referanstaki her bölüm (Görevler, Haftalık Seri) kendi kabında.
+   Başlıklar ekranda serbest gezmiyor, kabın içinde. */
+.sly-panel {
+  border-radius: var(--sly-r-lg);
+  background: var(--sly-panel);
+  border: 1px solid var(--sly-line);
+  box-shadow: var(--sly-shadow), var(--sly-catch);
+  padding: 15px 14px 16px;
+  margin-bottom: var(--sly-gap-5);
+}
+.sly-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sly-gap-3); margin-bottom: 13px;
+}
+.sly-panel-title {
+  display: flex; align-items: center; gap: 9px;
+  font-family: var(--font-display);
+  font-size: 16.5px; font-weight: 800; letter-spacing: -.1px;
+  color: var(--sly-text);
+}
+.sly-panel-title-ico {
+  width: 27px; height: 27px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1;
+  background: linear-gradient(145deg, rgba(var(--sly-violet-rgb),.32), rgba(var(--sly-violet-rgb),.10));
+  box-shadow: inset 0 0 0 1px rgba(var(--sly-violet-rgb),.30);
+}
+.sly-panel-link {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 12.5px; font-weight: 700;
+  color: var(--sly-violet-lt);
+  transition: opacity .15s ease;
+}
+.sly-panel-link:active { opacity: .6; }
+.sly-panel-link.sly-muted { color: var(--sly-text-2); font-weight: 600; }
+
+/* ============================================================
+   7) GÖREV SATIRI  —  .sly-task
+   ============================================================ */
+.sly-tasks { display: flex; flex-direction: column; gap: 9px; }
+.sly-task {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 11px 11px 10px;
+  border-radius: var(--sly-r-sm);
+  background: var(--sly-panel-2);
+  border: 1px solid var(--sly-line-soft);
+}
+.sly-task-ico {
+  width: var(--sly-ico-tile); height: var(--sly-ico-tile); flex-shrink: 0;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; line-height: 1;
+}
+.sly-task-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.sly-task-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+/* İKİ SATIRA SARIYOR, tek satır + üç nokta DEĞİL. Cihazda ölçüldü:
+   "Günlük meydan okumayı tamamla" kutusunu 94px aşıyordu ve
+   "Günlük meydan ok…" diye çıkıyordu — görevin ne olduğu okunmuyordu.
+   Üç nokta uzun bir adı kısaltmak için iyidir, anlamını yok etmek için
+   değil. İki satır sınırı (line-clamp) yine de kaçak bir metnin satırı
+   sonsuza uzatmasını engelliyor. */
+.sly-task-name {
+  flex: 1; min-width: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--sly-text);
+  line-height: 1.28;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Sayaç, adın İLK satırıyla hizalı kalsın: kap artık flex-start, yani
+   hizayı line-height eşlemesi veriyor (13.5 × 1.28 ≈ 17.3px). */
+.sly-task-count {
+  font-size: 11.5px; font-weight: 700; color: var(--sly-text-2);
+  font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0;
+  line-height: 17.3px;
+}
+/* Tamamlanan görev: sayının yanında onay. Ayrı bir "tamam" satırı
+   yerine mevcut sayacın yanında durması, listedeki hizayı bozmuyor. */
+.sly-task.is-done .sly-task-count { color: var(--sly-green); }
+.sly-task-tick {
+  margin-left: 5px; font-size: 11px; color: var(--sly-green);
+}
+/* Ödül rozeti — referansın sağdaki elmas kutusu. */
+.sly-task-reward {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 4px;
+  padding: 7px 10px; border-radius: 11px;
+  background: rgba(var(--sly-violet-rgb),.13);
+  border: 1px solid rgba(var(--sly-violet-rgb),.26);
+  font-size: 12.5px; font-weight: 800; color: #DCD3FF;
+  font-variant-numeric: tabular-nums;
+}
+.sly-task.is-done .sly-task-reward {
+  background: rgba(var(--sly-green-rgb),.12);
+  border-color: rgba(var(--sly-green-rgb),.28);
+  color: #A7F3D0;
+}
+.sly-task-reward-ico { font-size: 12px; line-height: 1; }
+
+/* Boş durum (görev/rozet listesi boşsa) */
+.sly-empty {
+  padding: 18px 12px; text-align: center;
+  font-size: 12.5px; color: var(--sly-text-2); line-height: 1.5;
+}
+.sly-empty b { display: block; margin-top: 4px; color: var(--sly-violet-lt); font-weight: 700; }
+
+/* ============================================================
+   8) HAFTALIK SERİ  —  .sly-streak
+   ============================================================
+   Sağdaki haftalık ödül sandığı KALDIRILDI (sahibinin isteği). Kart
+   artık yalnızca günleri ve seri durumunu gösteriyor; sağdaki alan
+   boşluk olarak kalmadı, yedi gün genişliği kaba yayıldı. */
+.sly-streak { display: flex; align-items: flex-start; justify-content: space-between; gap: 2px; position: relative; }
+/* Günleri birleştiren çizgi: daire sırasının ARKASINDAN geçiyor,
+   ilk ve son dairenin merkezinde başlayıp bitiyor. */
+.sly-streak::before {
+  content: ''; position: absolute; z-index: 0;
+  left: 7%; right: 7%; top: 21px; height: 2px;
+  background: rgba(255,255,255,.08);
+}
+.sly-day { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.sly-day-dot {
+  width: 42px; height: 42px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 800; line-height: 1;
+  transition: transform .15s ease;
+}
+.sly-day-lbl { font-size: 10.5px; font-weight: 600; color: var(--sly-text-3); }
+
+/* Alınmış gün — yeşil onay. */
+.sly-day.is-done .sly-day-dot {
+  background: rgba(var(--sly-green-rgb),.15);
+  border: 1.5px solid rgba(var(--sly-green-rgb),.5);
+  color: var(--sly-green);
+}
+.sly-day.is-done .sly-day-lbl { color: var(--sly-text-2); }
+
+/* Bugün — menekşe halka + ışıma. Tıklanabilirse (ödül alınmamışsa)
+   ayrıca nabız atıyor: alınacak bir şey olduğunu söyleyen tek işaret. */
+.sly-day.is-today .sly-day-dot {
+  background: linear-gradient(150deg, rgba(var(--sly-violet-rgb),.55), rgba(var(--sly-violet-rgb),.22));
+  border: 2px solid var(--sly-violet-lt);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(var(--sly-violet-rgb),.12), 0 0 18px -2px rgba(var(--sly-violet-rgb),.85);
+}
+.sly-day.is-today .sly-day-lbl { color: var(--sly-violet-lt); font-weight: 800; }
+.sly-day.is-claimable .sly-day-dot { animation: slyDayPulse 2.2s ease-in-out infinite; }
+.sly-day.is-claimable .sly-day-dot:active { transform: scale(.9); }
+@keyframes slyDayPulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(var(--sly-violet-rgb),.12), 0 0 18px -2px rgba(var(--sly-violet-rgb),.85); }
+  50%      { box-shadow: 0 0 0 8px rgba(var(--sly-violet-rgb),.05), 0 0 26px 0 rgba(var(--sly-violet-rgb),.95); }
+}
+
+/* Gelecek gün — yalnızca çerçeve. */
+.sly-day.is-future .sly-day-dot {
+  background: rgba(255,255,255,.03);
+  border: 1.5px solid rgba(255,255,255,.10);
+  color: var(--sly-text-3);
+}
+
+/* ============================================================
+   9) PROMO SATIRI  —  .sly-promo
+   ============================================================
+   İki kolon: solda son kazanılan rozet, sağda PLUS. Dar ekranda
+   (<340px) alt alta geçiyor. */
+/* KOLONLAR EŞİT DEĞİL: sağdaki (PLUS) başlık ve not olarak daha uzun
+   metin taşıyor, 1.2fr ona nefes alanı veriyor. Sol hücre ~161px'e
+   iniyor ve içeriği (kısa rozet adları) rahat sığıyor.
+
+   "PLUS Avantajları" İKİ SATIRA SARIYOR ve bu KABUL EDİLDİ, çözülmemiş
+   bir hata değil. Denendi ve ölçüldü: 1fr → 178px, 1.1fr → 185px,
+   1.2fr → 193px hücre; başlık her üçünde de sarıyor. Sebep yine
+   WebView'in metin şişirmesi (13px → ~14.3px, bkz. .sly-stat notu):
+   metin ~121px'e çıkıyor, oysa hücrede 114px metin alanı var. Tek
+   satıra sığdırmak için sol hücreyi ~150px'in altına indirmek gerekirdi
+   ve o zaman SOLDAKİ rozet adları sarmaya başlıyordu — sorunu bir
+   hücreden diğerine taşımak.
+   Önemli olan hiçbir metnin KIRPILMAMASI; iki satır normal dizgi.
+   Metin sığdırma bu ızgarada sabit oranlarla çözülemez, çünkü ölçek
+   cihazın sistem ayarına bağlı. */
+.sly-promo {
+  display: grid; grid-template-columns: 1fr 1.2fr;
+  gap: 1px;                                  /* ayraç çizgisi bu boşluktan */
+  background: var(--sly-line-soft);
+  border-radius: var(--sly-r-lg);
+  border: 1px solid var(--sly-line);
+  box-shadow: var(--sly-shadow), var(--sly-catch);
+  overflow: hidden;
+  margin-bottom: var(--sly-gap-4);
+}
+.sly-promo-cell {
+  display: flex; align-items: center; gap: 11px;
+  padding: 14px 12px;
+  background: linear-gradient(160deg, rgba(255,255,255,.045), rgba(255,255,255,.02));
+  min-width: 0;
+  transition: background .15s ease;
+}
+.sly-promo-cell:active { background: rgba(255,255,255,.075); }
+.sly-promo-ico {
+  width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; line-height: 1;
+}
+.sly-promo-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sly-promo-kicker {
+  font-size: 10.5px; font-weight: 600; color: var(--sly-text-3);
+  letter-spacing: .02em;
+}
+/* Aynı gerekçe: yarım genişlikteki hücrede "PLUS Avantajları" cihazda
+   37px taşıyordu. Sarmak, kısaltmaktan iyi. */
+.sly-promo-title {
+  font-size: 13px; font-weight: 800; color: var(--sly-text);
+  line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sly-promo-note {
+  font-size: 10.5px; font-weight: 500; color: var(--sly-text-2);
+  line-height: 1.35;
+}
+/* PLUS kolonu altın; solundakinden ayrılması gerek, aynı yüzeyde iki
+   eşit kutu okunmuyor. */
+.sly-promo-cell.is-plus {
+  background: linear-gradient(160deg, rgba(var(--sly-gold-rgb),.13), rgba(var(--sly-gold-rgb),.03));
+}
+.sly-promo-cell.is-plus .sly-promo-ico {
+  background: linear-gradient(145deg, rgba(var(--sly-gold-rgb),.32), rgba(var(--sly-gold-rgb),.08));
+  box-shadow: inset 0 0 0 1px rgba(var(--sly-gold-rgb),.38);
+}
+.sly-promo-cell.is-plus .sly-promo-title { color: var(--sly-gold); }
+.sly-promo-chev { margin-left: auto; flex-shrink: 0; color: var(--sly-text-3); font-size: 17px; }
+
+@media (max-width: 339px) {
+  .sly-promo { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   10) ROZET KARTI  —  .sly-badge-card
+   ============================================================ */
+.sly-badge-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.sly-badge-card {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 15px 10px 13px;
+  border-radius: var(--sly-r-md);
+  background: var(--sly-panel-2);
+  border: 1px solid var(--sly-line-soft);
+  text-align: center;
+}
+/* Kazanılmış rozet: madalyonun arkasında kendi renginde bir hâle.
+   Kilitlide bu hâle yok — fark tek bakışta görünmeli. */
+.sly-badge-card.is-earned { background: var(--sly-panel); border-color: var(--sly-line); }
+.sly-badge-card.is-earned::before {
+  content: ''; position: absolute; pointer-events: none;
+  width: 130px; height: 130px; top: -52px; left: 50%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--sly-violet-rgb),.22), transparent 66%);
+}
+.sly-badge-card.is-earned.sly-t-gold::before  { background: radial-gradient(circle, rgba(var(--sly-gold-rgb),.24), transparent 66%); }
+.sly-badge-card.is-earned.sly-t-green::before { background: radial-gradient(circle, rgba(var(--sly-green-rgb),.22), transparent 66%); }
+.sly-badge-card.is-earned.sly-t-cyan::before  { background: radial-gradient(circle, rgba(var(--sly-cyan-rgb),.22), transparent 66%); }
+.sly-badge-card.is-earned.sly-t-blue::before  { background: radial-gradient(circle, rgba(var(--sly-blue-rgb),.22), transparent 66%); }
+.sly-badge-card.is-earned.sly-t-rose::before  { background: radial-gradient(circle, rgba(var(--sly-rose-rgb),.22), transparent 66%); }
+
+.sly-badge-medal {
+  position: relative; z-index: 1;
+  width: 58px; height: 58px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; line-height: 1;
+  background: linear-gradient(150deg, rgba(255,255,255,.10), rgba(255,255,255,.03));
+  border: 1.5px solid rgba(255,255,255,.10);
+}
+.sly-badge-card.is-earned .sly-badge-medal {
+  background: linear-gradient(150deg, rgba(var(--sly-violet-rgb),.42), rgba(var(--sly-violet-rgb),.12));
+  border-color: rgba(var(--sly-violet-rgb),.6);
+  box-shadow: 0 6px 20px -6px rgba(var(--sly-violet-rgb),.8);
+}
+.sly-badge-card.is-earned.sly-t-gold  .sly-badge-medal { background: linear-gradient(150deg, rgba(var(--sly-gold-rgb),.42),  rgba(var(--sly-gold-rgb),.10));  border-color: rgba(var(--sly-gold-rgb),.65);  box-shadow: 0 6px 20px -6px rgba(var(--sly-gold-rgb),.75); }
+.sly-badge-card.is-earned.sly-t-green .sly-badge-medal { background: linear-gradient(150deg, rgba(var(--sly-green-rgb),.40), rgba(var(--sly-green-rgb),.10)); border-color: rgba(var(--sly-green-rgb),.6);  box-shadow: 0 6px 20px -6px rgba(var(--sly-green-rgb),.7); }
+.sly-badge-card.is-earned.sly-t-cyan  .sly-badge-medal { background: linear-gradient(150deg, rgba(var(--sly-cyan-rgb),.40),  rgba(var(--sly-cyan-rgb),.10));  border-color: rgba(var(--sly-cyan-rgb),.6);   box-shadow: 0 6px 20px -6px rgba(var(--sly-cyan-rgb),.7); }
+.sly-badge-card.is-earned.sly-t-blue  .sly-badge-medal { background: linear-gradient(150deg, rgba(var(--sly-blue-rgb),.40),  rgba(var(--sly-blue-rgb),.10));  border-color: rgba(var(--sly-blue-rgb),.6);   box-shadow: 0 6px 20px -6px rgba(var(--sly-blue-rgb),.7); }
+.sly-badge-card.is-earned.sly-t-rose  .sly-badge-medal { background: linear-gradient(150deg, rgba(var(--sly-rose-rgb),.40),  rgba(var(--sly-rose-rgb),.10));  border-color: rgba(var(--sly-rose-rgb),.6);   box-shadow: 0 6px 20px -6px rgba(var(--sly-rose-rgb),.7); }
+/* Kilitli: gri tonlama — ayrı bir kilit ikonu koymaya gerek yok,
+   emoji zaten okunmaz hâle geliyor ve "henüz değil" diyor. */
+.sly-badge-card:not(.is-earned) .sly-badge-medal { filter: grayscale(1); opacity: .38; }
+
+.sly-badge-name { position: relative; z-index: 1; font-size: 13px; font-weight: 800; color: var(--sly-text); }
+.sly-badge-card:not(.is-earned) .sly-badge-name { color: var(--sly-text-2); }
+.sly-badge-desc { position: relative; z-index: 1; font-size: 10.5px; font-weight: 500; color: var(--sly-text-3); line-height: 1.35; }
+.sly-badge-foot {
+  position: relative; z-index: 1; margin-top: 2px;
+  font-size: 10.5px; font-weight: 800;
+  padding: 4px 9px; border-radius: var(--sly-r-pill);
+}
+.sly-badge-card.is-earned .sly-badge-foot {
+  color: var(--sly-green); background: rgba(var(--sly-green-rgb),.12);
+}
+.sly-badge-card:not(.is-earned) .sly-badge-foot {
+  color: #DCD3FF; background: rgba(var(--sly-violet-rgb),.12);
+}
+
+/* ── Koleksiyon çipleri (Rozetler ekranı) ─────────────────── */
+.sly-chips {
+  display: flex; gap: 8px;
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  margin: 0 calc(var(--sly-edge) * -1) var(--sly-gap-4);
+  padding: 0 var(--sly-edge) 4px;
+}
+.sly-chips::-webkit-scrollbar { display: none; }
+.sly-chip {
+  flex: 0 0 auto;
+  padding: 8px 14px; border-radius: var(--sly-r-pill);
+  font-size: 12.5px; font-weight: 700; letter-spacing: .01em;
+  color: var(--sly-text-2);
+  background: var(--sly-panel);
+  border: 1px solid var(--sly-line);
+  white-space: nowrap;
+  transition: transform .14s ease;
+}
+.sly-chip:active { transform: scale(.95); }
+.sly-chip.on {
+  color: #fff;
+  background: linear-gradient(135deg, var(--sly-violet-lt), var(--sly-violet));
+  border-color: rgba(255,255,255,.22);
+  box-shadow: 0 6px 18px -7px rgba(var(--sly-violet-rgb),.95);
+}
+.sly-chip-n { opacity: .62; margin-left: 4px; font-weight: 600; }
+
+/* ── Rozet ilerleme kartı (halka) ─────────────────────────── */
+.sly-ring-card {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 16px;
+  border-radius: var(--sly-r-lg);
+  background:
+    radial-gradient(110% 120% at 92% 4%, rgba(var(--sly-violet-rgb),.26) 0%, transparent 60%),
+    linear-gradient(150deg, #191740 0%, #121130 50%, #0B0A20 100%);
+  border: 1px solid rgba(var(--sly-violet-rgb),.24);
+  box-shadow: var(--sly-shadow-lg), var(--sly-catch);
+  margin-bottom: var(--sly-gap-5);
+}
+/* Halka SVG değil conic-gradient: tek bir öğe, tek boyama, dolgu
+   yüzdesi bir CSS değişkeninden geliyor. */
+.sly-ring {
+  position: relative; flex-shrink: 0;
+  width: 84px; height: 84px; border-radius: 50%;
+  background: conic-gradient(var(--sly-violet-lt) calc(var(--sly-ring-pct, 0) * 1%), rgba(255,255,255,.07) 0);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 22px -6px rgba(var(--sly-violet-rgb),.75);
+}
+.sly-ring::after {
+  content: ''; position: absolute; inset: 7px;
+  border-radius: 50%;
+  background: #100F2A;
+}
+.sly-ring-txt { position: relative; z-index: 1; text-align: center; line-height: 1.05; }
+.sly-ring-n {
+  display: block; font-family: var(--font-display);
+  font-size: 21px; font-weight: 900; color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.sly-ring-of { display: block; font-size: 10px; font-weight: 600; color: var(--sly-text-2); }
+.sly-ring-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.sly-ring-title { font-family: var(--font-display); font-size: 17px; font-weight: 800; color: #fff; }
+.sly-ring-desc { font-size: 12px; font-weight: 500; color: rgba(232,230,255,.62); line-height: 1.45; }
+.sly-ring-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.sly-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px; border-radius: var(--sly-r-pill);
+  font-size: 10.5px; font-weight: 800;
+  background: rgba(255,255,255,.07); color: var(--sly-text-2);
+  border: 1px solid var(--sly-line-soft);
+}
+.sly-pill.is-gold { color: var(--sly-gold); background: rgba(var(--sly-gold-rgb),.12); border-color: rgba(var(--sly-gold-rgb),.26); }
+
+/* ============================================================
+   11) AYAR SATIRI  —  .sly-row
+   ============================================================
+   Düz bir liste değil, gruplanmış kartlar. Her grubun başlığı var
+   ve satırlar tek bir yüzeyin içinde ince ayraçlarla bölünüyor. */
+.sly-group { margin-bottom: var(--sly-gap-5); }
+.sly-group-title {
+  font-size: 11px; font-weight: 800; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--sly-text-3);
+  margin: 0 4px 9px;
+}
+.sly-list {
+  border-radius: var(--sly-r-md);
+  background: var(--sly-panel);
+  border: 1px solid var(--sly-line);
+  box-shadow: var(--sly-shadow), var(--sly-catch);
+  overflow: hidden;
+}
+.sly-row {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 13px 13px;
+  text-align: left;
+  border-bottom: 1px solid var(--sly-line-soft);
+  transition: background .14s ease;
+}
+.sly-row:last-child { border-bottom: none; }
+.sly-row:active { background: rgba(255,255,255,.05); }
+.sly-row-ico {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1;
+  background: rgba(255,255,255,.06);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+.sly-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sly-row-label { font-size: 14px; font-weight: 600; color: var(--sly-text); }
+.sly-row-note { font-size: 11px; font-weight: 500; color: var(--sly-text-3); line-height: 1.35; }
+.sly-row-value { font-size: 12.5px; font-weight: 600; color: var(--sly-text-2); flex-shrink: 0; }
+.sly-row-chev { font-size: 19px; color: var(--sly-text-3); flex-shrink: 0; line-height: 1; }
+
+/* Öne çıkan satır (Plus / Mağaza) — ikon karosu markalı. */
+.sly-row.is-accent .sly-row-ico {
+  background: linear-gradient(145deg, rgba(var(--sly-violet-rgb),.34), rgba(var(--sly-violet-rgb),.10));
+  box-shadow: inset 0 0 0 1px rgba(var(--sly-violet-rgb),.34);
+}
+.sly-row.is-gold .sly-row-ico {
+  background: linear-gradient(145deg, rgba(var(--sly-gold-rgb),.32), rgba(var(--sly-gold-rgb),.08));
+  box-shadow: inset 0 0 0 1px rgba(var(--sly-gold-rgb),.34);
+}
+.sly-row.is-gold .sly-row-label { color: var(--sly-gold); }
+
+/* ── Anahtar (toggle) ─────────────────────────────────────────
+   Gerçek bir <input> değil, durumu JS yazıyor (.on sınıfı). Kabuğun
+   hiçbir yerinde form yok; bir checkbox'ın erişilebilirlik kazancı
+   burada karşılığını bulmuyor, buton zaten buton. */
+.sly-switch {
+  position: relative; flex-shrink: 0;
+  width: 44px; height: 26px; border-radius: var(--sly-r-pill);
+  background: rgba(255,255,255,.09);
+  border: 1px solid var(--sly-line);
+  transition: background .2s ease, border-color .2s ease;
+}
+.sly-switch::after {
+  content: ''; position: absolute;
+  top: 2px; left: 2px; width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #C9C9E4;
+  box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  transition: transform .2s cubic-bezier(.3,.8,.4,1.2), background .2s ease;
+}
+.sly-switch.on {
+  background: linear-gradient(135deg, var(--sly-violet-lt), var(--sly-violet));
+  border-color: rgba(255,255,255,.24);
+  box-shadow: 0 0 14px -4px rgba(var(--sly-violet-rgb),.9);
+}
+.sly-switch.on::after { transform: translateX(18px); background: #fff; }
+
+/* ============================================================
+   12) PROFİL BAŞLIĞI  —  .sly-profile-hero
+   ============================================================ */
+.sly-profile-hero {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 15px;
+  padding: 18px 16px;
+  border-radius: var(--sly-r-lg);
+  background:
+    radial-gradient(110% 130% at 88% 0%, rgba(var(--sly-violet-rgb),.30) 0%, transparent 62%),
+    linear-gradient(150deg, #1A1740, #0C0B22);
+  border: 1px solid rgba(var(--sly-violet-rgb),.24);
+  box-shadow: var(--sly-shadow-lg), var(--sly-catch);
+  margin-bottom: var(--sly-gap-5);
+}
+.sly-profile-avatar {
+  width: 66px; height: 66px; flex-shrink: 0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px; line-height: 1;
+  background: linear-gradient(150deg, rgba(var(--sly-violet-rgb),.38), rgba(var(--sly-blue-rgb),.20));
+  border: 2px solid rgba(var(--sly-violet-rgb),.6);
+  box-shadow: 0 0 0 5px rgba(var(--sly-violet-rgb),.09), 0 8px 22px -8px rgba(var(--sly-violet-rgb),.9);
+}
+.sly-profile-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.sly-profile-name { font-family: var(--font-display); font-size: 21px; font-weight: 800; color: #fff; }
+.sly-profile-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ============================================================
+   13) ALT NAVİGASYON
+   ============================================================
+   ORTA BÜYÜK DÜĞME YOK — bilerek. Dört sekme eşit ağırlıkta.
+   İkonlar SVG, emoji DEĞİL: aktif sekmenin rengi ikona da inmeli ve
+   emojiye renk verilemiyor (style.css'te bunun için ikonun ARKASINA
+   dolgu konmuştu — SVG o çözümü gereksiz kılıyor). */
+.bottom-tabs {
+  display: flex; align-items: stretch; justify-content: space-between;
+  gap: 4px;
+  background: linear-gradient(180deg, rgba(16,15,42,.96), rgba(8,8,24,.99));
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding: 8px var(--sly-edge) calc(env(safe-area-inset-bottom, 6px) + 8px);
+  box-shadow: 0 -10px 30px -18px rgba(0,0,0,.95);
+}
+.tab {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; padding: 8px 2px 7px;
+  border-radius: var(--sly-r-sm);
+  background: transparent;
+  transition: background .2s ease, transform .15s ease;
+}
+.tab:active { transform: scale(.94); }
+.tab-icon {
+  width: var(--sly-ico-md); height: var(--sly-ico-md);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--sly-text-3);
+  transition: color .2s ease, transform .2s ease;
+}
+.tab-icon svg { width: 100%; height: 100%; display: block; }
+.tab-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .015em;
+  color: var(--sly-text-3);
+  transition: color .2s ease;
+  white-space: nowrap;
+}
+
+/* Aktif sekme: TEK renk ailesi (menekşe). Sekme başına ayrı renk
+   (style.css'teki --tab-active-* dörtlüsü) kaldırıldı — dört farklı
+   vurgu rengi, tutarlı bir kimlikten çok bir gökkuşağı okunuyordu.
+   Token'lar style.css'te duruyor, çünkü orayı boşaltmak bu turun
+   konusu değil. */
+.tab.active { background: rgba(var(--sly-violet-rgb),.14); }
+.tab.active .tab-icon,
+.tab[data-tab].active .tab-label { color: var(--sly-violet-lt); }
+.tab.active .tab-icon {
+  transform: translateY(-1px);
+  filter: drop-shadow(0 0 8px rgba(var(--sly-violet-rgb),.85));
+}
+/* style.css sekme başına renk/dolgu veriyordu; burada tek aileye
+   indiriliyor (aynı özgüllükte, sonra geldiği için kazanıyor). */
+.tab[data-tab="home"].active,
+.tab[data-tab="discover"].active,
+.tab[data-tab="lider"].active,
+.tab[data-tab="profil"].active { background: rgba(var(--sly-violet-rgb),.14); }
+.tab[data-tab="home"].active     .tab-label,
+.tab[data-tab="discover"].active .tab-label,
+.tab[data-tab="lider"].active    .tab-label,
+.tab[data-tab="profil"].active   .tab-label { color: var(--sly-violet-lt); }
+
+/* ============================================================
+   14) ESKİ KABUK SINIFLARININ YENİ DİLE ÇEKİLMESİ
+   ============================================================
+   Aşağıdakiler style.css'te tanımlı ve hâlâ kullanılıyor (Plus
+   sayfası, mağaza, günlük meydan okuma kartı). Yeniden yazılmadılar;
+   yalnızca yüzey/kenar/yarıçap değerleri yeni sisteme hizalanıyor ki
+   ekranlar arasında malzeme farkı olmasın. */
+.dc-card {
+  border-radius: var(--sly-r-md);
+  background: var(--sly-panel);
+  border: 1px solid var(--sly-line);
+  box-shadow: var(--sly-shadow), var(--sly-catch);
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: 16.5px; font-weight: 800; letter-spacing: -.1px;
+  color: var(--sly-text);
+}
+.shop-page .shop-section-title,
+.plus-page .plus-title { letter-spacing: -.2px; }
+
+/* Rozet kutlama katmanı (Badges._drain) yeni yüzeye hizalanıyor. */
+.bdg-pop-card {
+  border-radius: var(--sly-r-lg);
+  border: 1px solid var(--sly-line);
+  box-shadow: var(--sly-shadow-lg);
+}
+
+/* ============================================================
+   15) GİRİŞ ANİMASYONU
+   ============================================================
+   style.css'teki .anim-in ile aynı rol, daha kısa mesafe. Liste
+   satırları sırayla beliriyor; gecikmeyi JS satır indeksinden
+   veriyor. prefers-reduced-motion'da tamamen kapanıyor. */
+.sly-in { animation: slyIn .38s cubic-bezier(.22,.9,.3,1) backwards; }
+@keyframes slyIn {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sly-in { animation: none; }
+  .sly-day.is-claimable .sly-day-dot { animation: none; }
+  .sly-bar-fill { transition: none; }
+}
+
+/* ============================================================
+   16) DAR / GENİŞ EKRAN
+   ============================================================
+   #app zaten 480px ile sınırlı (style.css), yani "geniş ekran"
+   demek tablet değil, sadece 400-480px arası demek. Tek gerçek
+   ihtiyaç dar uçta: 340px altında hero metni sanata giriyor. */
+@media (max-width: 359px) {
+  .sly-hero { min-height: 0; padding: 18px 16px 20px; }
+  .sly-hero-body { max-width: 100%; }
+  .sly-hero-title { font-size: 25px; }
+  /* Sanat gizlenmiyor, arkaya alınıyor: metnin arkasında soluk bir
+     doku olarak duruyor — kaldırmak kartı boşaltırdı. */
+  .sly-hero-art { opacity: .28; right: -34px; }
+  .sly-day-dot { width: 36px; height: 36px; font-size: 13px; }
+  .sly-badge-grid { gap: 8px; }
+}
+@media (min-width: 420px) {
+  .sly-stat { width: 176px; }
+}
+
+/* ============================================================
+   17) PROFİL: VİTRİN VE FAVORİLER
+   ============================================================
+   style.css'teki .pf-badge altıgen bir clip-path ve 78px genişlikte —
+   yeni sistemde hiçbir şeye benzemiyordu ve kilitli hâli düz koyu bir
+   siluetti. Rozet ızgarasındaki madalyonla AYNI dile çekiliyor; iki
+   ekranda aynı rozetin iki farklı malzemede görünmesi, tasarım
+   sisteminin ilk kaybettiği yer. */
+.pf-showcase { display: flex; gap: 12px; }
+.pf-badge {
+  width: 62px; height: 62px; flex: 0 0 auto;
+  clip-path: none;                     /* style.css'teki altıgeni iptal et */
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 27px; line-height: 1;
+  background: linear-gradient(150deg, rgba(var(--sly-violet-rgb),.40), rgba(var(--sly-violet-rgb),.12));
+  border: 1.5px solid rgba(var(--sly-violet-rgb),.58);
+  box-shadow: 0 6px 20px -6px rgba(var(--sly-violet-rgb),.75);
+}
+.pf-badge.bdg-gold  { background: linear-gradient(150deg, rgba(var(--sly-gold-rgb),.42),  rgba(var(--sly-gold-rgb),.10));  border-color: rgba(var(--sly-gold-rgb),.62);  box-shadow: 0 6px 20px -6px rgba(var(--sly-gold-rgb),.7); }
+.pf-badge.bdg-cyan  { background: linear-gradient(150deg, rgba(var(--sly-cyan-rgb),.40),  rgba(var(--sly-cyan-rgb),.10));  border-color: rgba(var(--sly-cyan-rgb),.58);  box-shadow: 0 6px 20px -6px rgba(var(--sly-cyan-rgb),.7); }
+.pf-badge.bdg-blue  { background: linear-gradient(150deg, rgba(var(--sly-blue-rgb),.40),  rgba(var(--sly-blue-rgb),.10));  border-color: rgba(var(--sly-blue-rgb),.58);  box-shadow: 0 6px 20px -6px rgba(var(--sly-blue-rgb),.7); }
+.pf-badge.bdg-red   { background: linear-gradient(150deg, rgba(var(--sly-rose-rgb),.40),  rgba(var(--sly-rose-rgb),.10));  border-color: rgba(var(--sly-rose-rgb),.58);  box-shadow: 0 6px 20px -6px rgba(var(--sly-rose-rgb),.7); }
+/* Kilitli yuva: kesik çizgi. Dolu ama soluk bir daire "kazanılmış ama
+   sönük" diye okunuyordu; kesik çizgi boş bir yeri anlatıyor. */
+.pf-badge.bdg-locked {
+  background: rgba(255,255,255,.03);
+  border: 1.5px dashed rgba(255,255,255,.14);
+  box-shadow: none;
+  font-size: 20px; opacity: .5;
+}
+
+.pf-fav-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+.pf-fav {
+  width: 58px; height: 58px; border-radius: var(--sly-r-sm);
+  box-shadow: var(--sly-shadow), inset 0 1px 0 rgba(255,255,255,.18);
+}
+/* Boş favori: satır içi mor bağlantı yerine kabuk boş-durum dili. */
+.pf-fav-empty {
+  display: block; width: 100%;
+  padding: 16px 12px; text-align: center;
+  border-radius: var(--sly-r-md);
+  background: var(--sly-panel-2);
+  border: 1px dashed var(--sly-line);
+  font-size: 12.5px; font-weight: 600; color: var(--sly-text-2);
+}
+
+/* Günlük meydan okuma düğmesi. Altın BİLEREK bırakılmadı: bu sistemde
+   altın = premium/ödül (PLUS düğmesi, elmas rozeti). Bir eylem düğmesi
+   olarak marka menekşesine geçiyor — aksi hâlde ekranda iki farklı
+   "birincil eylem" rengi olurdu. */
+.dc-btn {
+  border-radius: var(--sly-r-pill);
+  background: linear-gradient(135deg, var(--sly-violet-lt), var(--sly-violet) 55%, #6D28D9);
+  color: #fff;
+  box-shadow: 0 8px 22px -8px rgba(var(--sly-violet-rgb),.95), inset 0 1px 0 rgba(255,255,255,.22);
+}

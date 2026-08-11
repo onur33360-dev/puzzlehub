@@ -21,6 +21,9 @@
   <link rel="stylesheet" href="core/design-tokens.css" />
   <link rel="stylesheet" href="core/components.css" />
   <link rel="stylesheet" href="style.css" />
+  <!-- Kabuk tasarım sistemi (sly-*). style.css'ten SONRA: çakışan
+       kabuk kurallarında yeni dil kazanmalı. Oyunlara dokunmuyor. -->
+  <link rel="stylesheet" href="core/ui-shell.css" />
 
   <!-- ============================================================
        AÇILIŞ SAHNESİNİ HEMEN GÖSTER — <head>'de olması ZORUNLU.
@@ -149,58 +152,119 @@
     <div id="main-content">
 
       <!-- ====== ANA EKRAN ====== -->
+      <!-- Bu ekran bir OYUN LİSTESİ DEĞİL. Oyunlar Keşfet akışında
+           keşfediliyor; ana sayfa oyuncunun durumunu (görev, seri,
+           rozet, seviye) gösteren ve Keşfet'e yönlendiren merkez.
+           Bu yüzden burada tek bir oyun kartı bile yok — hero kartın
+           işi tam olarak "oyunlar şurada" demek. -->
       <div id="screen-home" class="screen active">
-        <!-- Üst bar — mockup panel 1: logo · seri rozeti · avatar.
-             PLUS rozeti buradan KALDIRILDI (Profil'deki satıra taşındı);
-             elmas göstergesi de mockup'ta header'da yok, mağazaya erişim
-             yine Profil satırından. Her ikisinin de tek erişim kapısı
-             oldukları için taşındılar, silinmediler. -->
-        <header class="home-header">
-          <div class="brand-mark">
-            <span class="brand-logo">🧩</span>
-            <span class="brand-name">SlySwipe</span>
+        <!-- Üst bar: solda marka (avatar + ad), sağda PLUS ve cüzdan.
+             PLUS ve elmas 2026-07-29'da header'dan Profil satırlarına
+             taşınmıştı; referans tasarım ikisini de geri istiyor. Profil
+             satırları SİLİNMEDİ — sorun tek kapının kapanmasıydı, iki
+             kapı olması değil.
+             #plus-badge id'si ve .plus-text çocuğu ZORUNLU:
+             PlusSystem.updateUI() ikisini de arıyor. Aynı şekilde
+             .diamond-display (artış animasyonu) ve .diamond-count
+             (DiamondSystem.updateUI). -->
+        <header class="sly-topbar">
+          <div class="sly-brand">
+            <div class="sly-brand-avatar" data-ph-avatar onclick="switchTab('profil')"></div>
+            <span class="sly-brand-name">SlySwipe</span>
           </div>
-          <div class="header-right">
-            <div class="streak-chip" onclick="switchTab('lider')">
-              <span class="streak-fire">🔥</span>
-              <span class="streak-info">
-                <span class="streak-num" id="hdr-streak">0</span>
-                <span class="streak-label">Günlük Seri</span>
-              </span>
+          <div class="sly-topbar-actions">
+            <button class="sly-plus-btn" id="plus-badge" onclick="showPlusPage()">
+              <span class="sly-plus-ico">👑</span>
+              <span class="plus-text">PLUS</span>
+            </button>
+            <div class="sly-wallet diamond-display" onclick="openShop()">
+              <span class="sly-wallet-ico">💎</span>
+              <span class="diamond-count">0</span>
+              <span class="sly-wallet-add">+</span>
             </div>
-            <div class="avatar-circle" data-ph-avatar onclick="switchTab('profil')"></div>
           </div>
         </header>
 
-        <!-- Bugünün Meydan Okuması — core/daily.js dolduruyor.
-             Katılan oyun yoksa bölüm tamamen gizlenir. -->
-        <div class="section" id="daily-challenge-section" style="display:none">
-          <h3 class="section-title">Bugünün Meydan Okuması</h3>
-          <div id="daily-challenge-list"></div>
-        </div>
-
-        <!-- Bugünün Görevleri -->
-        <div class="section">
-          <h3 class="section-title">Bugünün Görevleri</h3>
-          <div id="daily-missions"></div>
-        </div>
-
-        <!-- 7 Günlük Seri -->
-        <div class="section">
-          <h3 class="section-title">7 Günlük Seri</h3>
-          <div class="streak-week" id="daily-rewards"></div>
-        </div>
-
-        <!-- Haftalık Ödül -->
-        <div class="section">
-          <div class="weekly-chest" id="weekly-chest" onclick="claimWeeklyReward()">
-            <div class="wc-info">
-              <span class="wc-title">Haftalık Ödül</span>
-              <span class="wc-desc">Tüm görevleri tamamla, ödülü kap!</span>
-            </div>
-            <span class="wc-chest">🎁</span>
+        <!-- ── HERO: Keşfet Akışı ──────────────────────────────
+             Sağdaki kart yelpazesi bir GÖRSEL VARLIK DEĞİL, DOM.
+             Sebep sw.js: kabuk listesindeki her görsel APP_VERSION
+             bump'ında yeniden iniyor. Beş div + bir yay, hepsi
+             statik — dönen bir süs, Keşfet demolarıyla dikkat için
+             yarışırdı. -->
+        <section class="sly-hero">
+          <div class="sly-hero-body">
+            <h1 class="sly-hero-title">Keşfet <em>Akışı</em></h1>
+            <p class="sly-hero-desc">Mini oyun kartlarını kaydırarak keşfet.</p>
+            <button class="sly-btn sly-btn-outline" onclick="switchTab('discover')">
+              Keşfete Git <span class="sly-btn-chev">›</span>
+            </button>
           </div>
-        </div>
+          <div class="sly-hero-art" aria-hidden="true">
+            <div class="sly-fan-card">🧩</div>
+            <div class="sly-fan-card">🧱</div>
+            <div class="sly-fan-card">🔗</div>
+            <div class="sly-fan-card">🐍</div>
+            <div class="sly-fan-card">🛸</div>
+            <!-- Kaydırma yayı kartların ALTINDAN geçiyor; üstünden
+                 geçen bir ok onları kapatıyordu. -->
+            <svg class="sly-fan-arc" viewBox="0 0 156 148" fill="none">
+              <path d="M8 122 Q40 150 76 116" stroke="rgba(255,255,255,.55)"
+                    stroke-width="2.5" stroke-linecap="round" fill="none"/>
+              <path d="M76 116 l-11 2.5 l4.5 8.5 z" fill="rgba(255,255,255,.75)"/>
+            </svg>
+          </div>
+        </section>
+
+        <!-- Özet kartlar — renderHomeStats() dolduruyor. -->
+        <div class="sly-stats" id="home-stats"></div>
+
+        <!-- Bugünün Meydan Okuması — core/daily.js dolduruyor.
+             Katılan oyun yoksa bölüm tamamen gizlenir (display''/none). -->
+        <section class="sly-panel" id="daily-challenge-section" style="display:none">
+          <div class="sly-panel-head">
+            <span class="sly-panel-title">
+              <!-- İkon ⚡, 🎯 DEĞİL: 🎯 zaten üstteki "Aktif Görev"
+                   özet kartında kullanılıyor ve iki bölüm aynı ikonu
+                   taşıyınca ekranda aynı şeyin tekrarı gibi okunuyor. -->
+              <span class="sly-panel-title-ico">⚡</span>Günün Meydan Okuması
+            </span>
+          </div>
+          <div id="daily-challenge-list"></div>
+        </section>
+
+        <!-- Görevler -->
+        <section class="sly-panel">
+          <div class="sly-panel-head">
+            <span class="sly-panel-title">
+              <span class="sly-panel-title-ico">📋</span>Görevler
+            </span>
+            <!-- Rozetler ekranında görevlerin tamamı + rozet kazanımı
+                 var; bağlantı gerçekten bir yere gidiyor. -->
+            <button class="sly-panel-link" onclick="switchTab('lider')">
+              Tümünü Gör <span>›</span>
+            </button>
+          </div>
+          <div class="sly-tasks" id="daily-missions"></div>
+        </section>
+
+        <!-- Haftalık Seri — SAĞDAKİ ÖDÜL SANDIĞI KALDIRILDI
+             (sahibinin isteği, 2026-08-10). Kart artık yalnızca
+             günleri ve seri durumunu gösteriyor. -->
+        <section class="sly-panel">
+          <div class="sly-panel-head">
+            <span class="sly-panel-title">
+              <span class="sly-panel-title-ico">🗓️</span>Haftalık Seri
+            </span>
+            <button class="sly-panel-link sly-muted" onclick="showStreakInfo()">
+              Nasıl Çalışır? <span>ⓘ</span>
+            </button>
+          </div>
+          <div class="sly-streak" id="daily-rewards"></div>
+        </section>
+
+        <!-- Alt promo — renderHomePromo() dolduruyor (son rozet gerçek
+             veriden geldiği için markup'ta sabit yazılamaz). -->
+        <div class="sly-promo" id="home-promo"></div>
       </div>
 
       <!-- ====== KEŞFET (REELS) EKRANI ====== -->
@@ -229,35 +293,41 @@
       </div>
 
       <!-- ====== PROFİL EKRANI ====== -->
+      <!-- Profil + Ayarlar aynı ekranda: uygulamanın hesap kavramı yok,
+           ayrı bir "Ayarlar" sekmesi dört sekmelik çubuğu beşe çıkarırdı
+           (sahibi sade bir navigasyon istedi). Ayarlar gruplanmış kart
+           listeleri hâlinde, düz bir liste olarak DEĞİL. -->
       <div id="screen-profil" class="screen">
-        <!-- Hero — mockup panel 4: mor gradyan, yıldız/puzzle süsleri,
-             beyaz halkalı büyük avatar, isim ve unvan. -->
-        <div class="pf-hero">
-          <span class="pf-deco pf-deco-1">⭐</span>
-          <span class="pf-deco pf-deco-2">🧩</span>
-          <span class="pf-deco pf-deco-3">⭐</span>
-          <span class="pf-deco pf-deco-4">🧩</span>
-          <div class="pf-avatar-ring">
-            <span class="pf-avatar" data-ph-avatar></span>
+        <div class="sly-screen-head">
+          <h2 class="sly-screen-title">Profil
+            <span class="sly-screen-sub">Hesabın, tercihlerin ve koleksiyonun</span>
+          </h2>
+        </div>
+
+        <!-- Hero: avatar + ad + durum çipleri. Çipler renderProfileHero()
+             ile gerçek veriden doluyor (seri, rozet, Plus). -->
+        <div class="sly-profile-hero">
+          <div class="sly-profile-avatar" data-ph-avatar onclick="openAvatarPicker()"></div>
+          <div class="sly-profile-txt">
+            <span class="sly-profile-name">Oyuncu</span>
+            <div class="sly-profile-tags" id="pf-tags"></div>
           </div>
-          <span class="pf-name">Oyuncu</span>
-          <!-- TODO: unvan/rütbe sistemi kurulunca gerçek veriye bağlanacak -->
-          <span class="pf-title">🏅 Bulmaca Kahramanı</span>
         </div>
 
-        <div class="section">
-          <h3 class="section-title">Favori Oyunlar</h3>
-          <div id="fav-games-list" class="pf-fav-grid"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">Vitrindeki Rozetler</h3>
+        <div class="sly-group">
+          <h3 class="sly-group-title">Vitrindeki Rozetler</h3>
           <!-- renderShowcase() dolduruyor: en değerli 3 rozet, otomatik.
                Seçim arayüzü bilerek yok (bkz. Badges.showcase). -->
           <div class="pf-showcase" id="pf-showcase"></div>
         </div>
 
-        <div class="settings-section" id="settings-list"></div>
+        <div class="sly-group">
+          <h3 class="sly-group-title">Favori Oyunlar</h3>
+          <div id="fav-games-list" class="pf-fav-grid"></div>
+        </div>
+
+        <!-- renderSettings() gruplanmış bölümleri buraya kuruyor. -->
+        <div id="settings-list"></div>
       </div>
 
       <!-- ====== PLUS SAYFA ====== -->
@@ -431,23 +501,46 @@
 
     </div>
 
-    <!-- Alt Tab Bar -->
+    <!-- ====== ALT NAVİGASYON ======
+         DÖRT sekme, eşit ağırlıkta. Ortada büyük yuvarlak/floating bir
+         düğme YOK ve eklenmeyecek (sahibinin açık isteği) — dört sekme
+         zaten dengeli bir çubuk oluşturuyor.
+
+         İkonlar SVG, emoji DEĞİL. Sebep teknik: aktif sekmenin rengi
+         ikona da inmeli, emojiye ise renk verilemiyor — style.css'te
+         bunun için ikonun ARKASINA renkli bir dolgu konmuştu, SVG o
+         çözümü gereksiz kılıyor (currentColor ile miras alıyor).
+
+         data-tab anahtarları DEĞİŞMEDİ. 'lider' tarihsel bir anahtar
+         ve ekranın adı artık "Rozetler"; anahtarı yeniden adlandırmak
+         switchTab/showScreen/__phHandleBack üçlüsünü aynı anda dokunmayı
+         gerektirir ve bu turda kazancı yok (bkz. CLAUDE.md §5). -->
     <nav class="bottom-tabs" id="bottom-tabs">
       <button class="tab active" data-tab="home" onclick="switchTab('home')">
-        <span class="tab-icon">🏠</span>
-        <span class="tab-label">ANA</span>
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.6V20h13V9.6"/>
+          <path d="M9.7 20v-5.2h4.6V20"/></svg></span>
+        <span class="tab-label">Ana Sayfa</span>
       </button>
       <button class="tab" data-tab="discover" onclick="switchTab('discover')">
-        <span class="tab-icon">🎯</span>
-        <span class="tab-label">KEŞFET</span>
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/><path d="M15.6 8.4 13.8 13.8 8.4 15.6l1.8-5.4z"/></svg></span>
+        <span class="tab-label">Keşfet</span>
       </button>
       <button class="tab" data-tab="lider" onclick="switchTab('lider')">
-        <span class="tab-icon">📊</span>
-        <span class="tab-label">İLERLEME</span>
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2.6 20 7v10l-8 4.4L4 17V7z"/>
+          <path d="m12 8.4 1.5 3 3.3.5-2.4 2.3.6 3.3-3-1.6-3 1.6.6-3.3-2.4-2.3 3.3-.5z"/></svg></span>
+        <span class="tab-label">Rozetler</span>
       </button>
       <button class="tab" data-tab="profil" onclick="switchTab('profil')">
-        <span class="tab-icon">👤</span>
-        <span class="tab-label">PROFİL</span>
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg></span>
+        <span class="tab-label">Profil</span>
       </button>
     </nav>
 
@@ -464,7 +557,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.64.0';
+    const APP_VERSION = '1.65.8';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile

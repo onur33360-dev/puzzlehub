@@ -1885,21 +1885,29 @@ window.ReelsEngine = (function() {
         pointer-events:none;                 /* boşluklar kaydırmayı yutmasın */
       }
       .reels-chips::-webkit-scrollbar{display:none}
+      /* Kabuk tasarım sistemiyle aynı çip dili (core/ui-shell.css
+         .sly-chip). Sınıfı paylaşmıyorlar çünkü buradaki çip akışın
+         ÜSTÜNDE yüzüyor ve kendi zeminini taşımak zorunda; ölçüler,
+         yarıçap ve aktif gradyan ise birebir aynı — iki ekran arasında
+         malzeme farkı olmasın. */
       .reels-chip{
         pointer-events:auto;                 /* çipin kendisi tıklanır */
         flex:0 0 auto; cursor:pointer;
-        padding:7px 14px; border-radius:999px;
-        font:700 12px/1 var(--ph-font-display); letter-spacing:.04em;
+        padding:8px 14px; border-radius:999px;
+        font:700 12.5px/1 var(--ph-font-display); letter-spacing:.01em;
         color:rgba(232,238,255,.86);
-        background:rgba(12,10,32,.62);
-        border:1px solid rgba(255,255,255,.14);
-        backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+        background:rgba(10,9,28,.66);
+        border:1px solid rgba(255,255,255,.12);
+        backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
         white-space:nowrap;
+        transition:transform .14s ease;
       }
+      .reels-chip:active{ transform:scale(.95); }
       .reels-chip.on{
         color:#fff;
-        background:rgba(var(--accent-rgb), .92);
-        border-color:rgba(255,255,255,.30);
+        background:linear-gradient(135deg, #A78BFA, #8B5CF6);
+        border-color:rgba(255,255,255,.22);
+        box-shadow:0 6px 18px -7px rgba(var(--accent-rgb), .95);
       }
       /* Boş favori: GİZLENMİYOR, soluk duruyor. Gizlemek "böyle bir
          seçenek yok" der; soluk göstermek "burayı doldurabilirsin" der —
@@ -1910,48 +1918,91 @@ window.ReelsEngine = (function() {
 
       .reel-bg{position:absolute;inset:0;z-index:0;opacity:0.85}
 
-      .reel-demo-area{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;z-index:1;min-height:0}
+      /* ÜST PADDING = ÇİP ŞERİDİ İÇİN AYRILAN YER. Çipler akışın üstüne
+         mutlak konumlanıyor (top: safe-area+10, ~31px yüksek), yani her
+         kartın üst şeridini kaplıyorlar. Demo alanı tüm yüksekliğe
+         yayıldığı için ortalanan demolar oraya taşıyordu: cihazda
+         ölçüldü — flowConnect önizlemesinin "PARMAĞINLA BAĞLA" başlığı
+         y 29-41'de, çip şeridi ise y 10-41'de, yani "Arcade" çipi tam
+         başlığın üstünde duruyordu.
+         Padding, demoyu KÜÇÜLTMEZ, aşağı kaydırır — demolar kendi
+         elemanlarının ölçüsünü okuyor, dolayısıyla yeni yüksekliğe
+         kendiliğinden uyuyorlar. Alt tarafta aynı işi .reel-info'nun
+         kendi yüksekliğini ölçen demolar yapıyor. */
+      .reel-demo-area{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;z-index:1;min-height:0;padding-top:calc(env(safe-area-inset-top, 0px) + 44px)}
       .reel-demo-inner{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
       .reel-demo-overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,0.25) 100%);z-index:2;pointer-events:none}
 
-      .reel-info{position:absolute;bottom:0;left:0;right:0;padding:24px 20px 30px;background:linear-gradient(transparent,rgba(0,0,0,0.72) 22%,rgba(0,0,0,0.9));z-index:10;animation:reelInfoIn 0.5s ease backwards}
+      /* Bilgi paneli. Gradyan biraz daha DERİN başlıyor (%18) ve alt uçta
+         tam siyaha gitmiyor: yeni palette zemin saf siyah değil, mürekkep
+         mavisi — saf siyah bir bant kartın altına ayrı bir katman gibi
+         oturuyordu (Flappy'nin "sis" şikâyetiyle aynı hata).
+         YÜKSEKLİK ÖLÇÜLÜYOR: flowConnect'in Keşfet önizlemesi bu panelin
+         yüksekliğini okuyup tahtayı ona göre yerleştiriyor. Padding
+         değiştirmek serbest (ölçüm dinamik), ama paneli position:absolute
+         olmaktan çıkarmak o hesabı bozar. */
+      .reel-info{position:absolute;bottom:0;left:0;right:0;padding:24px 20px 30px;background:linear-gradient(transparent,rgba(7,7,26,0.74) 18%,rgba(5,5,18,0.94));z-index:10;animation:reelInfoIn 0.5s ease backwards}
 
-      .reel-game-emoji{font-size:36px;display:inline-block;margin-right:8px;vertical-align:middle;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.4))}
-      .reel-game-name{font-family:'Outfit',sans-serif;font-size:28px;font-weight:800;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,0.5);line-height:1.2;display:inline;vertical-align:middle}
-      .reel-desc{font-size:14px;color:rgba(255,255,255,0.72);margin:10px 0 16px;line-height:1.45}
+      .reel-game-emoji{font-size:34px;display:inline-block;margin-right:9px;vertical-align:middle;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.45))}
+      .reel-game-name{font-family:'Outfit',sans-serif;font-size:28px;font-weight:800;letter-spacing:-.4px;color:#fff;text-shadow:0 2px 14px rgba(0,0,0,0.55);line-height:1.15;display:inline;vertical-align:middle}
+      .reel-desc{font-size:13.5px;color:rgba(233,232,255,0.68);margin:10px 0 15px;line-height:1.5}
 
-      .reel-stats{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
-      .reel-stat{display:flex;align-items:center;gap:4px;font-size:12px;color:rgba(255,255,255,0.65);font-weight:600}
-      .reel-stat-val{color:#fff;font-weight:700}
-      .reel-diff-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.5px}
-      .reel-diff-badge.easy{background:rgba(34,197,94,0.2);color:#86efac}
-      .reel-diff-badge.medium{background:rgba(234,179,8,0.2);color:#fde047}
-      .reel-diff-badge.hard{background:rgba(239,68,68,0.2);color:#fca5a5}
-      .reel-highscore{font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:14px}
-      .reel-highscore span{color:#fbbf24;font-weight:800}
+      .reel-stats{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+      /* İstatistikler artık çip: kabuktaki .sly-pill ile aynı ölçü ve
+         yarıçap. Çıplak metin, üstündeki başlıkla aynı ağırlıkta
+         okunuyordu. */
+      .reel-stat{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.07);font-size:11.5px;color:rgba(255,255,255,0.62);font-weight:600}
+      .reel-stat-val{color:#fff;font-weight:800}
+      .reel-diff-badge{padding:5px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.02em}
+      .reel-diff-badge.easy{background:rgba(52,211,153,0.16);color:#6EE7B7;border:1px solid rgba(52,211,153,.26)}
+      .reel-diff-badge.medium{background:rgba(251,191,36,0.16);color:#FCD34D;border:1px solid rgba(251,191,36,.26)}
+      .reel-diff-badge.hard{background:rgba(244,114,182,0.16);color:#F9A8D4;border:1px solid rgba(244,114,182,.26)}
+      .reel-highscore{font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:13px}
+      .reel-highscore span{color:#FBBF24;font-weight:800}
 
       /* Sakin premium CTA: sürekli pulse + shine kaldırıldı (§2.5 restraint —
          demo/atmosfer/CTA aynı anda yarışmasın). Soft-solid: üst catch-light
          inline gradyanla, temiz gölge, yalnızca :active geri bildirim. */
-      .reel-play-btn{width:100%;padding:17px;border-radius:16px;font-family:'Outfit',sans-serif;font-size:18px;font-weight:800;color:#fff;border:none;cursor:pointer;letter-spacing:0.3px;box-shadow:0 8px 24px -6px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.22);-webkit-tap-highlight-color:transparent;position:relative;overflow:hidden;margin-top:8px;transition:transform .12s ease}
+      /* Yarıçap 18px: kabuktaki --sly-r-md ile aynı. Renk oyunun kendi
+         gradyanından geliyor (satır içi), o yüzden burada yazılmıyor. */
+      .reel-play-btn{width:100%;padding:17px;border-radius:18px;font-family:'Outfit',sans-serif;font-size:17.5px;font-weight:800;color:#fff;border:none;cursor:pointer;letter-spacing:0.2px;box-shadow:0 10px 28px -8px rgba(0,0,0,0.65),inset 0 1px 0 rgba(255,255,255,0.24);-webkit-tap-highlight-color:transparent;position:relative;overflow:hidden;margin-top:8px;transition:transform .12s ease}
       .reel-play-btn:active{transform:scale(0.97)}
 
-      .reel-actions{position:absolute;right:12px;bottom:200px;display:flex;flex-direction:column;align-items:center;gap:20px;z-index:15}
-      .reel-action-btn{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-      .reel-action-btn .act-icon{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.1);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;font-size:20px;transition:all 0.25s;border:1px solid rgba(255,255,255,0.06)}
-      .reel-action-btn .act-label{font-size:10px;color:rgba(255,255,255,0.6);font-weight:600}
+      .reel-actions{position:absolute;right:12px;bottom:200px;display:flex;flex-direction:column;align-items:center;gap:18px;z-index:15}
+      .reel-action-btn{display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+      .reel-action-btn .act-icon{width:46px;height:46px;border-radius:50%;background:rgba(14,12,36,.52);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;font-size:20px;transition:transform .2s ease,background .2s ease,border-color .2s ease;border:1px solid rgba(255,255,255,0.12);box-shadow:0 6px 18px -8px rgba(0,0,0,.8)}
+      .reel-action-btn .act-label{font-size:10px;color:rgba(255,255,255,0.58);font-weight:700;letter-spacing:.01em}
       .reel-action-btn:active .act-icon{transform:scale(0.9)}
 
-      .reel-action-btn.fav-active .act-icon{background:rgba(239,68,68,0.2);border-color:rgba(239,68,68,0.3)}
+      .reel-action-btn.fav-active .act-icon{background:rgba(244,114,182,0.18);border-color:rgba(244,114,182,0.42);box-shadow:0 0 18px -4px rgba(244,114,182,.7)}
 
-      .reel-swipe-hint{position:absolute;bottom:24%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px;z-index:20;animation:reelSwipeHint 1.8s ease-in-out infinite;pointer-events:none;transition:opacity .6s ease}
-      .reel-swipe-hint .hint-arrow{font-size:22px;color:rgba(255,255,255,0.5)}
-      .reel-swipe-hint .hint-text{font-size:10px;color:rgba(255,255,255,0.35);font-weight:600;letter-spacing:0.5px}
+      /* bottom 24% → 44%: ölçüldü, tahmin edilmedi. .reel-info kartın
+         ALT %41'ini kaplıyor (cihazda 417-702 / 702px kart), yani %24
+         ipucunu bilgi panelinin İÇİNE koyuyordu — "Kaydır" oku oyunun
+         açıklama metninin üstüne biniyordu. %44, panelin üst kenarını
+         ~24px boşlukla geçiyor. */
+      /* KENDİ ZEMİNİNİ TAŞIYOR. Eskiden çıplak beyaz metindi ve demonun
+         üstünde duruyor — Akış Bağlantı'nın tahtası BEYAZ, dolayısıyla
+         ipucu cihazda neredeyse görünmezdi. Konumu değiştirmek bunu
+         çözmez (her demo farklı yerde açık renkli olabilir); çözüm,
+         ipucunun kontrastını demodan bağımsız hâle getirmek. */
+      .reel-swipe-hint{position:absolute;bottom:44%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:1px;z-index:20;animation:reelSwipeHint 1.8s ease-in-out infinite;pointer-events:none;transition:opacity .6s ease;padding:7px 14px 6px;border-radius:999px;background:rgba(8,7,24,.82);border:1px solid rgba(255,255,255,.14);box-shadow:0 6px 18px -8px rgba(0,0,0,.9)}
+      .reel-swipe-hint .hint-arrow{font-size:19px;line-height:1;color:rgba(255,255,255,0.82)}
+      .reel-swipe-hint .hint-text{font-size:10px;color:rgba(255,255,255,0.72);font-weight:700;letter-spacing:0.5px}
 
-      .reel-card-counter{position:absolute;top:16px;left:16px;z-index:12;padding:4px 12px;border-radius:20px;background:rgba(0,0,0,0.4);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:11px;color:rgba(255,255,255,0.6);font-weight:700;border:1px solid rgba(255,255,255,0.06)}
+      /* Sayaç çip satırının ALTINDA duruyor (çipler top ~10px, 33px
+         yüksekliğinde), o yüzden top 56px. Aynı hizaya konsaydı ilk
+         kategori çipiyle üst üste binerdi. */
+      .reel-card-counter{position:absolute;top:56px;left:14px;z-index:12;padding:5px 12px;border-radius:999px;background:rgba(10,9,28,0.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:11px;color:rgba(255,255,255,0.55);font-weight:700;border:1px solid rgba(255,255,255,0.08)}
 
       @keyframes reelInfoIn{0%{opacity:0;transform:translateY(30px)}100%{opacity:1;transform:translateY(0)}}
-      @keyframes reelSwipeHint{0%,100%{transform:translateX(-50%) translateY(0);opacity:0.5}50%{transform:translateX(-50%) translateY(-12px);opacity:1}}
+      /* OPACITY NABZI KALDIRILDI, yalnızca hareket kaldı. İpucu artık
+         kendi koyu zeminini taşıyor ve 0.5 opaklığa inen bir nabız o
+         zemini de soluklaştırıyordu: cihazda beyaz tahtanın üstünde
+         gri bir leke gibi görünüyordu. Sönümlenme hâlâ var, ama onu
+         JS yapıyor (4.2sn sonra style.opacity=0) — yani "dikkat çek"
+         ile "işi bitince kaybol" artık ayrı iki şey. */
+      @keyframes reelSwipeHint{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-12px)}}
       @keyframes reelCardIn{0%{opacity:0;transform:scale(0.95)}100%{opacity:1;transform:scale(1)}}
     `);
   }

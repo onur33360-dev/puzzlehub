@@ -1022,9 +1022,75 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   backwards compatible; games that omit it get the old behavior. It exists so a game can
   define what "continue after an ad/diamonds" restores. The hook is single-use and cleared
   on restart/exit.
-- **The palette lives in TWO independent `:root` blocks and they do NOT talk to each other.**
-  `style.css` owns the **app shell** (Home / Progress / Profile / Plus / Shop / tab bar /
-  game header) via legacy tokens — `--bg-body`, `--accent`, `--text`, `--radius-*`.
+- **The shell was REDESIGNED on 2026-08-10 and the new design system is
+  `core/ui-shell.css` (`sly-*`).** Owner-supplied reference mockup; scope was Home,
+  Discover, Rozetler and Ayarlar. It is a **third** stylesheet layer, loaded **after**
+  `style.css` so it wins on conflicting shell rules, and it does **not** touch games
+  (`--ph-*` is untouched — see the two-`:root` bullet below, now three).
+  What the redesign reversed, each deliberately:
+  1. **PLUS and the diamond wallet are BACK in the home header.** The 2026-07-29 bullet
+     below says they were moved to Profile rows because the mockup's header had neither;
+     the new reference has both. The **Profile rows stayed** — the original problem was
+     that those were the *only* doors, not that two doors exist. `#plus-badge` still needs
+     its `.plus-text` child (`PlusSystem.updateUI`), and the wallet still carries
+     `.diamond-display` + `.diamond-count`.
+  2. **The weekly chest is GONE from Home** (owner request). `claimWeeklyReward()` and
+     `WEEKLY_MISSIONS` are kept uncalled, same rule as `renderLeaderboard()`.
+  3. **Tab icons are SVG, not emoji, and per-tab accent colours were dropped.** Emoji
+     cannot take a colour — `style.css` worked around that by putting a coloured fill
+     *behind* the icon; `currentColor` on an SVG removes the need. The four
+     `--tab-active-*` tokens still exist in `style.css` but nothing reads them any more.
+     `data-tab` keys are unchanged (`lider` is still the Rozetler screen's key).
+  4. **There is no centre/floating nav button and none may be added** — explicit owner
+     instruction. Four equal tabs.
+  5. **The Rozetler screen dropped its placeholder numbers**, see the placeholder bullet
+     below. `SETTINGS` became `SETTING_GROUPS` (grouped sections, real toggles).
+  6. **Discover changed CSS only — `_injectCSS` values, no logic.** Three pre-existing
+     overlaps were fixed there, all device-measured on a Galaxy A51 (384 CSS px wide):
+     - `.reel-card-counter` was at `top:16px`, i.e. **underneath the category chips**
+       added on 2026-08-08 (chips sit at `safe-area + 10px`, ~31 px tall). Now `top:56px`
+       — counter top 56, chip bottom 41, no overlap.
+     - **`.reel-demo-area` now reserves the chip strip** (`padding-top: safe-area + 44px`).
+       The chips overlay the top of *every* card, so a centred demo ran under them:
+       flowConnect's "PARMAĞINLA BAĞLA" caption measured y 29-41 against a chip strip at
+       y 10-41. After: caption at y 72. This does **not** shrink demos, it shifts them —
+       demos read their own element's size, so they re-fit on their own. It is the
+       top-edge twin of the bottom-edge reservation flowConnect already does for
+       `.reel-info` (whose `position:absolute` must therefore stay).
+     - **The swipe hint moved `bottom:24%` → `44%` and gained its own dark pill.** `.reel-info`
+       occupies the bottom ~41% of the card (measured 417-702 of a 702 px card), so 24% put
+       the hint *inside* it, on top of the game description. Contrast was a separate bug:
+       the hint is bare white text over the demo, and Akış Bağlantı's board is **white**.
+       Position alone cannot fix that (any demo may be light there), hence the pill.
+       **`@keyframes reelSwipeHint` no longer animates `opacity`** — it pulsed 0.5→1, which
+       faded the new pill to a grey smear. Two consequences: the bob is now motion-only,
+       and the JS fade-out (`style.opacity=0` after 4.2 s) finally works — an animated
+       `opacity` outranks an inline style in the cascade, so it never had.
+  7. **Android WebView INFLATES text and it only shows on device.** The stat-card label is
+     `font-size:10px` in CSS and computes to **11px** on the A51 (system font scale /
+     font boosting); desktop keeps 10px. "Rozet İlerlemesi" then measured 84.36 px in an
+     83.58 px box and rendered as "Rozet İlerlem…" — a defect that is **invisible in a
+     desktop browser at the same viewport width**. Fixed by widening `.sly-stat` to 164 px
+     (~13% slack, tolerates ~124% system scale). `-webkit-text-size-adjust:100%` would kill
+     the inflation outright but also overrides the user's accessibility preference, so it
+     is a product decision (§7), not a silent fix.
+     **Measurement trap, cost a wrong "it fits" conclusion:** `scrollWidth` is rounded to an
+     integer, so a 0.78 px overflow reads as `84 == 84` and looks clean. Use
+     `Range.selectNodeContents(el).getBoundingClientRect().width` against the element's own
+     rect to see sub-pixel overflow.
+  **Adding a shell file means editing THREE places, not one:** the `<link>` in
+  `index.html`, `SHELL_ASSETS` in `sw.js`, and `SHIP` in `tools/build-www.js`. The build
+  cross-checks the last two and fails loudly; the `<link>` has no guard.
+  **Testing trap that cost a wrong diagnosis here:** on the web surface the service worker
+  serves `style.css`/`ui-shell.css` **cache-first**, so CSS edits do not appear until
+  `APP_VERSION` is bumped — while `index.html` is network-first and updates immediately.
+  The symptom is "my HTML change landed, my CSS change didn't", which reads like a
+  specificity bug. Unregister the worker and clear `caches` before re-reading the page.
+- **The palette lives in THREE `:root` blocks and they do NOT talk to each other.**
+  `style.css` owns the **legacy app shell** tokens — `--bg-body`, `--accent`, `--text`,
+  `--radius-*` — still consumed by Plus, Shop, the game header and the avatar picker.
+  `core/ui-shell.css` owns the **redesigned shell** via `--sly-*` (Home / Discover chrome /
+  Rozetler / Profile-Ayarlar / bottom nav).
   `core/design-tokens.css` owns **games and shared components** via `--ph-*` (143 uses in
   `components.css`, 308 in `games.js`). `style.css` reads **zero** `--ph-*` tokens.
   Practical consequence: editing one file changes exactly half the app. The 2026-07-28
@@ -1042,9 +1108,10 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   `android/app/src/main/res/values/colors.xml` (`phBackground` / `phAccent` /
   `colorPrimary` / `colorPrimaryDark` / `colorAccent`). If they drift, the app shows the
   wrong colour for one frame while the native splash hands off to the web view.
-- **The third tab is keyed `lider` but displays İLERLEME — this is intentional.**
-  2026-07-28 replaced the tab's *content*, not its *key*: `data-tab="lider"`, the screen
-  id `#screen-lider` and `__phHandleBack`'s screen ordering all still say `lider`.
+- **The third tab is keyed `lider` but displays ROZETLER — this is intentional.**
+  2026-07-28 replaced the tab's *content*, not its *key*, and 2026-08-10 replaced the
+  content again (İLERLEME → Rozetler): `data-tab="lider"`, the screen id `#screen-lider`
+  and `__phHandleBack`'s screen ordering all still say `lider`.
   Renaming the key means touching `switchTab` / `showScreen` / `__phHandleBack` at once,
   and there is no payoff until the leaderboard's fate is settled.
   **`renderLeaderboard()` and the `LEADERBOARD` array are NOT dead code — do not delete
@@ -1052,6 +1119,21 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   gone entirely) is undecided. Their containers still exist in `index.html` inside a
   hidden `#lider-legacy`, so restoring the screen is: drop the `display:none`, call the
   function. Deleting either half breaks that.
+- **MOSTLY REVERSED 2026-08-10 — the shell redesign removed almost every placeholder
+  named in the next bullet.** Read this first; what survives there is now a short list.
+  Removed and replaced with real data: the "Oyun Denedi 10/10" tile (`gh_plays_*` only
+  counts Discover launches, so the total was wrong), the "%72 Koleksiyon" tile (no such
+  system), and the three `ACHIEVEMENT_CARDS` per-game achievement bars. The array is
+  **kept but no longer rendered**, same rule as `renderLeaderboard()` — it is the raw
+  material for real per-game badges later.
+  **`PlayerLevel` is the one number that is derived rather than deleted.** The reference
+  design has a "Seviye" card and the two honest options were a placeholder or a
+  derivation; it is `floor(totalGamesWon / 5) + 1`, read from the `GameEvents` counter
+  that already exists. **No new storage key was written** — a second record of the same
+  truth is exactly what `DailyQuests`' third quest avoids. The curve is deliberately flat:
+  an escalating one is an economy number, and economy numbers are the owner's call (§7).
+  Still placeholder, still carrying `TODO:`: the daily challenge's "⭐ 50 XP" reward label
+  (no XP economy exists), "Profil Çerçevesi", and the profile name "Oyuncu".
 - **Home / İlerleme / Profil carry STATIC PLACEHOLDER numbers on purpose (2026-07-29).**
   These three screens were rebuilt to match the owner's design mockup one-for-one, and the
   mockup shows values for systems that do not exist yet: a collection percentage, per-game
@@ -1084,6 +1166,8 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   the `data-ph-avatar` attribute is filled from it — that attribute is the whole contract,
   so new avatar spots need no new code. Anything that rebuilds avatar markup via
   `innerHTML` must call `AvatarSystem.updateUI()` afterwards (`renderProgress` does).
+- **SUPERSEDED 2026-08-10 — PLUS and the diamond wallet are back in the home header (see
+  the redesign bullet above). The Profile rows below still exist and are still required.**
 - **The PLUS badge and the diamond display are gone from the home header — they moved, they
   were not removed.** The mockup's header is logo + streak + avatar only, but those two
   elements were the **only** entry points to the Plus page and the diamond shop, so both now
