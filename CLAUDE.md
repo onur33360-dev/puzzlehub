@@ -1066,7 +1066,21 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
        faded the new pill to a grey smear. Two consequences: the bob is now motion-only,
        and the JS fade-out (`style.opacity=0` after 4.2 s) finally works — an animated
        `opacity` outranks an inline style in the cascade, so it never had.
-  7. **Android WebView INFLATES text and it only shows on device.** The stat-card label is
+  7. **Two test phones now, and 360 px is the narrow end.** The Galaxy A51 is 384 CSS px;
+     a Huawei P20 Lite (ANE-LX1, Android 9, 1080×2280 @ 480 dpi) is **360**, and 24 px was
+     enough to break the top bar. Measured there: the actions block (PLUS 78.4 + wallet 101)
+     is `flex-shrink:0` and takes 187.4 of 332 px, leaving the brand 132.6; minus the avatar
+     and gap the name got 79.6 px while "SlySwipe" needs 86.3 — **the app's own name was
+     being clipped.** Fixed with a `max-width: 383px` block (brand 19 px, avatar 38 px),
+     which also pulls the hero title in (it overlapped the card fan by 3 px of real glyphs).
+     That block sits **before** the existing `max-width: 359px` one so the narrower, more
+     aggressive rules still win. Discover, Rozetler and Profil measured clean at 360.
+     **Do not assume Android 9 means an old WebView.** This phone ships WebView 79 as a
+     package but its actual provider is Chrome 138, so `gap`, `conic-gradient`,
+     `-webkit-line-clamp` and `backdrop-filter` all work — verified by *measuring a real
+     flex gap in the page*, not by reading `dumpsys` version strings. Check the provider
+     before designing around a compat table.
+  8. **Android WebView INFLATES text and it only shows on device.** The stat-card label is
      `font-size:10px` in CSS and computes to **11px** on the A51 (system font scale /
      font boosting); desktop keeps 10px. "Rozet İlerlemesi" then measured 84.36 px in an
      83.58 px box and rendered as "Rozet İlerlem…" — a defect that is **invisible in a

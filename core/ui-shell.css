@@ -1053,6 +1053,30 @@ body {
    #app zaten 480px ile sınırlı (style.css), yani "geniş ekran"
    demek tablet değil, sadece 400-480px arası demek. Tek gerçek
    ihtiyaç dar uçta: 340px altında hero metni sanata giriyor. */
+/* ── 383px ve altı: DAR TELEFON ────────────────────────────────
+   Huawei P20 Lite'ta (360 CSS px) ölçüldü. 384px'lik Galaxy A51'de
+   her şey sığıyordu; 24px daha dar bir ekranda üst bar taşıyor.
+
+   ÖLÇÜM (360px): üst bar 332px. Sağdaki aksiyonlar (PLUS 78.4 +
+   cüzdan 101 + boşluk) 187.4px yer kaplıyor ve KÜÇÜLMÜYOR
+   (flex-shrink:0), markaya 132.6px kalıyor. Avatar 42 + boşluk 11
+   düşünce ada 79.6px kalıyor, oysa "SlySwipe" 21px'te 86.3px sürüyor
+   — 6.7px eksik, yani uygulamanın KENDİ ADI kırpılıyordu.
+   Ada 19px + avatara 38px vermek 12px kazandırıyor; 7.5px pay kalıyor.
+
+   Hero başlığı da 3px sanata giriyordu (gerçek harfler, kutu değil);
+   26px'te sağ ucu 190 → 174'e iniyor, sanat 187'de başlıyor.
+
+   Bu blok 359px bloğundan ÖNCE: orası daha sert kuralları taşıyor ve
+   çakışan yerlerde sonradan geldiği için kazanmalı. */
+@media (max-width: 383px) {
+  .sly-brand { gap: 9px; }
+  .sly-brand-avatar { width: 38px; height: 38px; font-size: 21px; }
+  .sly-brand-name { font-size: 19px; }
+  .sly-hero-title { font-size: 26px; }
+  .sly-hero-body { max-width: 56%; }
+}
+
 @media (max-width: 359px) {
   .sly-hero { min-height: 0; padding: 18px 16px 20px; }
   .sly-hero-body { max-width: 100%; }
