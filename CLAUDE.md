@@ -1093,6 +1093,17 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      (wrap does that) but to decide *when wrapping kicks in*, since 360 px is the most
      common Android width and a two-row header there would be the normal case, not a
      fallback.
+     **Device-confirmed on 2026-08-11 (A51, `font_scale` 1.1, forced density 450 → 384 CSS
+     px).** The phone's real setting is *not* the default, which is the point: brand text is
+     written as 21 px and computes to **23.1 px** on the device. All three shell screens
+     scanned clean at that setting. Pushing it to ~130 % in-page (without touching the
+     user's system setting) made the top bar wrap to two rows and the hero title to two
+     lines — exactly the designed degradation — with zero clipped text and no horizontal
+     scroll.
+     **Boosting re-applies to an INLINE `font-size` too**, so the on-device simulation
+     compounded to ~1.43× rather than 1.3× (measured: brand 30.03 px). That makes an
+     on-device scale test *stricter* than the matrix, not weaker — useful to know, and the
+     reason the same trick would over-report if used to calibrate anything.
      **A bug in the tool itself is worth remembering:** the font-scale simulation applied
      the multiplier more than once — parents were scaled before children were read, so
      inherited sizes got multiplied twice, and re-applying after each tab switch compounded
