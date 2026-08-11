@@ -131,17 +131,24 @@ body {
    TAŞINMIŞTI; referans tasarım ikisini de geri istiyor. Profil
    satırları KALDI — iki kapı olması bir sorun değil, tek kapının
    kapanması sorundu. */
+/* flex-wrap + min-width:max-content = MARKA ADI ASLA KIRPILMAZ.
+   Sagdaki aksiyonlar (PLUS + cuzdan) kucultulemiyor; dar bir ekranda ya
+   ad kirpilacak ya da satir kirilacak. Kirpilan sey uygulamanin ADI
+   oldugu icin secim net: sigmiyorsa aksiyonlar alta iner. Bu, breakpoint
+   gerektirmeyen bir cozum — hangi genislikte kirilacagini bilmemize gerek
+   yok, kendisi karar veriyor. */
 .sly-topbar {
   display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--sly-gap-3); margin-bottom: var(--sly-gap-5);
 }
-.sly-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.sly-brand { display: flex; align-items: center; gap: 11px; min-width: max-content; }
 
 /* Marka işareti = oyuncunun AVATARI (data-ph-avatar). Referansta da
    sol üstte bir karakter portresi var. Halka, avatarın etrafında
    ince bir menekşe kenar + dışarı doğru yumuşak ışıma. */
 .sly-brand-avatar {
-  width: 42px; height: 42px; flex-shrink: 0;
+  width: 1.83em; height: 1.83em; flex-shrink: 0;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 23px; line-height: 1;
@@ -155,10 +162,13 @@ body {
   font-family: var(--font-display);
   font-size: 21px; font-weight: 800; letter-spacing: -.3px;
   color: var(--sly-text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* overflow/ellipsis YOK: kırpmak yerine taşmasına izin veriyoruz ve
+     taşmayı üst bardaki flex-wrap engelliyor. Ellipsis burada
+     "SlySwip…" demekti — uygulamanın kendi adı. */
+  white-space: nowrap;
 }
 
-.sly-topbar-actions { display: flex; align-items: center; gap: var(--sly-gap-2); flex-shrink: 0; }
+.sly-topbar-actions { display: flex; align-items: center; gap: var(--sly-gap-2); flex-shrink: 0; margin-left: auto; }
 
 /* PLUS düğmesi — altın. #plus-badge id'si ve .plus-text çocuğu
    ZORUNLU: PlusSystem.updateUI() ikisini de arıyor (abone olunca
@@ -199,7 +209,7 @@ body {
   font-variant-numeric: tabular-nums; letter-spacing: .01em;
 }
 .sly-wallet-add {
-  width: 25px; height: 25px; border-radius: 50%;
+  width: 1.47em; height: 1.47em; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 17px; font-weight: 700; line-height: 0;
   color: #fff;
@@ -382,8 +392,13 @@ body {
    ÖLÇÜM TUZAĞI: `scrollWidth` TAM SAYIYA yuvarlıyor, yani 0.78px'lik
    taşma orada görünmüyor (84 == 84) ve "taşma yok" gibi okunuyor.
    Alt-piksel taşmayı görmek için Range.getBoundingClientRect() kullan. */
+/* GENISLIK ICERIKTEN. Sabit px verilince en uzun etiket ("Rozet
+   Ilerlemesi") bazi yazi olceklerinde kutuya sigmiyordu ve her cihazda
+   yeniden olcmek gerekiyordu. Serit zaten YATAY KAYAN, yani kart
+   genisleyebilir — sigmama diye bir durum kalmiyor. min-width sadece
+   kisa etiketli kartlarin comelmesini engelliyor. */
 .sly-stat {
-  flex: 0 0 auto; width: 164px;
+  flex: 0 0 auto; width: max-content; min-width: 9.5em; max-width: 80vw;
   scroll-snap-align: start;
   padding: 12px 13px 13px;
   border-radius: var(--sly-r-md);
@@ -395,16 +410,17 @@ body {
 .sly-stat-top { display: flex; align-items: center; gap: 9px; }
 /* İkon karosu: rengi karta göre değişiyor, tonu .sly-t-* veriyor. */
 .sly-stat-ico {
-  width: 32px; height: 32px; flex-shrink: 0;
+  width: 2em; height: 2em; flex-shrink: 0;
   border-radius: var(--sly-r-xs);
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1;
 }
 .sly-stat-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* nowrap KALIYOR ama ellipsis YOK: kart artik icerige gore buyudugu
+   icin kirpilacak bir sey de yok. */
 .sly-stat-lbl {
   font-size: 10px; font-weight: 600; color: var(--sly-text-2);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  letter-spacing: 0;
+  white-space: nowrap; letter-spacing: 0;
 }
 .sly-stat-val {
   font-family: var(--font-display);
@@ -430,6 +446,23 @@ body {
 .sly-t-cyan   .sly-stat-val { color: var(--sly-cyan); }
 .sly-t-blue   .sly-stat-val { color: var(--sly-blue); }
 .sly-t-rose   .sly-stat-val { color: var(--sly-rose); }
+
+/* ── SON GARANTİ: SERBEST METİN ASLA TAŞMAZ ────────────────────
+   Yukarıdaki kuralların hepsi metne YER açıyor. Bu kural ise yer
+   açmanın yetmediği uç durumu kapatıyor: dar bir sütun + %130 yazı
+   ölçeği + uzun bir Türkçe kelime ("Avantajları", "tamamla").
+   Kelime kutudan genişse `anywhere` onu böler — çirkin ama okunur ve
+   HİÇBİR ŞEY kaybolmaz. Alternatifi kırpmaktı, yani metnin bir kısmını
+   yok etmek.
+   Ölçüm: bu kural olmadan 320px×1.3 ve 360px×1.3 hücrelerinde üç metin
+   taşıyordu. Yalnızca SERBEST metne uygulanıyor; sayı ve kısa etiket
+   gibi bölünmesi anlamsız olanlara değil. */
+.sly-task-name, .sly-promo-title, .sly-promo-note, .sly-row-label,
+.sly-row-note, .sly-badge-name, .sly-badge-desc, .sly-ring-desc,
+.sly-ring-title, .sly-panel-title, .sly-screen-title, .sly-empty,
+.sly-group-title, .sly-profile-name {
+  overflow-wrap: anywhere;
+}
 
 /* ============================================================
    5) İLERLEME ÇUBUĞU  —  .sly-bar
@@ -477,7 +510,7 @@ body {
   color: var(--sly-text);
 }
 .sly-panel-title-ico {
-  width: 27px; height: 27px; border-radius: 8px;
+  width: 1.95em; height: 1.95em; border-radius: .55em;
   display: flex; align-items: center; justify-content: center;
   font-size: 14px; line-height: 1;
   background: linear-gradient(145deg, rgba(var(--sly-violet-rgb),.32), rgba(var(--sly-violet-rgb),.10));
@@ -496,20 +529,23 @@ body {
    7) GÖREV SATIRI  —  .sly-task
    ============================================================ */
 .sly-tasks { display: flex; flex-direction: column; gap: 9px; }
+/* flex-wrap: dar ekran + buyuk yazida odul rozeti alt satira iner ve
+   ad tam genisligi alir. Sarma olmadan ada 54.8px kaliyordu (olcum:
+   320px x1.3) — tek kelime bile sigmiyordu. */
 .sly-task {
-  display: flex; align-items: center; gap: 11px;
+  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
   padding: 11px 11px 11px 10px;
   border-radius: var(--sly-r-sm);
   background: var(--sly-panel-2);
   border: 1px solid var(--sly-line-soft);
 }
 .sly-task-ico {
-  width: var(--sly-ico-tile); height: var(--sly-ico-tile); flex-shrink: 0;
-  border-radius: 12px;
+  width: 2.25em; height: 2.25em; flex-shrink: 0;
+  border-radius: .66em;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; line-height: 1;
 }
-.sly-task-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.sly-task-body { flex: 1 1 55%; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
 .sly-task-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 /* İKİ SATIRA SARIYOR, tek satır + üç nokta DEĞİL. Cihazda ölçüldü:
    "Günlük meydan okumayı tamamla" kutusunu 94px aşıyordu ve
@@ -521,7 +557,9 @@ body {
   flex: 1; min-width: 0;
   font-size: 13.5px; font-weight: 600; color: var(--sly-text);
   line-height: 1.28;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  /* 3 satir: 320px x1.3 ucunda 2 satir metni kesiyordu. Normal
+     olculerde zaten 1-2 satir surer; 3 yalnizca ucta devreye girer. */
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden;
 }
 /* Sayaç, adın İLK satırıyla hizalı kalsın: kap artık flex-start, yani
@@ -576,8 +614,11 @@ body {
   background: rgba(255,255,255,.08);
 }
 .sly-day { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+/* 7 daire × 42px = 294px + bosluklar; 320px'lik bir ekranda tasiyordu.
+   Genislik artik sutundan geliyor, 42px yalnizca UST SINIR. aspect-ratio
+   daireligi koruyor. */
 .sly-day-dot {
-  width: 42px; height: 42px; border-radius: 50%;
+  width: 100%; max-width: 2.8em; aspect-ratio: 1; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 800; line-height: 1;
   transition: transform .15s ease;
@@ -624,9 +665,11 @@ body {
    ============================================================
    İki kolon: solda son kazanılan rozet, sağda PLUS. Dar ekranda
    (<340px) alt alta geçiyor. */
-/* KOLONLAR EŞİT DEĞİL: sağdaki (PLUS) başlık ve not olarak daha uzun
-   metin taşıyor, 1.2fr ona nefes alanı veriyor. Sol hücre ~161px'e
-   iniyor ve içeriği (kısa rozet adları) rahat sığıyor.
+/* auto-fit + minmax: SABİT ORAN YOK. İki hücre yan yana sığdığı sürece
+   yan yana duruyor, sığmadığı an (dar ekran ya da büyük yazı ölçeği)
+   kendiliğinden alt alta geçiyor — breakpoint gerekmiyor, ızgara kendi
+   karar veriyor. Eskiden `1fr 1.2fr` idi ve o oran belirli bir ekran
+   genişliği varsayıyordu; varsayım tutmadığı yerde metin taşıyordu.
 
    "PLUS Avantajları" İKİ SATIRA SARIYOR ve bu KABUL EDİLDİ, çözülmemiş
    bir hata değil. Denendi ve ölçüldü: 1fr → 178px, 1.1fr → 185px,
@@ -640,7 +683,7 @@ body {
    Metin sığdırma bu ızgarada sabit oranlarla çözülemez, çünkü ölçek
    cihazın sistem ayarına bağlı. */
 .sly-promo {
-  display: grid; grid-template-columns: 1fr 1.2fr;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1px;                                  /* ayraç çizgisi bu boşluktan */
   background: var(--sly-line-soft);
   border-radius: var(--sly-r-lg);
@@ -658,8 +701,8 @@ body {
 }
 .sly-promo-cell:active { background: rgba(255,255,255,.075); }
 .sly-promo-ico {
-  width: 44px; height: 44px; flex-shrink: 0;
-  border-radius: 13px;
+  width: 2em; height: 2em; flex-shrink: 0;
+  border-radius: .6em;
   display: flex; align-items: center; justify-content: center;
   font-size: 22px; line-height: 1;
 }
@@ -692,9 +735,8 @@ body {
 .sly-promo-cell.is-plus .sly-promo-title { color: var(--sly-gold); }
 .sly-promo-chev { margin-left: auto; flex-shrink: 0; color: var(--sly-text-3); font-size: 17px; }
 
-@media (max-width: 339px) {
-  .sly-promo { grid-template-columns: 1fr; }
-}
+/* Dar ekranda tek sutuna inme kurali KALDIRILDI: auto-fit zaten
+   yapiyor ve bir breakpointin varsaydigi genislik yok. */
 
 /* ============================================================
    10) ROZET KARTI  —  .sly-badge-card
@@ -727,7 +769,7 @@ body {
 
 .sly-badge-medal {
   position: relative; z-index: 1;
-  width: 58px; height: 58px; border-radius: 50%;
+  width: 2.25em; height: 2.25em; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 26px; line-height: 1;
   background: linear-gradient(150deg, rgba(255,255,255,.10), rgba(255,255,255,.03));
@@ -863,8 +905,8 @@ body {
 .sly-row:last-child { border-bottom: none; }
 .sly-row:active { background: rgba(255,255,255,.05); }
 .sly-row-ico {
-  width: 34px; height: 34px; flex-shrink: 0;
-  border-radius: 11px;
+  width: 2.15em; height: 2.15em; flex-shrink: 0;
+  border-radius: .68em;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1;
   background: rgba(255,255,255,.06);
@@ -929,7 +971,7 @@ body {
   margin-bottom: var(--sly-gap-5);
 }
 .sly-profile-avatar {
-  width: 66px; height: 66px; flex-shrink: 0;
+  width: 1.95em; height: 1.95em; flex-shrink: 0;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 34px; line-height: 1;
@@ -1053,25 +1095,28 @@ body {
    #app zaten 480px ile sınırlı (style.css), yani "geniş ekran"
    demek tablet değil, sadece 400-480px arası demek. Tek gerçek
    ihtiyaç dar uçta: 340px altında hero metni sanata giriyor. */
-/* ── 383px ve altı: DAR TELEFON ────────────────────────────────
-   Huawei P20 Lite'ta (360 CSS px) ölçüldü. 384px'lik Galaxy A51'de
-   her şey sığıyordu; 24px daha dar bir ekranda üst bar taşıyor.
+/* ── DAR EKRAN: yalnizca HERO ─────────────────────────────────
+   Buradaki kurallar metin sigdirmak icin DEGIL — o is artik yapisal
+   (ikon kutulari em, ust bar sariyor, kartlar icerige gore buyuyor).
+   Kalan tek sey uzamsal bir cakisma: hero metniyle sagdaki kart
+   yelpazesi dar ekranda ayni yeri istiyor ve bu bir olcu sorunu degil,
+   kompozisyon sorunu — o yuzden hala breakpoint ile cozuluyor.
 
-   ÖLÇÜM (360px): üst bar 332px. Sağdaki aksiyonlar (PLUS 78.4 +
-   cüzdan 101 + boşluk) 187.4px yer kaplıyor ve KÜÇÜLMÜYOR
-   (flex-shrink:0), markaya 132.6px kalıyor. Avatar 42 + boşluk 11
-   düşünce ada 79.6px kalıyor, oysa "SlySwipe" 21px'te 86.3px sürüyor
-   — 6.7px eksik, yani uygulamanın KENDİ ADI kırpılıyordu.
-   Ada 19px + avatara 38px vermek 12px kazandırıyor; 7.5px pay kalıyor.
-
-   Hero başlığı da 3px sanata giriyordu (gerçek harfler, kutu değil);
-   26px'te sağ ucu 190 → 174'e iniyor, sanat 187'de başlıyor.
-
-   Bu blok 359px bloğundan ÖNCE: orası daha sert kuralları taşıyor ve
-   çakışan yerlerde sonradan geldiği için kazanmalı. */
+   Marka adi / avatar kurallari KALDIRILDI: ust bar artik flex-wrap ile
+   kendini koruyor, kucultmeye gerek yok. */
 @media (max-width: 383px) {
+  /* Marka ölçüsü GERİ GELDİ — ama artık farklı bir işi var. Üst bardaki
+     flex-wrap taşmayı zaten imkânsız kılıyor; bu kural sarmanın NE ZAMAN
+     devreye gireceğini ayarlıyor.
+     Ölçüm (360px): kural olmadan marka 139.3 + aksiyonlar 187.4 + boşluk
+     12 = 338.7 > 332, yani sarıyordu. 360 px Android'in en yaygın
+     genişliği; orada üst barın iki satıra düşmesi "emniyet supabı" değil,
+     normal hâl demekti. 19px ad + 38px avatar ile toplam 324.5'e iniyor
+     ve tek satırda kalıyor.
+     Sarma yine de yerinde duruyor: %130 yazı ölçeğinde (aynı ekranda
+     ~412px gerekiyor) devreye giriyor — yani gerçekten sığmadığı zaman. */
   .sly-brand { gap: 9px; }
-  .sly-brand-avatar { width: 38px; height: 38px; font-size: 21px; }
+  .sly-brand-avatar { font-size: 21px; }
   .sly-brand-name { font-size: 19px; }
   .sly-hero-title { font-size: 26px; }
   .sly-hero-body { max-width: 56%; }
@@ -1081,14 +1126,10 @@ body {
   .sly-hero { min-height: 0; padding: 18px 16px 20px; }
   .sly-hero-body { max-width: 100%; }
   .sly-hero-title { font-size: 25px; }
-  /* Sanat gizlenmiyor, arkaya alınıyor: metnin arkasında soluk bir
-     doku olarak duruyor — kaldırmak kartı boşaltırdı. */
+  /* Sanat gizlenmiyor, arkaya aliniyor: metnin arkasinda soluk bir
+     doku olarak duruyor — kaldirmak karti bosaltirdi. */
   .sly-hero-art { opacity: .28; right: -34px; }
-  .sly-day-dot { width: 36px; height: 36px; font-size: 13px; }
   .sly-badge-grid { gap: 8px; }
-}
-@media (min-width: 420px) {
-  .sly-stat { width: 176px; }
 }
 
 /* ============================================================
@@ -1101,7 +1142,7 @@ body {
    sisteminin ilk kaybettiği yer. */
 .pf-showcase { display: flex; gap: 12px; }
 .pf-badge {
-  width: 62px; height: 62px; flex: 0 0 auto;
+  width: 2.3em; height: 2.3em; flex: 0 0 auto;
   clip-path: none;                     /* style.css'teki altıgeni iptal et */
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

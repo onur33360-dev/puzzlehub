@@ -1066,7 +1066,41 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
        faded the new pill to a grey smear. Two consequences: the bob is now motion-only,
        and the JS fade-out (`style.opacity=0` after 4.2 s) finally works — an animated
        `opacity` outranks an inline style in the cascade, so it never had.
-  7. **Two test phones now, and 360 px is the narrow end.** The Galaxy A51 is 384 CSS px;
+  7. **The shell layout is now SAFE BY CONSTRUCTION, and `tools/layout-matrix-test.js`
+     proves it.** Text clipping used to be discovered one phone at a time — A51 (384 px)
+     clipped "Rozet İlerlemesi", then the Huawei (360 px) clipped the app's own name. The
+     cause was the method, not the devices: fixed-pixel boxes (`width: 164px`,
+     `grid-template-columns: 1fr 1.2fr`) verified by measuring whether a given string
+     happened to fit. That is "correct on the phones I owned", never "cannot break".
+     The tool sweeps **6 widths × 3 font scales × 3 screens = 54 cells** in one headless
+     run and fails on any sub-pixel text overflow or horizontal scroll. Baseline was
+     **25 of 54 failing**; it is now 0. Run it after any shell CSS change:
+     `node tools/layout-matrix-test.js` (add `--shot 320x1.3` to look at one cell).
+     Four rules replaced the fixed pixels, and each one removes a whole class of failure:
+     - **Icon tiles are sized in `em`, not px.** A 42 px box holding a 23 px glyph breaks
+       the moment the system scales text; `width: 1.83em` makes box and glyph grow
+       together. This alone fixed 24 of the 25 failing cells' icon overflows.
+     - **The top bar wraps** (`flex-wrap` + `min-width: max-content` on the brand). The
+       actions block cannot shrink, so something had to give — and the thing that must
+       never be clipped is the app's name.
+     - **Cards size to content** (`width: max-content` on `.sly-stat`) because the rail
+       already scrolls horizontally; a card that grows can't clip.
+     - **`overflow-wrap: anywhere` on free text** is the last-resort guarantee for a long
+       Turkish word in a narrow column (`Avantajları` at 130 %). Breaking a word is ugly;
+       clipping it destroys information.
+     **Breakpoints now only handle SPATIAL composition** (hero text vs the card fan), not
+     text fitting. The one at ≤383 px still trims the brand — not to prevent clipping
+     (wrap does that) but to decide *when wrapping kicks in*, since 360 px is the most
+     common Android width and a two-row header there would be the normal case, not a
+     fallback.
+     **A bug in the tool itself is worth remembering:** the font-scale simulation applied
+     the multiplier more than once — parents were scaled before children were read, so
+     inherited sizes got multiplied twice, and re-applying after each tab switch compounded
+     it further (measured: "Oyuncu" reported at 212 px, i.e. 1.3^4). Snapshot every computed
+     size *before* writing any, and mark scaled elements so re-application is idempotent. A
+     measuring tool that is wrong in the strict direction invents failures and wastes the
+     time it was built to save.
+  8. **Two test phones now, and 360 px is the narrow end.** The Galaxy A51 is 384 CSS px;
      a Huawei P20 Lite (ANE-LX1, Android 9, 1080×2280 @ 480 dpi) is **360**, and 24 px was
      enough to break the top bar. Measured there: the actions block (PLUS 78.4 + wallet 101)
      is `flex-shrink:0` and takes 187.4 of 332 px, leaving the brand 132.6; minus the avatar
@@ -1080,7 +1114,7 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      `-webkit-line-clamp` and `backdrop-filter` all work — verified by *measuring a real
      flex gap in the page*, not by reading `dumpsys` version strings. Check the provider
      before designing around a compat table.
-  8. **Android WebView INFLATES text and it only shows on device.** The stat-card label is
+  9. **Android WebView INFLATES text and it only shows on device.** The stat-card label is
      `font-size:10px` in CSS and computes to **11px** on the A51 (system font scale /
      font boosting); desktop keeps 10px. "Rozet İlerlemesi" then measured 84.36 px in an
      83.58 px box and rendered as "Rozet İlerlem…" — a defect that is **invisible in a
