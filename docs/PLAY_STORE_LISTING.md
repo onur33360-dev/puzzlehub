@@ -139,6 +139,29 @@ görünmesin diye kritik nokta: AdMob SDK'sı birleştirilmiş manifest'e
 `AndroidManifest.xml`'imiz yalnızca `INTERNET` istese de reklam kimliği
 toplanıyor sayılır.
 
+### Paketteki izinler — 2026-08-12'de yüklenen AAB'den okundu
+
+Play Console "11 izin" diyor. **Bizim `AndroidManifest.xml`'imizde yalnızca bir
+tane var** (`INTERNET`); gerisini SDK'lar manifest birleştirme sırasında ekliyor.
+Birleştirilmiş release manifestinden çıkarılan tam liste:
+
+| İzin | Kaynak |
+|---|---|
+| `android.permission.INTERNET` | **bizim** |
+| `com.google.android.gms.permission.AD_ID` | AdMob ← **veri güvenliği beyanını zorunlu kılan izin** |
+| `android.permission.ACCESS_ADSERVICES_AD_ID` | AdMob (Privacy Sandbox) |
+| `android.permission.ACCESS_ADSERVICES_ATTRIBUTION` | AdMob (Privacy Sandbox) |
+| `android.permission.ACCESS_ADSERVICES_TOPICS` | AdMob (Privacy Sandbox) |
+| `android.permission.ACCESS_NETWORK_STATE` | AdMob / Capacitor |
+| `android.permission.WAKE_LOCK` | AdMob (video reklam ekranı açık tutar) |
+| `android.permission.FOREGROUND_SERVICE` | eklenti |
+| `com.android.vending.BILLING` | Play Faturalandırma (RevenueCat) |
+| `…DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | AndroidX, otomatik üretilir |
+
+**Hiçbiri "tehlikeli" (runtime) izin değil** — konum, kişiler, kamera, mikrofon,
+depolama yok. Yani kullanıcıya çalışma anında hiçbir izin sorusu çıkmıyor ve
+formda o kategorilerin hepsi "Hayır".
+
 **Veri topluyor mu?** → **Evet**
 
 | Veri türü | Toplanıyor | Paylaşılıyor | Amaç | Zorunlu mu |
