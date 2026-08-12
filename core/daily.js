@@ -137,8 +137,13 @@ function renderDailyChallenge() {
              previewFor(id, emoji) +
              '<div class="dc-body">' +
                '<span class="dc-name">' + name + (diff ? ' - ' + diff : '') + '</span>' +
-               // TODO: XP ekonomisi kurulunca gerçek ödüle bağlanacak.
-               '<span class="dc-reward">⭐ 50 XP</span>' +
+               // Ödül etiketi YOK ve bu bilinçli (2026-08-12, yayın öncesi).
+               // Burada "⭐ 50 XP" yazıyordu; XP diye bir ekonomi hiç kurulmadı,
+               // yani kart tutulmayan bir ödül vaat ediyordu. Sahibin kararı:
+               // vaadi kaldır, sahte bir sayıyla değiştirme. Günlük meydan
+               // okumanın gerçek ödülü zaten DailyQuests'in "günlük meydan
+               // okumayı tamamla" görevi (EconomyConfig.QUEST_*) üzerinden
+               // ödeniyor — kartta ikinci kez ilan edilmesi gerekmiyor.
                '<button class="dc-btn" onclick="DailyChallenge.start(\'' + id + '\')">' +
                  (st.doneToday ? 'Tekrar Oyna' : 'Başla') +
                '</button>' +

@@ -463,7 +463,8 @@ a { color:inherit; text-decoration:none; }
 
 .dc-body { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
 .dc-name { font-size:16px; font-weight:800; }
-.dc-reward { font-size:12px; font-weight:700; color:var(--yellow); }
+/* .dc-reward kaldirildi (2026-08-12) — tek tuketicisi daily.js'teki
+   "50 XP" etiketiydi, o da kaldirildi (gerekcesi orada). */
 .dc-btn {
   margin-top:2px; padding:9px 16px; border-radius:var(--radius-full);
   background:linear-gradient(180deg, #fcd34d 0%, var(--yellow) 40%, #e79c17 100%);

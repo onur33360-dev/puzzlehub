@@ -23,8 +23,16 @@ android {
         applicationId "com.skyroonlabs.slyswipe"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // SURUM DAMGASI — her Play yuklemesinde versionCode ARTMAK ZORUNDA,
+        // yoksa Play paketi reddeder. Bu, unutulmasi en kolay yayin adimi.
+        //
+        // versionName BILEREK index.html'deki APP_VERSION ile ayni tutuluyor.
+        // Uygulama kendi surumunu Ayarlar'da APP_VERSION'dan yaziyor
+        // (core/app.js); Play'de "1.0", uygulama icinde "1.67.2" yazsaydi bir
+        // hata raporundaki surum hangi koda denk geliyor sorusunun cevabi
+        // olmazdi. Iki sayi ayni olsun diye ilk surum "1.0" degil.
+        versionCode 2
+        versionName "1.68.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

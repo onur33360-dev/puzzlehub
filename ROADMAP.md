@@ -599,6 +599,180 @@ oluşturacak.
 
 ---
 
+## Sprint 13 — Yayın altyapısı: gerçek reklam birimleri (2026-08-06/07)
+
+Sprint 9'un "gerçek kimlikler yayına çıkarken, ayrı ve son bir adımda girilir"
+kuralı burada uygulandı — ve **kural değiştirildi, atlanmadı.** Eski hâli
+("depoda yalnızca test kimliği") tehlikeyi yanlış yerde arıyordu: bir APK
+açılabilir, yani kimlikler yayınlanmış her build'den zaten okunabiliyor. Asıl
+tehlike sızıntı değil, **kendi reklamına geliştirirken dokunmak** — geçersiz
+trafik, hesap askıya alma. Google'ın bunun için kendi mekanizması var, o
+yüzden yasak yerine `AD_TEST_DEVICES` kondu: listedeki cihaz gerçek birim
+kimliğine karşı bile **test reklamı** görüyor.
+
+**Hash cihaza değil İMZA ANAHTARINA bağlı — ölçüldü, varsayılmadı.** Tek bir
+A51 üç ayrı değer üretti: debug anahtarıyla `50CD4ED8…`, release/upload
+anahtarıyla `58A6B464…`, üçüncü taraf imzalı bir kurulumda `88D815B2…`. Yani
+debug build'de doğrulanmış bir koruma release'e **taşınmıyor**. Bu yalnızca
+release build ayrıca ölçüldüğü için yakalandı; ilk tahmin yanlıştı.
+
+**Yanlış hash sessizce başarısız olur** — SDK sadece gerçek reklam sunar. Tek
+kanıt logcat'te `I/Ads: This request is sent from a test device.` satırını
+GÖRMEK, ve satır açılışta değil ilk **reklam isteğinde** çıkıyor.
+
+**`isTesting` adının tersini yapıyor** ve aylardır `true`'ydu: eklentinin
+`getFinalAdId`'i, cihaz test cihazı değilken bizim `adId`'mizi atıp Google'ın
+demo birimini koyuyor. Demo kimlikleriyle zararsızdı; gerçek kimliklerle
+yayına çıksaydı **gerçek oyuncular demo reklam görürdü** — sıfır gelir ve
+arayüzde bunu söyleyen hiçbir şey yok.
+
+Ayrıca `site/` doğdu: `slyswipe/gizlilik.html` ve `app-ads.txt`. Gizlilik
+politikası zorunlu, çünkü **birleştirilmiş manifest'te** Mobile Ads SDK
+`AD_ID` iznini kendisi enjekte ediyor — bizim `AndroidManifest.xml`'imiz
+yalnızca `INTERNET` istese de uygulama reklam kimliği topluyor sayılıyor.
+GitHub Pages **kullanıcı sitesi** şart: `app-ads.txt` yalnızca alan adının
+kökünde geçerli, proje sitesi her şeyi `/<repo>/` altına düşürür.
+
+`tools/ad-release-test.js` bu sprintin çıktısı: gerçek kimlik + boş
+`AD_TEST_DEVICES` kombinasyonu, `isTesting: true`, yayıncı uyuşmazlığı ve
+eksik gizlilik politikası testi düşürüyor. **Önce başarısız olduğu görülerek**
+doğrulandı, sonra güvenildi.
+
+---
+
+## Sprint 14 — Oyun genişlemesi: 10 → 13 oyun (2026-08-07/09)
+
+Katalog dört başlıkla büyüdü, ikisi ilk kez **puzzle olmayan** türler.
+
+- **Yılan** — ilk arcade oyunu, `category:'arcade'` alanının ilk sahibi.
+  Şartname "klasik", yani mekanik EKLENMEYECEK. Kenarlar **sarıyor**; duvarla
+  ölüm birkaç saat yayında kaldı ve referans oyuna bakılarak *hata* sayıldı —
+  tek kaybetme yolu kendi kuyruğun. rAF döngüsü **yok**: hareket hücre
+  adımlarında, çizim `setTimeout` zincirinin içinde, yani boşta maliyet sıfır.
+- **Flappy UFO** — iki kaynak bilerek ayrı: **oynanış** referans oyundan
+  (sabitler ölçüldü, icat edilmedi), **görsel** sahibin tasarımından. Fizik
+  sabit 120 Hz akümülatörde, çizim rAF'ta: kare başına fizik, 60 ve 120 fps'te
+  *farklı oyun* demek olurdu. Arka plan sonunda **asset**'e döndü — boyalı bir
+  manzara render değil **varlık** problemi, ve prosedürel dağlar yedek olarak
+  duruyor.
+- **Akış Bağlantı** — 70 seviye. İki ders taşıyor. (1) **Kazanma koşulu tam
+  kaplama DEĞİL**, tüm çiftlerin bağlanması; oyun birkaç saat iki farklı
+  "bitti" tanımı taşıdı ve ikisini aynı anda gösterdi. (2) Zorluk **açgözlü
+  oyuncunun başarı oranı** olarak ölçülüyor; eski yapısal skor seviye 10'dan
+  sonra artmayı bıraktığını göremiyordu çünkü **kazanma koşuluyla aynı şeyi
+  ölçmüyordu**. Düzeltildikten sonra: 90 → 61 → 44 → 30 → 21 → 10 → 5 %.
+- **Labirent ve Vida Ustası SİLİNDİ** (sahip kararı) — modüller, Keşfet
+  demoları ve üç kayıt yerinin tamamı.
+
+**Keşfet sırası bağımsız çekilişten KARIŞTIRILMIŞ TORBAYA geçti.** Eski kod
+son N kartı eleyip rastgele çekiyordu; bu yalnızca *bitişik* tekrarı önler,
+dağıtmaz. Ölçüm (13 oyun, 40 kart, 20 000 koşu): 6 kart içinde tekrar
+**%35 → %12**, ilk turda görülen farklı oyun **9.5 → 13/13**, belirli bir
+oyunu bulmak için gereken kart (p90) **23 → 12**. Aynı desen depoda zaten
+vardı — Jigsaw'ın görsel rotasyonu. Bu, o desenin ikinci tüketicisi.
+
+---
+
+## Sprint 15 — Kabuk redesign + yerleşim güvenliği (2026-08-10/11)
+
+Sahibin referans mockup'ıyla Ana Sayfa, Keşfet, Rozetler ve Ayarlar yeniden
+çizildi. `core/ui-shell.css` (`sly-*`) **üçüncü** stil katmanı; oyunlara
+dokunmuyor (`--ph-*` el değmedi).
+
+**Asıl çıktı tasarım değil, YÖNTEM değişikliği.** Metin taşması bu projede
+telefon telefon keşfediliyordu: A51 (384 px) "Rozet İlerlemesi"ni kırptı,
+ardından Huawei (360 px) uygulamanın **kendi adını** kırptı. Sebep cihazlar
+değil yöntemdi — sabit piksel kutular, ve doğrulama olarak "şu dizgi sığdı
+mı" ölçümü. Bu "sahip olduğum telefonlarda doğru" demektir, "kırılamaz"
+demek değil.
+
+`tools/layout-matrix-test.js` **6 genişlik × 3 yazı ölçeği × 3 ekran = 54
+hücreyi** tek koşuda tarıyor ve alt-piksel taşmada düşüyor. Başlangıç: **54'te
+25 başarısız**. Şimdi 0. Sabit pikselleri dört kural değiştirdi, her biri bir
+hata SINIFINI kaldırıyor: ikon kutuları `em` (tek başına 24 hücreyi düzeltti),
+üst bar **sarıyor**, kartlar içeriğe göre boyutlanıyor, serbest metinde
+`overflow-wrap: anywhere`.
+
+Üç ders:
+- **Android WebView yazıyı ŞİŞİRİYOR ve bu yalnızca cihazda görünür.** CSS'te
+  10 px olan etiket A51'de 11 px hesaplanıyor; aynı viewport genişliğinde
+  masaüstü tarayıcı kusursuz görünüyordu.
+- **`scrollWidth` tam sayıya yuvarlanır**, 0.78 px taşma `84 == 84` diye
+  temiz okunur. `Range.selectNodeContents(el).getBoundingClientRect()` gerekli.
+- **Ölçüm aracının kendi hatası zamanı yakar.** Yazı ölçeği simülasyonu
+  çarpanı birden fazla kez uyguluyordu (ebeveyn çocuktan önce ölçekleniyor,
+  sekme değişiminde yeniden uygulanıyor) ve "Oyuncu"yu 212 px raporladı.
+  **Katı yönde yanlış olan bir araç olmayan hatayı icat eder** ve kazandırmak
+  için yazıldığı zamanı harcar.
+
+**Cihaz doğrulaması (A51, `font_scale` 1.1 — varsayılan DEĞİL, ki asıl önemli
+olan bu):** üç kabuk ekranı temiz; sayfa içinde ~%130'a itilince üst bar iki
+satıra, hero başlığı iki satıra düşüyor — tasarlanmış bozulma, sıfır kırpma.
+
+---
+
+## Sprint 16 — Giriş serisi gerçekten çalışıyor (2026-08-11)
+
+`StreakSystem.checkIn()`'in **tüm uygulamadaki tek çağıranı**
+`claimDailyReward()`'dı — yani seri, yalnızca oyuncu günün dairesine
+dokunursa ilerliyordu. Cihazda kanıt: 248 tur oynamış bir hesap **"0 gün
+seri"** gösteriyordu. Artık `initApp()` her açılışta çağırıyor.
+
+Üç yük taşıyan sonuç:
+- **Boşluk seriyi 1'e SIFIRLIYOR** (sahip kararı). Eski `max(1, count-1)`
+  "art arda kaç gün" sorusunu hiç cevaplamıyordu, yani hiçbir şey ölçmüyordu.
+- **Günlük ödül kendi alanına taşındı (`rewardDate`).** Zorunluydu: seri ve
+  ödül aynı `lastDate`'i paylaşıyordu, check-in otomatikleşince uygulama
+  ödülü açılışta "alınmış" işaretler ve oyuncu bir daha asla toplayamazdı.
+  Göç `lastDate`'e dokunmadan ÖNCE yapılıyor; `|| null` savunma gürültüsü
+  değil — onsuz yeni oyuncuya "zaten aldın" deniyor (cihazda yakalandı,
+  harness'te değil).
+- **Kilometre taşları `checkIn()`e taşındı.** `claimDailyReward()` içinde
+  `streak === 7` kontrolü, ancak oyuncu tam o gün ödülü toplarsa ödüyordu.
+
+Seri rozetleri 7/30/50/100/250/500 oldu. Ödülleri **sahibin kendi ölçeği
+uzatılarak** belirlendi (60/75/100/150), icat edilerek değil: ilk deneme
+75/150/300/600'dü ve sahip haklı olarak reddetti — tek başına 500 günlük
+rozet (600💎) mağazanın "Popüler" paketini (550💎) geçiyordu. **Yeni rozet
+eklerken uygulanacak test:** tüm rozet havuzu (500💎) en ucuz paketin (100💎)
+küçük bir katı kalmalı ve paket satın almanın yerine geçmemeli.
+
+---
+
+## Sprint 17 — Play Store yayını (2026-08-12, AÇIK)
+
+İlk kez hedef bir özellik değil bir **yayın**. Kod tarafı büyük ölçüde hazır:
+10 Node harness geçiyor, `targetSdk 35`, gerçek AdMob birimleri + test cihazı
+koruması, RevenueCat public anahtarı, imza yapılandırması, gizlilik politikası
+ve `app-ads.txt` yayında.
+
+**Diskteki AAB (3 Ağustos) kullanılamaz** — o günden beri 75 commit, üç yeni
+oyun, kabuk redesign ve seri düzeltmesi girdi. Sürüm damgası bu sprintte
+`versionCode 2` / `versionName 1.67.2` oldu; **versionName bilerek
+`APP_VERSION` ile aynı** tutuluyor, yoksa bir hata raporundaki sürüm numarası
+hangi koda denk geldiğini söylemez.
+
+**"⭐ 50 XP" etiketi silindi.** Vaat eden son yer tutucuydu: XP diye bir
+ekonomi hiç kurulmadı. Sahte bir elmas sayısıyla DEĞİŞTİRİLMEDİ — günlük
+meydan okuma zaten `DailyQuests` üzerinden ödeniyor, kartta ikinci kez ilan
+etmek ya çift sayardı ya da ikinci bir sayı icat ederdi.
+
+**Takvim gerçeği:** kişisel geliştirici hesabı, üretim erişimi için **12 test
+kullanıcısıyla 14 gün kesintisiz kapalı test** istiyor. Bugünün çıktısı
+üretim değil, **sayacın başlaması**. Sıra bağlayıcı ve keyfî değil: ürünler
+AAB yüklenmeden oluşturulamaz, RevenueCat ürünler olmadan bağlanamaz, satın
+alma testi Play'den kurulum olmadan yapılamaz.
+
+**Play App Signing açık riski:** Play paketi Google'ın anahtarıyla yeniden
+imzalar, yani listede olmayan **dördüncü** bir cihaz hash'i doğar. İlk Play
+kurulumunda logcat'ten okunup `AD_TEST_DEVICES`'a eklenene kadar Play'den
+kurulmuş build'de reklama dokunulmaz.
+
+**Gerçek satın alma hâlâ tek doğrulanmamış sistem** (Sprint 10'dan devreden
+borç) — teknik kısıt, atlanmış adım değil.
+
+---
+
 ## Hedef
 
 Sadece yüksek FPS değil:

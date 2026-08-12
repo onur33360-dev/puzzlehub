@@ -1241,8 +1241,15 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   that already exists. **No new storage key was written** — a second record of the same
   truth is exactly what `DailyQuests`' third quest avoids. The curve is deliberately flat:
   an escalating one is an economy number, and economy numbers are the owner's call (§7).
-  Still placeholder, still carrying `TODO:`: the daily challenge's "⭐ 50 XP" reward label
-  (no XP economy exists), "Profil Çerçevesi", and the profile name "Oyuncu".
+  **The "⭐ 50 XP" label was DELETED on 2026-08-12 (owner decision, pre-launch).** It was the
+  last placeholder that *promised* something rather than merely showing a number: no XP
+  economy was ever built, so the card advertised a reward the app could not pay. It was
+  removed rather than replaced with a diamond figure — the daily challenge is already paid
+  through `DailyQuests`' "günlük meydan okumayı tamamla" quest, and announcing it twice would
+  either double-count or invent a second number. `.dc-reward` in `style.css` went with it (it
+  had exactly one consumer).
+  Still placeholder, still carrying `TODO:`: "Profil Çerçevesi" (labelled "Yakında", so it
+  promises nothing) and the profile name "Oyuncu".
 - **Home / İlerleme / Profil carry STATIC PLACEHOLDER numbers on purpose (2026-07-29).**
   These three screens were rebuilt to match the owner's design mockup one-for-one, and the
   mockup shows values for systems that do not exist yet: a collection percentage, per-game
