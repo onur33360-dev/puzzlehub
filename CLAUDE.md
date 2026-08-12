@@ -289,9 +289,13 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   1. **İksir Sıralama and Ok Bulmaca are absent from `PUZZLE_GAMES` and that hides nothing.**
      They are in `GAME_MAP` and `REEL_GAMES` (both `playable:true`), so they are reachable
      exactly like every other game. Adding them to the dead array would change no pixel.
-  2. **Discover is currently the only game-catalogue surface.** All 13 games are `playable`
+  2. **Discover is currently the only game-catalogue surface.** All **11** games are `playable`
      there, so "will every game show up at launch" is a question about `REEL_GAMES`, not about
      Home. Whether Home should get a catalogue back is a product decision, not a bug.
+     (This said "13" until 2026-08-12 — stale since the Labirent/Vida Ustası deletion on
+     2026-08-09. **Thirteen games were built; eleven ship.** Both numbers are correct about
+     different things, which is exactly why they get confused: count `REEL_GAMES`, don't
+     recall it.)
   The array is kept rather than deleted because it still carries per-game presentation data
   (emoji, rating, gradient, blurb) that a future Home catalogue would want — but nothing reads
   it today, so **do not treat adding an entry there as registering a game.**
@@ -974,6 +978,10 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   a given game missing from the first 20 cards **12.6% → 0%**, cards needed to find a
   specific game (p90) **23 → 12**. Device-verified on the A51: first 13 cards contained all
   13 games and repeat-within-6 measured **7%**.
+  **The pool was 13 when this was measured; it is 11 since the 2026-08-09 deletion.** The
+  numbers are kept as recorded rather than rescaled — they are a real measurement of a real
+  run, and the guarantee they demonstrate ("every game once per epoch") is structural, so it
+  holds at any pool size. Do not read "13" here as a current game count.
   **The same pattern already existed in the repo** — Jigsaw's image rotation is an
   epoch-shuffle for exactly this reason (`docs/GAMES/SLIDING_PUZZLE.md`: 174 early repeats
   in 400 unguarded levels). This is that pattern's second consumer, not a new one.
