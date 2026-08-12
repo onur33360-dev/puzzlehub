@@ -29,7 +29,13 @@ const vm = require('vm');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'games/games.js'), 'utf8');
+// Satır sonları normalize ediliyor: aşağıdaki kaynak taramaları YAKINLIK
+// ölçüyor ve CRLF her satırı bir karakter şişiriyor, yani aynı kod depoda
+// geçip Windows çalışma kopyasında düşebiliyor. Gerekçe ve ölçülen örnek:
+// tools/dom-sandbox.js içindeki readSrc(). Bu araç dom-sandbox'ı bilerek
+// kullanmıyor (CLAUDE.md), o yüzden normalizasyon burada tekrarlanıyor.
+const SRC = fs.readFileSync(path.join(ROOT, 'games/games.js'), 'utf8')
+              .replace(/\r\n/g, '\n');
 
 // Kayıt sırası = raporun sırası. GAME_MAP'teki kimliklerle birebir aynı
 // olmalı; bu liste aynı zamanda "hiçbir oyun unutulmadı" kontrolüdür.

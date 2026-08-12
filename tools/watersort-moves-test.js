@@ -23,9 +23,9 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeSandbox, stubEl } = require('./dom-sandbox');
+const { ROOT, makeSandbox, stubEl, readSrc } = require('./dom-sandbox');
 
-const SRC = fs.readFileSync(path.join(ROOT, 'games/games.js'), 'utf8');
+const SRC = readSrc('games/games.js');
 
 let failures = 0;
 function ok(name)       { console.log('  ✓ ' + name); }
@@ -198,7 +198,7 @@ function testSource() {
   check('elmas bedeli EconomyConfig\'ten okunuyor',
         /econ\('EXTRA_MOVES_DIAMONDS'/.test(code));
   check('EXTRA_MOVES_DIAMONDS EconomyConfig\'te tanımlı',
-        /EXTRA_MOVES_DIAMONDS:\s*\d+/.test(fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8')));
+        /EXTRA_MOVES_DIAMONDS:\s*\d+/.test(readSrc('core/app.js')));
 
   // Kapsam: SADECE Su Sıralama. Başka oyuna limit sızmamalı.
   const others = ['game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',

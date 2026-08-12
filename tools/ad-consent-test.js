@@ -16,9 +16,9 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeSandbox } = require('./dom-sandbox');
+const { ROOT, makeSandbox, readSrc } = require('./dom-sandbox');
 
-const APP_SRC = fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8');
+const APP_SRC = readSrc('core/app.js');
 
 let failures = 0;
 function ok(n)       { console.log('  ✓ ' + n); }

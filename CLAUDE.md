@@ -1816,6 +1816,43 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   `tools/interstitial-test.js` pins all of it, including the assertions that encode the
   reasoning rather than the code: each axis must block *on its own*, the Discover exemption
   must not consume the counter, and `maybeShow` must still have exactly one call site.
+- **Google Play SUBSCRIPTION product ids arrive COMPOSITE — `plus_monthly:basePlanId` — so
+  `loadOfferings()` registers every package under its base id too (2026-08-12).** Without
+  the alias, `priceFor('plus_monthly')` misses and the Plus page shows `—`.
+  **The symptom is what makes this findable: diamond prices load while Plus prices don't.**
+  Both screens use the *same* code path (`data-ph-price` → `priceFor` → one table), so a
+  difference between them cannot be UI code — it has to be the table's **key**. One-time
+  products (`diamonds_100`) keep a plain identifier; Play subscriptions live under base
+  plans and RevenueCat returns the composite. Source is the package's own types:
+  `SubscriptionOption.storeProductId` → *"This will be subId:basePlanId"*.
+  Three things are load-bearing:
+  1. **Price was the cosmetic half. `purchase()` reads the same table**, so Plus was
+     silently returning `notFound` — the subscription could not be bought at all.
+  2. **An exact match always wins; the alias only fills an empty slot** (`!table[base]`).
+     Otherwise a subscription's base plan could silently overwrite a real product that
+     happens to share the id.
+  3. **`loadOfferings()` logs the identifiers it actually received**, once. A `—` has two
+     possible causes that are fixed in different places — the product/base plan is missing
+     or inactive in Play Console (package never arrives), or the id shape is unexpected
+     (package arrives, key misses). That one line is the only thing that separates them on
+     a device, and the release build has no WebView debugging to ask interactively.
+  `iap-test.js` pins it, but only after the fixture was made honest: it emitted plain ids,
+  so the harness could not have caught this. Same lesson as `configureReturnsString`
+  directly below — **a mock is only as honest as the thing it imitates**. Verified by
+  reverting the fix: 4 assertions fail, then pass.
+- **Harness source scans MUST normalize line endings — use `readSrc()` from
+  `tools/dom-sandbox.js`, never a bare `readFileSync` (2026-08-12).** The strongest layer in
+  these tools is the source scan, and most of those assertions are **proximity** regexes
+  ("this call appears within 900 characters of that one"). On Windows the working copy is
+  CRLF, so every line counts one character more, and the same code that passes against the
+  repo's bytes can fail against the file on disk.
+  Measured: `badges-test`'s "StreakSystem.checkIn() triggers Badges.check()" spans **889
+  characters with LF and 907 with CRLF** — against a 900 budget. The assertion was 11
+  characters from failing and nobody knew, because the file happened to sit on disk with LF;
+  a `git stash` round-trip re-checked it out as CRLF and flipped it. **A fresh `git clone` on
+  Windows would have found the suite broken**, and the failure names a streak/badge wiring
+  problem that does not exist — the worst kind, because it sends you into the wrong file.
+  A source scan must measure **code**, not line-ending style.
 - **`Billing.init()` must keep its `Promise.resolve(...)` wrapper, and `openShop()` must
   keep `showScreen` BEFORE `renderShop` (2026-08-07).** Two halves of one shipped bug that
   made the diamond shop completely unopenable on device — the row was tapped, nothing

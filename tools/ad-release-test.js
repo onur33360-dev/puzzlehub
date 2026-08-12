@@ -24,11 +24,10 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeSandbox } = require('./dom-sandbox');
+const { ROOT, makeSandbox, readSrc } = require('./dom-sandbox');
 
-const APP_SRC = fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8');
-const MANIFEST = fs.readFileSync(
-  path.join(ROOT, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
+const APP_SRC = readSrc('core/app.js');
+const MANIFEST = readSrc('android/app/src/main/AndroidManifest.xml');
 
 // Google'ın resmî demo yayıncısı. Hiçbir hesaba bağlı değil, o yüzden
 // bu yayıncıya ait kimlikler "gerçek değil" demek.
@@ -479,7 +478,7 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     const p = path.join(ROOT, 'site/slyswipe/gizlilik.html');
     check('gizlilik politikası metni depoda', fs.existsSync(p), p);
     if (fs.existsSync(p)) {
-      const html = fs.readFileSync(p, 'utf8');
+      const html = fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
       // Politika, uygulamanın GERÇEKTE ne yaptığını anlatmak zorunda.
       // Yeni bir SDK eklenip politikaya yazılmazsa bu liste yakalar.
       for (const t of ['AdMob', 'RevenueCat', 'Google Fonts', 'Unsplash'])

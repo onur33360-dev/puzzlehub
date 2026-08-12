@@ -14,10 +14,10 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeSandbox } = require('./dom-sandbox');
+const { ROOT, makeSandbox, readSrc } = require('./dom-sandbox');
 
-const GAMES_SRC = fs.readFileSync(path.join(ROOT, 'games/games.js'), 'utf8');
-const BUILD_SRC = fs.readFileSync(path.join(ROOT, 'tools/build-www.js'), 'utf8');
+const GAMES_SRC = readSrc('games/games.js');
+const BUILD_SRC = readSrc('tools/build-www.js');
 
 let failures = 0;
 function ok(n)        { console.log('  ✓ ' + n); }
@@ -93,7 +93,7 @@ check('build-www SHIP listesinde assets/jigsaw var',
       'APK\'ya girmez → cihazda yine numara çıkar');
 // SHELL_ASSETS'te OLMAMALI: precache her sürüm bump'ında yeniden indirir.
 // (Çapraz doğrulama tek yönlü olduğu için build bunu yakalamaz.)
-const swSrc = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+const swSrc = readSrc('sw.js');
 const shell = (swSrc.match(/const SHELL_ASSETS = \[([\s\S]*?)\]/) || [])[1] || '';
 check('sw.js kabuk listesinde jigsaw görselleri YOK (precache değil)',
       !/assets\/jigsaw\/[^']*\.jpg'/.test(shell),

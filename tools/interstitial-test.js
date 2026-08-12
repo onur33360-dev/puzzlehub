@@ -18,9 +18,9 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeSandbox } = require('./dom-sandbox');
+const { ROOT, makeSandbox, readSrc } = require('./dom-sandbox');
 
-const APP_SRC = fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8');
+const APP_SRC = readSrc('core/app.js');
 
 let failures = 0;
 function ok(n)       { console.log('  ✓ ' + n); }
@@ -318,7 +318,7 @@ async function flush(n) { for (let i = 0; i < (n || 6); i++) await wait(); }
     check('AÇILIŞTA interstitial çağrısı YOK',
           initApp.indexOf('InterstitialAds') < 0, 'initApp içinde interstitial çağrısı var');
 
-    const splash = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const splash = readSrc('index.html');
     check('SPLASH tarafında interstitial çağrısı YOK',
           splash.indexOf('InterstitialAds') < 0);
   }

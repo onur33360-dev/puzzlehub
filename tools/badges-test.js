@@ -23,9 +23,9 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeSandbox, stubEl } = require('./dom-sandbox');
+const { ROOT, makeSandbox, stubEl, readSrc } = require('./dom-sandbox');
 
-const APP_SRC = fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8');
+const APP_SRC = readSrc('core/app.js');
 
 const GAMES = [
   'game2048', 'memoryGame', 'wordSearch', 'sudoku', 'blockPuzzle',

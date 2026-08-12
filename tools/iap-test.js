@@ -19,10 +19,10 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeSandbox } = require('./dom-sandbox');
+const { ROOT, makeSandbox, readSrc } = require('./dom-sandbox');
 
-const APP_SRC = fs.readFileSync(path.join(ROOT, 'core/app.js'), 'utf8');
-const HTML_SRC = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const APP_SRC = readSrc('core/app.js');
+const HTML_SRC = readSrc('index.html');
 
 let failures = 0;
 function ok(n)       { console.log('  ✓ ' + n); }
@@ -62,8 +62,21 @@ function fakePlugin(cfg) {
     diamonds_100: 89.99, diamonds_550: 379.99,
     diamonds_1800: 799.99, diamonds_6500: 1649.99,
   };
+  // `basePlanSuffix`: GOOGLE PLAY'İN GERÇEK DAVRANIŞI (2026-08-12).
+  // Play'de bir aboneliğin altında taban planlar var ve RevenueCat ürün
+  // kimliğini BİLEŞİK döndürüyor — 'plus_monthly:aylik'. Tek seferlik
+  // ürünlerde (diamonds_*) böyle bir şey yok, kimlik birebir kalıyor.
+  //
+  // Fixture bunu taklit etmediği için harness aylarca yeşil kaldı: cihazda
+  // elmas fiyatları gelirken Plus fiyatları '—' görünüyordu ve Plus satın
+  // alma sessizce notFound dönüyordu. `configureReturnsString` ile aynı
+  // sınıf hata — bir mock, taklit ettiği şey kadar dürüsttür.
+  const suffix = cfg.basePlanSuffix || null;
   const packages = Object.keys(products).map(id => ({
-    identifier: '$rc_' + id, product: makeProduct(id, products[id], cur),
+    identifier: '$rc_' + id,
+    product: makeProduct(
+      (suffix && /^plus_/.test(id)) ? id + ':' + suffix : id,
+      products[id], cur),
   }));
   return {
     calls, names() { return calls.map(c => c[0]); },
@@ -315,6 +328,49 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     await b.get('refreshPrices()');
     await flush();
     eq('USD fiyat lokalize geldi', b.B.priceFor('plus_yearly'), '$19.99');
+  }
+  {
+    // ── ABONELİK KİMLİĞİ BİLEŞİK GELİYOR (regresyon: 2026-08-12) ──
+    // Cihazda gözlenen belirti: elmas fiyatları GELİYOR, Plus fiyatları '—'.
+    // Sebep tek bir yerdeydi — tablo pkg.product.identifier ile anahtarlanıyor
+    // ve Play abonelikleri 'plus_monthly:aylik' biçiminde dönüyor.
+    //
+    // Bu bloğun asıl değeri fiyat DEĞİL: purchase() de aynı tabloya baktığı
+    // için Plus satın alma notFound dönüyordu. Fiyat kozmetik, satın
+    // alamamak gelir kaybı.
+    const b = boot({ native: true, basePlanSuffix: 'aylik' });
+    await b.get('refreshPrices()');
+    await flush();
+
+    eq('bileşik kimlikli abonelik fiyatı ÜRÜN KİMLİĞİYLE bulunuyor',
+       b.B.priceFor('plus_monthly'), '₺149.99');
+    eq('bileşik kimliğin kendisi de çalışıyor',
+       b.B.priceFor('plus_monthly:aylik'), '₺149.99');
+    eq('tek seferlik ürün etkilenmedi (kimlik zaten düz)',
+       b.B.priceFor('diamonds_550'), '₺379.99');
+    eq('türetilen yıllık not yine hesaplanıyor',
+       /%\d+/.test(b.get('_yearlyNote()')), true);
+
+    // Asıl mesele: paket bulunabiliyor mu?
+    const res = await b.get("Billing.purchase('plus_monthly')");
+    check('bileşik kimlikli abonelik SATIN ALINABİLİYOR',
+          res && res.ok === true && !res.notFound,
+          'purchase() döndü: ' + JSON.stringify(res));
+  }
+  {
+    // Takma ad var olan bir kaydı EZMEMELİ: birebir eşleşme her zaman kazanır.
+    // Aksi hâlde 'plus_monthly' adında gerçek bir ürün varken bir aboneliğin
+    // taban planı onun fiyatını sessizce değiştirebilirdi.
+    const b = boot({ native: true, basePlanSuffix: 'aylik',
+      products: { plus_monthly: 149.99, plus_weekly: 44.99, plus_yearly: 499,
+                  diamonds_100: 89.99, diamonds_550: 379.99,
+                  diamonds_1800: 799.99, diamonds_6500: 1649.99 } });
+    await b.get('refreshPrices()');
+    await flush();
+    const t = b.B._offerings;
+    check('bileşik kimlik de düz kimlik de tabloda',
+          !!t['plus_monthly'] && !!t['plus_monthly:aylik'],
+          Object.keys(t).join(', '));
   }
   {
     // Mağazaya ulaşılamıyorsa NÖTR yer tutucu; eski sabit fiyata düşülmez.

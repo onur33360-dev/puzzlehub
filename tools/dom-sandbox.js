@@ -18,6 +18,25 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 
+// KAYNAK TARAMASI İÇİN DOSYA OKUMA — satır sonları NORMALİZE EDİLİR.
+//
+// Bu tek satır gerçek bir hatayı kapatıyor (2026-08-12). Harness'lerin
+// en güçlü katmanı kaynağı tarayan iddialar ve çoğu YAKINLIK regex'i:
+// "şu çağrı bundan sonraki 900 karakter içinde geçiyor mu". Windows'ta
+// çalışma kopyası CRLF olduğu için her satır sonu bir karakter FAZLA
+// sayılıyor, yani aynı kod depoda geçerken diskte düşebiliyor.
+//
+// Ölçülen örnek: badges-test'in "StreakSystem.checkIn() rozet kontrolü
+// tetikliyor" iddiasında mesafe LF'te 889, CRLF'te 907 — bütçe 900.
+// Yani iddia düşmeye 11 karakter uzaktaydı ve fark koda değil, dosyanın
+// nasıl checkout edildiğine bağlıydı. Windows'ta temiz bir `git clone`
+// yapan herkes bunu kırık bulurdu.
+//
+// Bir kaynak taraması KODU ölçmeli, satır sonu biçimini değil.
+function readSrc(rel) {
+  return fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+}
+
 // index.html'deki yükleme sırasının AYNISI. Sıra bozulursa gerçek
 // uygulamadaki hata burada da çıkmalı (bkz. CLAUDE.md §2).
 const LOAD_ORDER = ['core/rng.js', 'games/games.js', 'core/ui-kit.js',
@@ -121,4 +140,4 @@ function makeSandbox(store) {
   return { sb, store, byId, get, stubEl };
 }
 
-module.exports = { ROOT, LOAD_ORDER, makeSandbox, stubEl, ctx2d };
+module.exports = { ROOT, LOAD_ORDER, makeSandbox, stubEl, ctx2d, readSrc };

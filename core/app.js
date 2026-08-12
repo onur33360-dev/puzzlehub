@@ -2293,12 +2293,44 @@ const Billing = {
           const prod = pkg.product || {};
           const id = prod.identifier;
           if (!id) return;
-          table[id] = {
+          const entry = {
             priceString: prod.priceString, price: prod.price,
             currencyCode: prod.currencyCode, pkg: pkg,
           };
+          table[id] = entry;
+
+          // ABONELİKLER "subId:basePlanId" OLARAK GELİR — takma ad ŞART.
+          // Google Play'de bir aboneliğin altında taban planlar (base plan)
+          // var ve RevenueCat ürün kimliğini bileşik döndürüyor:
+          // 'plus_monthly:aylik'. Tek seferlik ürünlerde (diamonds_100) böyle
+          // bir şey yok, kimlik birebir kalıyor. Kaynak, paketin kendi tip
+          // tanımı: SubscriptionOption.storeProductId → "This will be
+          // subId:basePlanId" (offerings.d.ts).
+          //
+          // Bu yüzden elmas fiyatları GELİRKEN Plus fiyatları '—' kalıyordu:
+          // tablo 'plus_monthly:aylik' ile anahtarlanıyor, IAP.PLUS.monthly
+          // ise 'plus_monthly' soruyor. Cihazda gözlendi (2026-08-12).
+          //
+          // Fiyattan daha ağırı: purchase() de aynı tabloya bakıyor, yani
+          // Plus satın alma sessizce notFound dönüyordu.
+          //
+          // Taban plan kimliğini BİLMEYE gerek yok — iki nokta üstündeki
+          // kısım zaten ürün kimliği. Var olan bir kayıt EZİLMİYOR: birebir
+          // eşleşme her zaman kazanır, takma ad yalnızca boş yeri doldurur.
+          const base = id.split(':')[0];
+          if (base && base !== id && !table[base]) table[base] = entry;
         });
         this._offerings = table;
+
+        // Mağazanın GERÇEKTE ne döndürdüğünü tek satırda göster. Bir fiyat
+        // '—' kaldığında iki sebep var ve ikisi farklı yerde çözülüyor:
+        // (a) ürün/taban plan Play Console'da yok veya etkin değil → paket
+        //     hiç dönmez, (b) kimlik biçimi beklenenden farklı → paket döner
+        //     ama anahtar tutmaz. Bu satır ikisini ayırt eden tek kanıt;
+        //     cihazda `adb logcat | grep RC` ile okunuyor.
+        if (typeof console !== 'undefined') {
+          console.log('[RC] offerings: ' + Object.keys(table).join(', '));
+        }
         return table;
       });
     }).catch((e) => {
