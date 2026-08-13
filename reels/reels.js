@@ -9,7 +9,7 @@ const REEL_GAMES = [
   { id:'blockPuzzle', name:'Bulmaca Blokları', emoji:'🧱', category:'puzzle', desc:'Blokları yerleştir, satırları temizle!', difficulty:'Orta', gradient:['#7c3aed','#5b21b6'], playable:true },
   { id:'game2048', name:'2048', emoji:'🔢', category:'puzzle', desc:'Kaydır, birleştir, 2048\'e ulaş!', difficulty:'Kolay', gradient:['#d97706','#92400e'], playable:true },
   { id:'memoryGame', name:'Hafıza Oyunu', emoji:'🧠', category:'puzzle', desc:'Kartları eşleştir, hafızanı test et!', difficulty:'Kolay', gradient:['#0891b2','#155e75'], playable:true },
-  { id:'wordSearch', name:'Kelime Avı', emoji:'📝', category:'puzzle', desc:'Gizli kelimeleri bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
+  { id:'wordSearch', name:'Kelime Avı', emoji:'📝', category:'puzzle', desc:'Parmağınla sürükle, kelimeyi bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
   { id:'sudoku', name:'Sudoku', emoji:'#️⃣', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
   { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#1e2a63','#080b22'], playable:true },
   { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🔮', category:'puzzle', desc:'Enerji kanallarını doğru sırayla boşalt!', difficulty:'Kolay', gradient:['#2a1a5e','#0d0824'], playable:true },
@@ -333,75 +333,183 @@ MiniDemos.demo_memory = function(gradient) {
   };
 };
 
-// ———————— 4. Word Search Demo ————————
+// ———————— 3. Kelime Avı Demo ————————
+// AMAÇ: karta bakan oyuncuya SÜRÜKLEMEYİ ve özellikle ÇAPRAZIN mümkün
+// olduğunu göstermek. Eski demo harfleri tek tek yakıp söndürüyordu ve
+// üç kelimenin üçü de YATAYDI — yani oyunun asıl mekaniği hakkında
+// hiçbir şey söylemiyor, hatta çaprazın olmadığını ima ediyordu.
+//
+// Şimdi kelimenin üstünde oyunun kendi seçim kapsülü (aynı camgöbeği)
+// büyüyor: "parmak buradan buraya kaydı" fikri harflerin yanıp
+// sönmesinden çok daha doğrudan anlatılıyor. Sıra bilerek ÇAPRAZLA
+// başlıyor.
+//
+// OYNANABİLİR DEĞİL (sahip kararı) — girdi almıyor, dolayısıyla Keşfet'in
+// dikey kaydırmasıyla jest çakışması bu kartta YOK. touch-action'a da bu
+// yüzden hiç dokunulmuyor.
 MiniDemos.demo_wordSearch = function(gradient) {
   const el = document.createElement('div');
   el.className = 'reel-demo-inner';
   const SIZE = 8;
-  const ALPHA = 'ABCDEFGHIJKLMNOPRSTUVYZİÖÜÇŞĞ';
-  const WORDS = ['OYUN','SKOR','BLOK','RENK'];
   const state = { paused:false, raf:0 };
 
+  // Harfler ve kelimeler oyunun HAVUZUNDAN geliyor; kartın kendi kopyası
+  // yok. Havuz yoksa (yükleme sırası bozulmuşsa) kart yine çalışsın.
+  const W = (typeof WORDS_TR !== 'undefined') ? WORDS_TR : null;
+  const ALPHA = W ? W.FILLER_BAG : 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ';
+  function pickWords() {
+    if (!W) return ['KEDİ', 'DENİZ', 'GÜNEŞ'];
+    const src = W.byLength(4, 5);
+    if (src.length < 3) return ['KEDİ', 'DENİZ', 'GÜNEŞ'];
+    const out = [];
+    while (out.length < 3) {
+      const w = src[Math.floor(Math.random() * src.length)].w;
+      if (out.indexOf(w) === -1) out.push(w);
+    }
+    return out;
+  }
+  const WORDS = pickWords();
+
+  // Üç yerleşim, üç FARKLI yön — çapraz başta. Konumlar çakışmayacak
+  // biçimde seçildi: çapraz (1,1)→(5,5), yatay 6. satır sütun 1'den,
+  // dikey 6. sütun 0. satırdan.
+  const PLACES = [
+    { dr: 1, dc: 1, r: 1, c: 1 },   // çapraz ↘
+    { dr: 0, dc: 1, r: 6, c: 1 },   // yatay →
+    { dr: 1, dc: 0, r: 0, c: 6 },   // dikey ↓
+  ];
+
+  // SÜTUN SARMALI ŞART. `.reel-demo-inner` kendisi bir flex kutusu ve
+  // yönü SATIR — başlıkla ızgarayı doğrudan ona eklemek ikisini yan yana
+  // dizer ve ızgarayı ekrandan taşırır (cihazda tam olarak bu oldu).
+  // flowConnect demosu da aynı sebeple kendi `scene` sarmalını kuruyor.
+  const scene = document.createElement('div');
+  scene.style.cssText =
+    'display:flex;flex-direction:column;align-items:center;width:100%';
+
+  const caption = document.createElement('div');
+  caption.style.cssText =
+    'font:800 11px/1 var(--ph-font-display,inherit);letter-spacing:.10em;' +
+    'color:rgba(255,255,255,.55);text-align:center;margin-bottom:9px';
+  caption.textContent = 'ÇAPRAZ DA SÜRÜKLE';
+  scene.appendChild(caption);
+
+  // position:relative — seçim kapsülü mutlak konumlanıyor.
   const gridEl = document.createElement('div');
-  gridEl.style.cssText = 'display:grid;grid-template-columns:repeat(8,1fr);gap:2px;width:85%;max-width:260px;';
+  gridEl.style.cssText =
+    'position:relative;display:grid;grid-template-columns:repeat(8,1fr);' +
+    'gap:2px;width:85%;max-width:240px';
+
+  const line = document.createElement('div');
+  line.style.cssText =
+    'position:absolute;z-index:0;left:0;top:0;pointer-events:none;' +
+    'border-radius:999px;background:rgba(34,211,238,.30);' +
+    'box-shadow:0 0 14px rgba(34,211,238,.35);transform-origin:0 50%;display:none';
+  gridEl.appendChild(line);
+
   const cells = [];
-  const letters = [];
-  // Place first word horizontally at row 2
-  const wordPositions = [];
-  let wordIdx=0, charIdx=0;
-  for(let y=0;y<SIZE;y++) {
-    for(let x=0;x<SIZE;x++) {
+  const grid = [];
+  for (let y = 0; y < SIZE; y++) {
+    grid.push(new Array(SIZE).fill(''));
+  }
+  // Önce kelimeler, sonra dolgu — oyunun üreticisiyle aynı sıra.
+  const wordCells = WORDS.map((w, i) => {
+    const p = PLACES[i];
+    const list = [];
+    for (let k = 0; k < w.length; k++) {
+      const r = p.r + p.dr * k, c = p.c + p.dc * k;
+      grid[r][c] = w[k];
+      list.push({ r, c });
+    }
+    return list;
+  });
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (!grid[y][x]) grid[y][x] = ALPHA[Math.floor(Math.random() * ALPHA.length)];
       const c = document.createElement('div');
-      c.style.cssText = 'aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border-radius:4px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);transition:all 0.3s;';
-      let letter = ALPHA[Math.floor(Math.random()*ALPHA.length)];
-      // Plant words
-      if(wordIdx<WORDS.length) {
-        const w = WORDS[wordIdx];
-        const wy = wordIdx * 2;
-        if(y===wy && x>=1 && x<1+w.length) {
-          letter = w[x-1];
-          wordPositions.push({y,x,wi:wordIdx,ci:x-1});
-        }
-      }
-      c.textContent = letter;
-      letters.push(letter);
+      c.style.cssText =
+        'position:relative;z-index:1;aspect-ratio:1;display:flex;align-items:center;' +
+        'justify-content:center;font-size:12px;font-weight:800;border-radius:4px;' +
+        'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);' +
+        'transition:background .2s,color .2s,transform .2s';
+      c.textContent = grid[y][x];
       gridEl.appendChild(c);
       cells.push(c);
     }
-    if(y>0 && y%2===0) wordIdx = Math.min(wordIdx+1, WORDS.length-1);
   }
-  el.appendChild(gridEl);
+  scene.appendChild(gridEl);
+  el.appendChild(scene);
 
-  let stepTimer=0, highlightWord=0, highlightChar=0;
-  function drawFn(frame) {
-    stepTimer++;
-    if(stepTimer % 20 === 0) { // Highlight letters one by one
-      const wp = wordPositions.filter(p=>p.wi===highlightWord);
-      if(highlightChar < wp.length) {
-        const p = wp[highlightChar];
-        const c = cells[p.y*SIZE+p.x];
-        c.style.background = gradient[0];
+  const cellAt = (r, c) => cells[r * SIZE + c];
+  function resetCell(el2) {
+    el2.style.background = 'rgba(255,255,255,0.06)';
+    el2.style.color = 'rgba(255,255,255,0.7)';
+    el2.style.transform = 'scale(1)';
+  }
+
+  let wi = 0, shown = 0, tick = 0, phase = 'draw';
+  // ÖLÇÜM ANİMASYON İÇİNDE, kurulumda DEĞİL. Demo elemanı fabrika
+  // çalışırken henüz DOM'da değil (_startDemo önce üretip sonra
+  // ekliyor), yani burada okunacak genişlik SIFIR olur. Uydurma bir
+  // yedek değer koymak, ölçümün başarılı SANILMASINA ve kapsülün
+  // yanlış yere çizilmesine yol açardı — flowConnect'te tam olarak bu
+  // olmuştu (bkz. CLAUDE.md).
+  function paintLine(list, n) {
+    const rect = gridEl.getBoundingClientRect();
+    if (!rect.width) { line.style.display = 'none'; return; }
+    const gap = 2;
+    const cell = (rect.width - gap * (SIZE - 1)) / SIZE;
+    const step = cell + gap;
+    const a = list[0], b = list[Math.max(0, n - 1)];
+    const p1 = { x: step * a.c + cell / 2, y: step * a.r + cell / 2 };
+    const p2 = { x: step * b.c + cell / 2, y: step * b.r + cell / 2 };
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const th = cell * 0.86;
+    line.style.display = 'block';
+    line.style.width = (len + th) + 'px';
+    line.style.height = th + 'px';
+    line.style.transformOrigin = (th / 2) + 'px ' + (th / 2) + 'px';
+    line.style.transform =
+      'translate(' + (p1.x - th / 2) + 'px,' + (p1.y - th / 2) + 'px) rotate(' + ang + 'rad)';
+  }
+
+  function drawFn() {
+    tick++;
+    const list = wordCells[wi];
+
+    if (phase === 'draw') {
+      if (tick % 9) return;
+      shown++;
+      for (let i = 0; i < shown && i < list.length; i++) {
+        const c = cellAt(list[i].r, list[i].c);
+        c.style.background = 'transparent';   // renk kapsülden geliyor
         c.style.color = '#fff';
-        c.style.transform = 'scale(1.1)';
-        c.style.boxShadow = '0 0 12px '+gradient[0];
-        highlightChar++;
-      } else {
-        highlightChar = 0;
-        highlightWord = (highlightWord+1) % WORDS.length;
-        // Reset all
-        cells.forEach(c=>{
-          c.style.background='rgba(255,255,255,0.06)';
-          c.style.color='rgba(255,255,255,0.7)';
-          c.style.transform='scale(1)';
-          c.style.boxShadow='none';
-        });
-        // Keep previously completed words highlighted (green)
-        wordPositions.filter(p=>p.wi<highlightWord).forEach(p=>{
-          const c=cells[p.y*SIZE+p.x];
-          c.style.background='rgba(34,197,94,0.25)';
-          c.style.color='#86efac';
+        c.style.transform = 'scale(1.08)';
+      }
+      paintLine(list, shown);
+      if (shown >= list.length) { phase = 'hold'; tick = 0; }
+      return;
+    }
+
+    if (phase === 'hold') {
+      // Onay: kapsül gider, hücreler yeşile döner — oyundaki geçişin
+      // aynısı (nötr → camgöbeği seçim → yeşil onay).
+      if (tick === 12) {
+        line.style.display = 'none';
+        list.forEach(p => {
+          const c = cellAt(p.r, p.c);
+          c.style.background = 'rgba(34,197,94,0.25)';
+          c.style.color = '#86efac';
+          c.style.transform = 'scale(1)';
         });
       }
+      if (tick > 70) {
+        list.forEach(p => resetCell(cellAt(p.r, p.c)));
+        wi = (wi + 1) % wordCells.length;
+        shown = 0; tick = 0; phase = 'draw';
+      }
+      return;
     }
   }
   _demoLoop(state, drawFn);
