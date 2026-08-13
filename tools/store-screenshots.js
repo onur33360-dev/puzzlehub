@@ -64,7 +64,11 @@ const CROP_BOTTOM = 96;
 // olmalı: ilk iki kare dönüşümün çoğunu belirliyor, o yüzden ürünün
 // FARKI (Keşfet akışı / oyun çeşitliliği) başa konur.
 const CAPTIONS = {
-  '01_hub':       { title: '11 Oyun, Tek Uygulama',      sub: 'Kaydır, keşfet, oyna' },
+  // SAYI YOK ve bu bilinçli (2026-08-13, sahip karari). Sabit bir oyun
+  // sayisi her yeni oyunda basligi yalanci yapar ve guncellemesi birinin
+  // aklinda kalmasina bagli kalir — Kesfet'teki "yeni oyun" rozetinin
+  // sabit bayrak yerine TARIHE baglanmasiyla ayni gerekce.
+  '01_hub':       { title: 'Tek Uygulamada Bir Sürü Oyun', sub: 'Bulmaca ve arcade — yeni oyunlar düzenli eklenir' },
   '02_gameplay1': { title: 'Parmağınla Sürükle',          sub: 'Kelimeyi bul — çapraz da serbest' },
   '03_gameplay2': { title: 'Blokları Yerleştir',          sub: 'Satırları temizle, kombo yap' },
   '04_gameplay3': { title: 'Her Gün Yeni Bulmaca',        sub: 'Günlük meydan okuma herkese aynı' },

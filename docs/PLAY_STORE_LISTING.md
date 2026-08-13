@@ -3,7 +3,7 @@
 Play Console'a **kopyala-yapıştır** için hazır metinler ve form cevapları.
 Kaynak burasıdır: bir metin değişirse önce bu dosya güncellenir, sonra Console.
 
-Paket: `com.skyroonlabs.slyswipe` · Sürüm: `1.68.0` (`versionCode 2`)
+Paket: `com.skyroonlabs.slyswipe` · Sürüm: `1.69.2` (`versionCode 7`)
 
 ---
 
@@ -27,7 +27,7 @@ SlySwipe: Bulmaca & Oyunlar
 ## 2. Kısa açıklama (en fazla 80 karakter)
 
 ```
-11 oyun tek uygulamada. Sudoku'dan Yılan'a, kendi hızında, tamamen Türkçe.
+Tek uygulamada bir sürü oyun. Bulmacadan arcade'e, kendi hızında, Türkçe.
 ```
 
 ---
@@ -35,7 +35,7 @@ SlySwipe: Bulmaca & Oyunlar
 ## 3. Tam açıklama (en fazla 4000 karakter)
 
 ```
-SlySwipe — 11 oyun, tek uygulama.
+SlySwipe — tek uygulamada bir sürü oyun.
 
 Bulmaca sevenler için sakin ve akıcı bir oyun merkezi. Sayaç yok, süre baskısı
 yok: istediğin kadar düşün, istediğin oyunu istediğin an bırak.
@@ -45,7 +45,7 @@ Yeni bir oyun aramak zorunda değilsin. Keşfet sekmesinde parmağını kaydır,
 oynanabilir önizlemeler önüne gelsin. Beğendiğin kartta "Oyna"ya bas, doğrudan
 oyuna gir. Her tur farklı bir oyun — kataloğun tamamı birkaç kaydırmada.
 
-▸ 11 OYUN
+▸ ŞU AN OYNAYABİLECEKLERİN
 
 Bulmaca
 • Sudoku — üç zorluk, günlük bulmaca, hata hakkı sistemi
@@ -53,7 +53,7 @@ Bulmaca
 • İksir Sıralama — renkleri tüplerde ayır, hamle limitine dikkat et
 • Ok Bulmaca — okları sıkışmadan tahtadan çıkar
 • Akış Bağlantı — 70 seviye, aynı renkleri kesişmeden birleştir
-• Kelime Avı — ızgarada gizli kelimeleri bul
+• Kelime Avı — parmağınla sürükle, gizli kelimeleri bul
 • Hafıza Oyunu — kart eşleştirme
 • 2048 — sayıları birleştir
 • Resim Kaydır — karışan fotoğrafı yerine oturt, sonsuz seviye
@@ -93,7 +93,7 @@ https://onur33360-dev.github.io/slyswipe/gizlilik.html
 
 | Varlık | Boyut | Durum |
 |---|---|---|
-| Uygulama ikonu | 512×512 PNG | ✅ `assets/icons/icon-512.png` |
+| Uygulama ikonu | 512×512 **32-bit** PNG | ✅ `assets/store/play-icon-512.png` |
 | Öne çıkan grafik | 1024×500 PNG/JPEG | ✅ `assets/store/feature-graphic-1024x500.png` |
 | Telefon ekran görüntüsü | min 2, max 8 · en az 320 px | ✅ **8 adet** → `screenshots/store-ready/` |
 
