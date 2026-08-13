@@ -94,8 +94,42 @@ https://onur33360-dev.github.io/slyswipe/gizlilik.html
 | Varlık | Boyut | Durum |
 |---|---|---|
 | Uygulama ikonu | 512×512 PNG | ✅ `assets/icons/icon-512.png` |
-| Öne çıkan grafik | 1024×500 PNG/JPEG | ⏳ üretilecek |
-| Telefon ekran görüntüsü | min 2, max 8 · en az 320 px | ⏳ cihazdan alınacak |
+| Öne çıkan grafik | 1024×500 PNG/JPEG | ✅ `assets/store/feature-graphic-1024x500.png` |
+| Telefon ekran görüntüsü | min 2, max 8 · en az 320 px | ✅ **8 adet** → `screenshots/store-ready/` |
+
+### Ekran görüntüsü hattı (2026-08-13)
+
+```
+screenshots/raw/          cihazdan alınan ham kareler (1080×2400)
+      ↓  node tools/store-screenshots.js
+screenshots/store-ready/  Play'e yüklenecek 1350×2400 dosyalar
+```
+
+Betik tekrar kullanılabilir: yeni bir kare eklemek için dosyayı `raw/`
+içine koymak yeterli, başlığı `CAPTIONS` tablosuna yaz (yoksa başlıksız
+üretir). `--no-caption` sade sürüm, `--jpeg` PNG yerine JPEG verir.
+
+**HAM KARE OLDUĞU GİBİ YÜKLENEMEZ — iki şart birden ihlal ediliyor,
+ikisi de ret sebebi. Ölçüldü, varsayılmadı:**
+
+1. **En-boy oranı.** Galaxy A51 ekranı 1080×2400, oran **0.450**. Play en
+   dar **9:16 = 0.5625**'e izin veriyor; telefon ekranı bundan daha uzun.
+   Yani "kırp ve yükle" diye bir yol yok, yanlara pay eklenmek *zorunda*.
+   Çıktı tam **1350×2400 = 9:16**. Madem pay eklenecek, marka zeminine ve
+   başlığa dönüştürülüyor.
+2. **Alfa kanalı.** `screencap` 4 kanallı PNG üretiyor; Play alfasız
+   24-bit istiyor. Burada bir tuzak var: `sharp`'ın `flatten()`'ı
+   saydamlığı zemin rengiyle **doldurur ama kanalı kaldırmaz** — çıktı
+   hâlâ RGBA yazılır. `removeAlpha()` de gerekiyor. Betiğin kendi
+   uygunluk denetimi bunu yakaladı, yani denetim süs değil.
+
+Durum ve gezinme çubukları kırpılıyor (`CROP_TOP`/`CROP_BOTTOM`); operatör
+adı ve pil yüzdesi mağaza görselinde bilgi taşımıyor. **Bu iki sayı cihaza
+özeldir** — başka bir telefonla çekilirse yeniden ölçülmeli.
+
+> `assets/store/screenshots/` altındaki 6 kare Huawei'den alınmış **ham**
+> görüntülerdir ve bu hatla üretilenler onların yerini alır. Silinmedi,
+> ama mağazaya yüklenecek olan `store-ready/` çıktısıdır.
 
 **Ekran görüntüsü çekim listesi** (sıra mağazada göründüğü sıradır — ilk iki
 kare dönüşümün çoğunu belirler, en güçlü ikisi başa):
