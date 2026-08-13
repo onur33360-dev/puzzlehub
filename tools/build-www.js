@@ -41,6 +41,7 @@ const SHIP = [
   'core/daily.js',
   'core/app.js',
   'games/games.js',
+  'games/words-tr.js',
   'reels/reels.js',
   'assets/icons',
   // Jigsaw'in yerel garanti gorsel havuzu (~1.1 MB, 6 dosya). APK'ya

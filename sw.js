@@ -47,6 +47,7 @@ const SHELL_ASSETS = [
   // Kabuk tasarım sistemi. style.css'ten SONRA yukleniyor.
   './core/ui-shell.css',
   './core/rng.js',
+  './games/words-tr.js',
   './games/games.js',
   './core/ui-kit.js',
   './core/daily.js',

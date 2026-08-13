@@ -39,7 +39,7 @@ function readSrc(rel) {
 
 // index.html'deki yükleme sırasının AYNISI. Sıra bozulursa gerçek
 // uygulamadaki hata burada da çıkmalı (bkz. CLAUDE.md §2).
-const LOAD_ORDER = ['core/rng.js', 'games/games.js', 'core/ui-kit.js',
+const LOAD_ORDER = ['core/rng.js', 'games/words-tr.js', 'games/games.js', 'core/ui-kit.js',
                     'reels/reels.js', 'core/daily.js', 'core/app.js'];
 
 function ctx2d() {

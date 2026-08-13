@@ -557,7 +557,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.68.2';
+    const APP_VERSION = '1.69.0';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile
@@ -706,6 +706,10 @@
     // rng.js EN ÖNCE: games.js'teki bulmaca üreticisi phRng/phShuffle/
     // phRandomSeed'e bağımlı.
     loadScript('core/rng.js', function(){
+      // words-tr.js games.js'ten ÖNCE: Kelime Avı'nın üreteci havuzu
+      // window.WORDS_TR üzerinden okuyor. Dosya YALNIZCA veri — hiçbir şeye
+      // bağımlı değil, o yüzden zincirin en başına yakın duruyor.
+      loadScript('games/words-tr.js', function(){
       loadScript('games/games.js', function(){
         loadScript('core/ui-kit.js', function(){
           loadScript('reels/reels.js', function(){
@@ -719,6 +723,7 @@
             });
           });
         });
+      });
       });
     });
 

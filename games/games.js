@@ -1761,104 +1761,551 @@ PuzzleGames.memoryGame = (() => {
 // ║       3. KELIME AVI                  ║
 // ╚══════════════════════════════════════╝
 PuzzleGames.wordSearch = (() => {
-  const WORDS = ['OYUN','SKOR','PUAN','BLOK','RENK','HARF','LEVEL','PUZZLE'];
-  const SIZE = 10;
-  let grid, placed, found, selStart, container;
+  // ─────────────────────────────────────────────────────────────────────
+  //  KELIME AVI — sürüklemeli seçim + sonsuz seviye (2026-08-13)
+  // ─────────────────────────────────────────────────────────────────────
+  //
+  // ÖNCEKİ HÂLİ: ilk harfe dokun → son harfe dokun → doğrula. Sekiz sabit
+  // kelime, tek tahta, çapraz YOK, seviye YOK. Yerleştirici 100 rastgele
+  // deneme yapıp sessizce pes ediyordu; yerleşemeyen kelime `placed`'a
+  // girmiyor ama alttaki listede ÇİPİ görünmeye devam ediyordu — yani
+  // oyuncuya tahtada olmayan bir kelime gösterilebiliyordu.
+  //
+  // RENDERER DOM'DA KALDI ve bu bilinçli bir seçim (docs/04_CANVAS_POLICY
+  // kararın uygulamadan ÖNCE verilmesini istiyor). Canvas ölçütlerinin
+  // ikisi de burada geçerli değil: tahta bütün olarak yeniden çizilmiyor
+  // ve sürekli hareket yok. Sürüklemede yalnızca birkaç hücrenin sınıfı
+  // değişiyor. Asıl sorun render değil, eski kodun her işlemde tüm
+  // innerHTML'i yeniden kurmasıydı; artık hücre referansları tutuluyor.
+  const LV_KEY = 'ph_wordsearch_level';
 
-  function init(c) {
-    container = c; found = []; selStart = null;
-    gameEvent('game_started', { gameId: 'wordSearch' });
-    grid = Array.from({length:SIZE}, () => Array(SIZE).fill(''));
-    placed = [];
-    WORDS.forEach(w => placeWord(w));
-    // Boş yerleri doldur
-    const ABC = 'ABCDEFGHIJKLMNOPRSTUVYZİÖÜÇŞĞ';
-    grid.forEach((r,y) => r.forEach((v,x) => { if(!v) grid[y][x] = ABC[Math.floor(Math.random()*ABC.length)] }));
-    injectStyle('css-ws', `
-      .ws-grid{display:grid;grid-template-columns:repeat(${SIZE},1fr);gap:3px;width:100%;max-width:360px}
-      .ws-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;border-radius:6px;background:rgba(255,255,255,0.06);cursor:pointer;user-select:none;transition:all .15s}
-      .ws-cell.sel{background:rgba(168,85,247,0.3);color:#e9d5ff}
-      .ws-cell.found{background:rgba(34,197,94,0.2);color:#86efac}
-      .ws-words{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
-      .ws-w{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(255,255,255,0.06)}
-      .ws-w.done{background:rgba(34,197,94,0.15);color:#86efac;text-decoration:line-through}
-    `);
-    render();
+  // TÜRKÇE BÜYÜTME. JS'in varsayılanı bu dilde YANLIŞ:
+  //   'i'.toUpperCase() → 'I'  (doğrusu 'İ'),  'I'.toLowerCase() → 'i'
+  // Havuz zaten büyük harf, ama karşılaştırmalar yine buradan geçiyor:
+  // ileride havuza küçük harfli bir kelime eklenirse sessizce eşleşmemek
+  // yerine doğru büyütülmeli.
+  const TRUP = (s) => String(s).toLocaleUpperCase('tr');
+
+  // Sekiz yön: [satır, sütun]. Ters yönler AYRI kayıt — bir kelimenin
+  // ters yerleştirilmesi ile ters okunması farklı şeyler ve ikisi de
+  // destekleniyor.
+  const D_E = [0, 1], D_W = [0, -1], D_S = [1, 0], D_N = [-1, 0];
+  const D_SE = [1, 1], D_NW = [-1, -1], D_SW = [1, -1], D_NE = [-1, 1];
+  const DIRS_ALL = [D_E, D_W, D_S, D_N, D_SE, D_NW, D_SW, D_NE];
+  // Erken seviyeler: yalnızca ileri yatay/dikey + iki kolay çapraz.
+  const DIRS_EASY = [D_E, D_S, D_SE, D_NE];
+  const DIRS_MED = [D_E, D_S, D_SE, D_NE, D_W, D_N];
+
+  // Zorluk KADEMELERİ. Kelime sayısı sonsuza kadar artmıyor (8'de
+  // duruyor) — şartnamenin kuralı: zorluk yerleşimden ve yönden gelsin,
+  // ekrandaki çip sayısından değil. Izgara da telefonda okunabilirlik
+  // için 12'de tavan yapıyor; daha büyüğü harfleri okunmaz yapardı.
+  function paramsFor(lv) {
+    if (lv <= 5)  return { size: 10, count: 5, dirs: DIRS_EASY, minLen: 3, maxLen: 6, overlapBias: 0 };
+    if (lv <= 10) return { size: 10, count: 6, dirs: DIRS_MED,  minLen: 3, maxLen: 7, overlapBias: 1 };
+    if (lv <= 20) return { size: 11, count: 6, dirs: DIRS_ALL,  minLen: 4, maxLen: 8, overlapBias: 2 };
+    if (lv <= 40) return { size: 11, count: 7, dirs: DIRS_ALL,  minLen: 4, maxLen: 9, overlapBias: 3 };
+    return          { size: 12, count: 8, dirs: DIRS_ALL,  minLen: 4, maxLen: 10, overlapBias: 4 };
   }
-  function placeWord(word) {
-    const dirs = [[0,1],[1,0]]; // yatay, dikey
-    for(let attempt=0; attempt<100; attempt++) {
-      const [dy,dx] = dirs[Math.floor(Math.random()*dirs.length)];
-      const y = Math.floor(Math.random()*(SIZE - (dy?word.length:0)));
-      const x = Math.floor(Math.random()*(SIZE - (dx?word.length:0)));
-      let ok = true;
-      for(let i=0;i<word.length;i++){const cy=y+i*dy,cx=x+i*dx;const v=grid[cy][cx];if(v&&v!==word[i]){ok=false;break}}
-      if(ok){
-        const cells=[];
-        for(let i=0;i<word.length;i++){const cy=y+i*dy,cx=x+i*dx;grid[cy][cx]=word[i];cells.push(`${cy},${cx}`)}
-        placed.push({word,cells});
-        return;
-      }
+
+  // ── Kelime torbası ──────────────────────────────────────────────────
+  // KARIŞTIRILMIŞ TORBA, bağımsız çekiliş DEĞİL. Aynı desen depoda iki
+  // kez kayıtlı (Keşfet kart sırası, Jigsaw görsel rotasyonu) ve sebebi
+  // aynı: bağımsız çekiliş kümelenir, bazı kelimeler üst üste gelirken
+  // bazıları hiç çıkmaz. Torba tükenmeden bir kelime ikinci kez gelmez.
+  let bag = [];
+  function refillBag(pool) {
+    bag = pool.slice();
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = bag[i]; bag[i] = bag[j]; bag[j] = t;
     }
   }
+  function pickWords(p) {
+    const src = (typeof WORDS_TR !== 'undefined' && WORDS_TR)
+      ? WORDS_TR.byLength(p.minLen, Math.min(p.maxLen, p.size))
+      : [];
+    // Havuz yoksa (yükleme sırası bozulmuşsa) oyun çökmesin.
+    if (!src.length) return ['OYUN', 'SKOR', 'PUAN', 'RENK', 'HARF'];
+    const words = [];
+    let guard = 0;
+    while (words.length < p.count && guard++ < 500) {
+      if (!bag.length) refillBag(src);
+      const item = bag.pop();
+      if (!item) break;
+      const w = TRUP(item.w);
+      // Aynı tahtada aynı kelime iki kez olmasın; uzunluk da tahtaya sığsın.
+      if (w.length > p.size || words.indexOf(w) !== -1) continue;
+      words.push(w);
+    }
+    return words;
+  }
+
+  // ── Üretici ─────────────────────────────────────────────────────────
+  // SIRA ŞART: önce hedef kelimeler yerleşir, SONRA boşluklar dolar.
+  // Tersi (önce rastgele harf, sonra kelime ara) bulmacanın çözülebilir
+  // olduğunu garanti etmez.
+  function fits(grid, word, r, c, d, size) {
+    const er = r + d[0] * (word.length - 1);
+    const ec = c + d[1] * (word.length - 1);
+    if (er < 0 || er >= size || ec < 0 || ec >= size) return -1;
+    let overlap = 0;
+    for (let i = 0; i < word.length; i++) {
+      const v = grid[r + d[0] * i][c + d[1] * i];
+      if (!v) continue;
+      if (v !== word[i]) return -1;   // çakışma: harf tutmuyor
+      overlap++;                       // yasal örtüşme: aynı harf
+    }
+    return overlap;
+  }
+
+  // Rastgele deneyip pes etmek YERİNE bütün yasal yerleşimleri sayıyoruz.
+  // 8 yön × 12² hücre × ≤10 harf ≈ 11 bin işlem — telefonda önemsiz, ve
+  // TÜKETİCİ olduğu için "yer vardı ama şansımız yaver gitmedi" durumu
+  // ortadan kalkıyor. Eski kodun 100 rastgele denemesi tam da bu yüzden
+  // sessizce başarısız oluyordu.
+  function placeOne(grid, word, p) {
+    const opts = [];
+    for (let di = 0; di < p.dirs.length; di++) {
+      const d = p.dirs[di];
+      for (let r = 0; r < p.size; r++) {
+        for (let c = 0; c < p.size; c++) {
+          const ov = fits(grid, word, r, c, d, p.size);
+          if (ov >= 0) opts.push({ r, c, d, ov });
+        }
+      }
+    }
+    if (!opts.length) return null;
+    // Örtüşme tercihi seviyeyle artıyor: iç içe geçmiş tahta daha zor
+    // okunur. Yine de rastgelelik korunuyor, yoksa her tahta aynı
+    // karakteri taşırdı.
+    const maxOv = opts.reduce((m, o) => Math.max(m, o.ov), 0);
+    const want = Math.min(p.overlapBias, maxOv);
+    const pref = opts.filter(o => o.ov >= want);
+    const pool = pref.length ? pref : opts;
+    const ch = pool[Math.floor(Math.random() * pool.length)];
+    const cells = [];
+    for (let i = 0; i < word.length; i++) {
+      const rr = ch.r + ch.d[0] * i, cc = ch.c + ch.d[1] * i;
+      grid[rr][cc] = word[i];
+      cells.push(rr + ',' + cc);
+    }
+    return { word, cells };
+  }
+
+  // Bir kelimenin tahtada kaç kez geçtiğini say (8 yönde). Dolgu harfleri
+  // kazara hedef kelimeyi ikinci kez üretebiliyor; o zaman oyuncu doğru
+  // bir yol çizip reddedilir ya da yanlış yeri yeşile boyarız.
+  function countOccurrences(grid, word, size) {
+    let n = 0;
+    for (let di = 0; di < DIRS_ALL.length; di++) {
+      const d = DIRS_ALL[di];
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          const er = r + d[0] * (word.length - 1);
+          const ec = c + d[1] * (word.length - 1);
+          if (er < 0 || er >= size || ec < 0 || ec >= size) continue;
+          let ok = true;
+          for (let i = 0; i < word.length; i++) {
+            if (grid[r + d[0] * i][c + d[1] * i] !== word[i]) { ok = false; break; }
+          }
+          if (ok) n++;
+        }
+      }
+    }
+    return n;
+  }
+
+  function fillBlanks(grid, placedWords, p) {
+    const FB = (typeof WORDS_TR !== 'undefined' && WORDS_TR)
+      ? WORDS_TR.FILLER_BAG : 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ';
+    const blanks = [];
+    for (let r = 0; r < p.size; r++)
+      for (let c = 0; c < p.size; c++)
+        if (!grid[r][c]) blanks.push([r, c]);
+
+    // Dolguyu birkaç kez yeniden atıyoruz ve hedef kelimenin İKİNCİ bir
+    // kopyasını üretmediğinden emin oluyoruz. Sınırlı deneme: bu bir
+    // cila, doğruluk şartı değil — sonsuz döngüye asla girmemeli.
+    for (let attempt = 0; attempt < 12; attempt++) {
+      for (let i = 0; i < blanks.length; i++) {
+        grid[blanks[i][0]][blanks[i][1]] = FB[Math.floor(Math.random() * FB.length)];
+      }
+      let clean = true;
+      for (let i = 0; i < placedWords.length; i++) {
+        if (countOccurrences(grid, placedWords[i].word, p.size) > 1) { clean = false; break; }
+      }
+      if (clean) return;
+    }
+    // Temizlenemediyse tahta yine oynanabilir (kelimeler yerinde);
+    // yalnızca kazara bir ikizi olabilir. Oyunu bunun için bozmuyoruz.
+  }
+
+  function buildBoard(lv) {
+    const p = paramsFor(lv);
+    // Tahta denemesi: kelime kümesi yerleşemezse YENİ küme çekilir.
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const words = pickWords(p);
+      if (!words.length) break;
+      const grid = Array.from({ length: p.size }, () => Array(p.size).fill(''));
+      const placedList = [];
+      // UZUN KELİME ÖNCE: yer daralmadan yerleşsin. Kısa olanı sona
+      // bırakmak, başarısızlık ihtimalini belirgin biçimde düşürüyor.
+      const sorted = words.slice().sort((a, b) => b.length - a.length);
+      let ok = true;
+      for (let i = 0; i < sorted.length; i++) {
+        const res = placeOne(grid, sorted[i], p);
+        if (!res) { ok = false; break; }
+        placedList.push(res);
+      }
+      if (!ok) continue;
+      fillBlanks(grid, placedList, p);
+      return { size: p.size, grid: grid, placed: placedList };
+    }
+    // SON ÇARE: en küçük ayarla, kesin yerleşen bir tahta. Buraya
+    // düşmek beklenmiyor ama oyun asla boş ekranla kalmamalı.
+    const p2 = { size: 10, count: 4, dirs: [D_E, D_S], minLen: 3, maxLen: 6, overlapBias: 0 };
+    const words = pickWords(p2);
+    const grid = Array.from({ length: p2.size }, () => Array(p2.size).fill(''));
+    const placedList = [];
+    for (let i = 0; i < words.length; i++) {
+      const res = placeOne(grid, words[i], p2);
+      if (res) placedList.push(res);
+    }
+    fillBlanks(grid, placedList, p2);
+    return { size: p2.size, grid: grid, placed: placedList };
+  }
+
+  // ── Durum ───────────────────────────────────────────────────────────
+  let container, boardEl, lineEl, hudLv, hudProg, wordsEl;
+  let size, grid, placed, foundWords, foundCells, cellEls;
+  let level, score, locked, ro;
+  // Sürükleme durumu
+  let dragging, startRC, curCells, curDir;
+
+  function loadLevel() {
+    try {
+      const v = parseInt(localStorage.getItem(LV_KEY), 10);
+      return (isFinite(v) && v >= 1) ? v : 1;
+    } catch (e) { return 1; }
+  }
+  function saveLevel(v) {
+    try { localStorage.setItem(LV_KEY, String(v)); } catch (e) {}
+  }
+
+  function init(c) {
+    container = c;
+    level = loadLevel();
+    score = 0;
+    injectCSS();
+    startLevel(level);
+  }
+
+  // TUR = SEVİYE. game_started her seviyede yayılıyor, init'te bir kez
+  // değil: seviye tamamlanınca game_ended('won') gidiyor ve başlangıç
+  // yayılmasaydı 1 başlangıca karşı N kazanma birikirdi — kazanma oranı
+  // dahil her türetilmiş metrik saçmalardı (Water Sort/Arrow/Jigsaw'da
+  // belgelenmiş aynı kural).
+  function startLevel(lv) {
+    level = lv;
+    saveLevel(level);
+    locked = false;
+    dragging = false; startRC = null; curCells = []; curDir = null;
+    foundWords = [];
+    foundCells = new Set();
+    const b = buildBoard(level);
+    size = b.size; grid = b.grid; placed = b.placed;
+    gameEvent('game_started', { gameId: 'wordSearch' });
+    render();
+    updateGameScore(score);
+  }
+
+  function injectCSS() {
+    injectStyle('css-ws', `
+      .ws-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+      .ws-hud{display:flex;align-items:center;justify-content:center;gap:14px;
+        font:800 12px/1 var(--ph-font-display,inherit);letter-spacing:.08em;
+        color:var(--ph-text-tertiary,rgba(255,255,255,.55))}
+      .ws-hud b{color:#fff;font-size:15px;font-variant-numeric:tabular-nums}
+      /* Tahta position:relative — seçim çizgisi mutlak konumlanıyor. */
+      .ws-grid{position:relative;display:grid;gap:3px;width:100%;max-width:380px;
+        touch-action:none;user-select:none;-webkit-user-select:none}
+      .ws-cell{position:relative;z-index:1;aspect-ratio:1;display:flex;
+        align-items:center;justify-content:center;font-weight:800;
+        border-radius:7px;background:rgba(255,255,255,0.06);
+        color:rgba(255,255,255,.86);
+        transition:background .12s,color .12s,transform .12s}
+      /* SEÇİM SIRASINDA arka plan ŞEFFAF: renk alttaki çizgiden geliyor,
+         yoksa hücre kutuları çizginin üstünü kapatırdı. */
+      .ws-cell.sel{background:transparent;color:#fff;transform:scale(1.08)}
+      .ws-cell.found{background:rgba(34,197,94,0.22);color:#86efac}
+      .ws-cell.pop{animation:wsPop .32s ease-out}
+      @keyframes wsPop{0%{transform:scale(1)}45%{transform:scale(1.22)}100%{transform:scale(1)}}
+      /* Seçim çizgisi: harflerin ALTINDA (z-index 0), yuvarlak uçlu. */
+      .ws-line{position:absolute;z-index:0;left:0;top:0;pointer-events:none;
+        border-radius:999px;background:rgba(34,211,238,.30);
+        box-shadow:0 0 14px rgba(34,211,238,.35);
+        transform-origin:0 50%;display:none}
+      .ws-words{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+      .ws-w{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:700;
+        background:rgba(255,255,255,0.06);color:rgba(255,255,255,.75);
+        transition:background .2s,color .2s}
+      .ws-w.done{background:rgba(34,197,94,0.16);color:#86efac;text-decoration:line-through}
+      .ws-flash{animation:wsFlash .5s ease-out}
+      @keyframes wsFlash{0%{filter:brightness(1)}40%{filter:brightness(1.5)}100%{filter:brightness(1)}}
+    `);
+  }
+
   function render() {
-    const foundCells = new Set(found.flatMap(w => placed.find(p=>p.word===w)?.cells||[]));
-    container.innerHTML = `
-      <div class="ws-grid">${grid.map((r,y)=>r.map((v,x)=>{
-        const key=`${y},${x}`;const isFnd=foundCells.has(key);
-        return `<div class="ws-cell ${isFnd?'found':''}" data-y="${y}" data-x="${x}">${v}</div>`
-      }).join('')).join('')}</div>
-      <div class="ws-words">${WORDS.map(w=>`<span class="ws-w ${found.includes(w)?'done':''}">${w}</span>`).join('')}</div>`;
-    container.querySelectorAll('.ws-cell:not(.found)').forEach(el => {
-      addEv(el, 'click', () => onCellClick(+el.dataset.y, +el.dataset.x));
+    const words = placed.map(p => p.word);
+    container.innerHTML =
+      '<div class="ws-wrap">' +
+        '<div class="ws-hud">SEVİYE <b data-ws-lv></b>' +
+          '<span>·</span><b data-ws-prog></b> KELİME</div>' +
+        '<div class="ws-grid"><div class="ws-line"></div></div>' +
+        '<div class="ws-words"></div>' +
+      '</div>';
+    boardEl = container.querySelector('.ws-grid');
+    lineEl = container.querySelector('.ws-line');
+    hudLv = container.querySelector('[data-ws-lv]');
+    hudProg = container.querySelector('[data-ws-prog]');
+    wordsEl = container.querySelector('.ws-words');
+
+    boardEl.style.gridTemplateColumns = 'repeat(' + size + ',1fr)';
+    // Harf boyutu ızgarayla ölçekleniyor; 12x12'de sabit 14px okunmuyordu.
+    boardEl.style.fontSize = (size >= 12 ? 12 : size >= 11 ? 13 : 14) + 'px';
+
+    cellEls = [];
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const el = document.createElement('div');
+        el.className = 'ws-cell';
+        el.textContent = grid[r][c];
+        boardEl.appendChild(el);
+        cellEls.push(el);
+      }
+    }
+    wordsEl.innerHTML = words.map(w => '<span class="ws-w" data-w="' + w + '">' + w + '</span>').join('');
+    updateHud();
+    bindInput();
+  }
+
+  function updateHud() {
+    if (hudLv) hudLv.textContent = level;
+    if (hudProg) hudProg.textContent = foundWords.length + '/' + placed.length;
+  }
+  const cellAt = (r, c) => cellEls[r * size + c];
+
+  // ── Girdi ───────────────────────────────────────────────────────────
+  // pointerdown TAHTADA, move/up PENCEREDE: parmak tahtanın dışına
+  // çıkabiliyor ve orada bırakıldığında seçim asılı kalmamalı.
+  // setPointerCapture BİLEREK YOK — yakalama sonraki `click`'i yakalayan
+  // elemana yönlendiriyor ve bu depoda bir kez Ok Bulmaca'yı tamamen
+  // oynanamaz yapmıştı (CLAUDE.md, phCamera maddesi).
+  function bindInput() {
+    addEv(boardEl, 'pointerdown', onDown);
+    addEv(window, 'pointermove', onMove);
+    addEv(window, 'pointerup', onUp);
+    // pointercancel ŞART: sistem jesti (kenardan geri, bildirim çubuğu,
+    // ikinci parmak) devraldığında pointerup HİÇ GELMEZ ve seçim sonsuza
+    // kadar açık kalır. "Hayalet çerçeve" hatasının sebebi buydu.
+    addEv(window, 'pointercancel', onCancel);
+    if (ro) { ro.disconnect(); ro = null; }
+    if (typeof ResizeObserver !== 'undefined') {
+      // Hücre boyutu değişince çizginin geometrisi bozulur; tek ölçüm
+      // yetmiyor (ilk layout oturmadan okunabiliyor).
+      ro = new ResizeObserver(() => { if (dragging) paintSelection(); });
+      ro.observe(boardEl);
+    }
+  }
+
+  function metrics() {
+    const rect = boardEl.getBoundingClientRect();
+    const gap = 3;
+    const cell = (rect.width - gap * (size - 1)) / size;
+    return { rect, gap, cell, step: cell + gap };
+  }
+  function centerOf(r, c, m) {
+    return { x: m.step * c + m.cell / 2, y: m.step * r + m.cell / 2 };
+  }
+  function cellFromPoint(x, y, m) {
+    const lx = x - m.rect.left, ly = y - m.rect.top;
+    const c = Math.floor(lx / m.step), r = Math.floor(ly / m.step);
+    if (r < 0 || r >= size || c < 0 || c >= size) return null;
+    return { r, c };
+  }
+
+  function onDown(e) {
+    if (locked) return;
+    const m = metrics();
+    const rc = cellFromPoint(e.clientX, e.clientY, m);
+    if (!rc) return;
+    // Tarayıcının kendi metin seçimi/kaydırması devreye girmesin.
+    if (e.cancelable) e.preventDefault();
+    dragging = true;
+    startRC = rc;
+    curDir = null;
+    curCells = [rc.r + ',' + rc.c];
+    paintSelection();
+  }
+
+  // BAĞIŞLAYICI İSABET: hücre merkezlerine basmak GEREKMİYOR. Başlangıç
+  // hücresinin merkezinden parmağa giden vektör alınıp sekiz yönden
+  // açıca en yakınına yansıtılıyor; uzunluk da o yansımadan çıkıyor.
+  // Bunun üç yan faydası var ve üçü de şartnamede ayrı ayrı isteniyordu:
+  //  • yön kilidi bedava geliyor (zikzak imkânsız),
+  //  • geri sarma bedava geliyor (parmak geri gelince uzunluk kısalıyor),
+  //  • hızlı sürüklemede aradaki hücrelere HİÇ değmese bile doğru çalışıyor
+  //    (konumdan hesaplanıyor, geçilen hücrelerden değil).
+  function onMove(e) {
+    if (!dragging || locked) return;
+    if (e.cancelable) e.preventDefault();
+    const m = metrics();
+    const s = centerOf(startRC.r, startRC.c, m);
+    const dx = (e.clientX - m.rect.left) - s.x;
+    const dy = (e.clientY - m.rect.top) - s.y;
+    const dist = Math.hypot(dx, dy);
+
+    // Ölü bölge: parmak hâlâ ilk hücrenin üstündeyse tek harf seçili.
+    if (dist < m.cell * 0.45) {
+      curDir = null;
+      setCells([startRC.r + ',' + startRC.c]);
+      return;
+    }
+    let best = null, bestProj = -Infinity;
+    for (let i = 0; i < DIRS_ALL.length; i++) {
+      const d = DIRS_ALL[i];
+      const len = Math.hypot(d[0], d[1]);
+      const proj = (dx * d[1] + dy * d[0]) / len;   // d = [satır, sütun]
+      if (proj > bestProj) { bestProj = proj; best = d; }
+    }
+    curDir = best;
+    const stepLen = m.step * Math.hypot(best[0], best[1]);
+    let n = Math.round(bestProj / stepLen);
+    if (n < 0) n = 0;
+    // Izgara dışına taşma: yönde kalan hücre kadar kırp.
+    const maxR = best[0] > 0 ? (size - 1 - startRC.r) : best[0] < 0 ? startRC.r : Infinity;
+    const maxC = best[1] > 0 ? (size - 1 - startRC.c) : best[1] < 0 ? startRC.c : Infinity;
+    n = Math.min(n, maxR, maxC);
+    const cells = [];
+    for (let i = 0; i <= n; i++) {
+      cells.push((startRC.r + best[0] * i) + ',' + (startRC.c + best[1] * i));
+    }
+    setCells(cells);
+  }
+
+  // Yalnızca DEĞİŞEN hücrelerin sınıfı güncelleniyor; her pointermove'da
+  // tahtayı yeniden kurmak sürüklemeyi tutuklaştırırdı.
+  function setCells(cells) {
+    if (cells.length === curCells.length) {
+      let same = true;
+      for (let i = 0; i < cells.length; i++) if (cells[i] !== curCells[i]) { same = false; break; }
+      if (same) return;
+    }
+    curCells = cells;
+    paintSelection();
+  }
+
+  function paintSelection() {
+    for (let i = 0; i < cellEls.length; i++) cellEls[i].classList.remove('sel');
+    if (!dragging || !curCells.length) { if (lineEl) lineEl.style.display = 'none'; return; }
+    for (let i = 0; i < curCells.length; i++) {
+      const p = curCells[i].split(',');
+      const el = cellAt(+p[0], +p[1]);
+      if (el && !el.classList.contains('found')) el.classList.add('sel');
+    }
+    const m = metrics();
+    const a = curCells[0].split(','), b = curCells[curCells.length - 1].split(',');
+    const p1 = centerOf(+a[0], +a[1], m), p2 = centerOf(+b[0], +b[1], m);
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const thick = m.cell * 0.82;
+    lineEl.style.display = 'block';
+    lineEl.style.width = (len + thick) + 'px';
+    lineEl.style.height = thick + 'px';
+    lineEl.style.transform =
+      'translate(' + (p1.x - thick / 2) + 'px,' + (p1.y - thick / 2) + 'px) rotate(' + ang + 'rad)';
+    lineEl.style.transformOrigin = (thick / 2) + 'px ' + (thick / 2) + 'px';
+  }
+
+  function onCancel() {
+    if (!dragging) return;
+    dragging = false; curCells = []; curDir = null;
+    paintSelection();
+  }
+
+  function onUp() {
+    if (!dragging || locked) return;
+    const cells = curCells.slice();
+    dragging = false;
+    curCells = [];
+    paintSelection();
+    if (cells.length < 2) return;      // dokunuş, sürükleme değil
+    validate(cells);
+  }
+
+  function validate(cells) {
+    const str = cells.map(k => { const p = k.split(','); return grid[+p[0]][+p[1]]; }).join('');
+    const rev = [...str].reverse().join('');
+    const hit = placed.find(p =>
+      foundWords.indexOf(p.word) === -1 && (p.word === str || p.word === rev));
+    if (!hit) {
+      // Yanlış seçim: sessizce geri al. Uyarı penceresi yok — bu oyun
+      // akışı bozmamak üzerine kurulu (bkz. akış-değil-stres ilkesi).
+      GameAudio.play('tap');
+      return;
+    }
+    foundWords.push(hit.word);
+    // KANONİK hücreler yeşile boyanıyor, oyuncunun çizdiği değil: ikisi
+    // normalde aynı, ama dolgu kazara bir ikiz üretmişse tahta ile
+    // kelime listesi arasında çelişki çıkmasın.
+    hit.cells.forEach(k => foundCells.add(k));
+    hit.cells.forEach(k => {
+      const p = k.split(',');
+      const el = cellAt(+p[0], +p[1]);
+      if (el) { el.classList.remove('sel'); el.classList.add('found', 'pop'); }
     });
+    const chip = wordsEl.querySelector('[data-w="' + hit.word + '"]');
+    if (chip) chip.classList.add('done');
+    score += hit.word.length * 10;
+    updateGameScore(score);
+    updateHud();
+    GameAudio.play('match'); GameAudio.haptic(12);
+    if (foundWords.length === placed.length) levelComplete();
   }
-  function onCellClick(y,x) {
-    if (!selStart) { selStart = {y,x}; highlightSel(y,x,y,x); return; }
-    // İki nokta arası kontrol
-    const sy=selStart.y, sx=selStart.x;
-    selStart = null;
-    // Yatay mı dikey mi?
-    let cells = [];
-    if (sy===y) { // yatay
-      const minX=Math.min(sx,x), maxX=Math.max(sx,x);
-      for(let i=minX;i<=maxX;i++) cells.push(`${y},${i}`);
-    } else if (sx===x) { // dikey
-      const minY=Math.min(sy,y), maxY=Math.max(sy,y);
-      for(let i=minY;i<=maxY;i++) cells.push(`${i},${x}`);
-    } else { render(); return; }
-    // Seçilen harf dizisini kontrol
-    const str1 = cells.map(c=>{const[cy,cx]=c.split(',');return grid[cy][cx]}).join('');
-    const str2 = [...str1].reverse().join('');
-    const match = placed.find(p => !found.includes(p.word) && (p.word===str1||p.word===str2));
-    if (match) {
-      found.push(match.word);
-      updateGameScore(found.length * 100);
-      GameAudio.play('match'); GameAudio.haptic(12);
-      render();
-      if (found.length === placed.length) { GameAudio.play('win'); GameAudio.haptic(25);
-        gameEvent('game_ended', {
-          gameId: 'wordSearch', result: 'won', score: found.length * 100,
-        });
-        showGameOver(true, 'Kelimeler Bulundu', 'Gizli kelimelerin hepsini buldun.', {
-          accent: 'var(--ph-jewel-4-shadow)',
-          accentLight: 'var(--ph-jewel-4-highlight)',
-          accentGlow: 'var(--ph-jewel-4-glow)',
-          mark: '✦',
-          stats: [
-            { label: 'Kelime', value: found.length + '/' + placed.length },
-            { label: 'Skor', value: (found.length * 100).toLocaleString() },
-          ],
-        }); }
-    } else { render(); }
-  }
-  function highlightSel(y1,x1,y2,x2) {
-    container.querySelectorAll('.ws-cell').forEach(el => {
-      if(+el.dataset.y===y1 && +el.dataset.x===x1) el.classList.add('sel');
+
+  function levelComplete() {
+    locked = true;                     // geçiş sırasında girdi kapalı
+    GameAudio.play('win'); GameAudio.haptic(25);
+    if (boardEl) boardEl.classList.add('ws-flash');
+    // SKOR OLAYDAN ÖNCE eklendi (yukarıda). Jigsaw'da tersi yapılmış ve
+    // "en iyi skor" bir seviye geriden gelmişti; aynı hataya düşmüyoruz.
+    gameEvent('game_ended', {
+      gameId: 'wordSearch', result: 'won', score: score,
     });
+    // Oyun SONSUZ: oyun-sonu kutusu yok, kısa bir kutlama ve sıradaki
+    // tahta. Jigsaw'ın deseni — "bir seviye daha" hissini kesen şey
+    // her turdan sonra çıkan modal penceredir.
+    setTimeout(() => {
+      if (!container) return;          // oyundan çıkılmışsa hiçbir şey yapma
+      startLevel(level + 1);
+    }, 900);
   }
-  function cleanup(){clearEvs()}
-  return {init,cleanup};
+
+  function cleanup() {
+    clearEvs();
+    if (ro) { ro.disconnect(); ro = null; }
+    container = null; boardEl = null; lineEl = null; cellEls = null;
+    dragging = false; locked = true;
+  }
+
+  // Test aracı motoru dışarıdan sürebilsin diye açılıyor (flowConnect'in
+  // `engine` deseni). Oyun kuralları TEK yerde kalsın: ikinci bir
+  // uygulama, iki uygulamanın sessizce ayrışması demek olurdu.
+  return {
+    init, cleanup,
+    engine: { paramsFor, buildBoard, countOccurrences, DIRS_ALL, TRUP },
+  };
 })();
 
 // ╔══════════════════════════════════════╗
