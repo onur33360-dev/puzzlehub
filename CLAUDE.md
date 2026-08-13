@@ -1638,10 +1638,15 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      the repo.
      **The hash is per-SIGNING-KEY, not per-device — measured, not assumed (2026-08-07).**
      One Galaxy A51 produced **three different values**: `50CD4ED8…` under the debug key,
-     `58A6B464…` under the release/upload key, and `88D815B2…` under a third-party-signed
-     install that happened to be on the phone. So a protection verified in a debug build
-     does **not** carry into the release APK — this was caught only because the release
-     build was measured separately rather than assumed, and the first guess was wrong.
+     `58A6B464…` under the release/upload key, and `88D815B2…` under **Google's Play App
+     Signing key — confirmed 2026-08-13** by reading it from a build installed from Play.
+     (That third value was originally filed as "a third-party-signed install that happened
+     to be on the phone". The *measurement* was right and the *label* was a guess; naming a
+     hash by where you think it came from, rather than by the key that produced it, is how
+     an already-known value sits unused in the repo for six days while a "missing fourth
+     hash" is treated as an open risk.) So a protection verified in a debug build does
+     **not** carry into the release APK — this was caught only because the release build was
+     measured separately rather than assumed, and the first guess was wrong.
      Re-read the hash after any change of signing key; extra entries are harmless. UMP and
      the Ads SDK print the *same* hash as each other, so UMP's boot-time line is a usable
      proxy — but it is the same 32-hex format either way, which is exactly what makes it
