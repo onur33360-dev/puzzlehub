@@ -1840,6 +1840,26 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   so the harness could not have caught this. Same lesson as `configureReturnsString`
   directly below — **a mock is only as honest as the thing it imitates**. Verified by
   reverting the fix: 4 assertions fail, then pass.
+  **CONFIRMED ON A REAL PLAY INSTALL (2026-08-13, Galaxy A51).** RevenueCat's product
+  catalogue lists the subscriptions as **`plus_yearly:yearly` / `plus_monthly:monthly` /
+  `plus_weekly:weekly`** — the base plans are literally named `yearly`/`monthly`/`weekly`.
+  Same device, same store setup, only the app version differing: **1.68.0 → `—`,
+  1.68.1 → ₺499,00 / ₺149,99 / ₺44,99**, with the derived "per-month + savings %" line
+  computing correctly (499/12 ≈ ₺42, 72 % vs monthly).
+  **Two diagnostic traps cost time here and are worth keeping:**
+  1. **The JS `console.log` does NOT reach logcat** — this repo already documents that
+     (`tools/cdp.js` exists for exactly that reason) and the `[RC] offerings:` line was
+     added anyway on the assumption it would be greppable. It is not. What *did* answer the
+     question was RevenueCat's **native** SDK log (`[Purchases]`), which logcat does carry.
+     A release build has no WebView debugging, so on that surface the native log is the only
+     channel.
+  2. **Absence of an error line is not evidence of absence.** The native log showed
+     `PRODUCT_NOT_FOUND` for the four `diamonds_*` (a harmless stray `subs`-type probe —
+     they resolve fine as INAPP and their prices render) and **nothing at all** for
+     `plus_*`. That silence was read as "the packages are missing from the offering"; it
+     actually meant they resolved *without error*. The dashboard showed all seven packages
+     present. Read the store's configuration directly before concluding anything from
+     missing log lines.
 - **Harness source scans MUST normalize line endings — use `readSrc()` from
   `tools/dom-sandbox.js`, never a bare `readFileSync` (2026-08-12).** The strongest layer in
   these tools is the source scan, and most of those assertions are **proximity** regexes
