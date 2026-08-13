@@ -1646,10 +1646,17 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      the Ads SDK print the *same* hash as each other, so UMP's boot-time line is a usable
      proxy — but it is the same 32-hex format either way, which is exactly what makes it
      easy to paste one build's value and believe you are covered.
-     **Open risk — Play App Signing:** Play re-signs the app with Google's key, so a build
-     installed *from Play* will report a fourth value that is not in the list. Read it from
-     logcat on the first internal-testing install and add it; until then, do not tap ads in
-     a Play-installed build.
+     **Play App Signing — CLOSED 2026-08-13.** Play re-signs with Google's key, so a build
+     installed *from Play* reports its own hash. Measured on the first internal-testing
+     install: **`88D815B2…` — the same value the 2026-08-07 note filed as "a third-party
+     signed install that happened to be on the phone".** It was Play's signature all along;
+     the earlier entry was a correct measurement with a wrong label. It is now in
+     `AD_TEST_DEVICES`, so a Play-installed build on that phone is protected.
+     Two practical notes from reading it: the hash came from **UMP's boot line**
+     (`addTestDeviceHashedId`) rather than the Ads SDK's, because **Plus was active on the
+     account and Plus suppresses ad loading entirely** — with no ad request there is no
+     `Ads:` line to read. And triggering a *request* is enough; `playGame()`'s `preload()`
+     makes one without ever rendering an ad, so no impression and no click is involved.
      **A wrong hash fails silently** — the SDK just serves real ads. The only proof is
      seeing `I/Ads: This request is sent from a test device.` in logcat; if instead you see
      `Use RequestConfiguration.Builder().setTestDeviceIds(…)`, the hash is wrong and the

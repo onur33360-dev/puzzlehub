@@ -1390,6 +1390,14 @@ const AD_IDS = {
 const AD_TEST_DEVICES = [
   '50CD4ED8DA91D950C1BFDFB07897BFB5',   // Galaxy A51 — debug imzalı kurulum
   '58A6B46444BBBA9EF97BA72ECA2BE728',   // Galaxy A51 — release (upload) anahtarıyla imzalı
+  // Galaxy A51 — PLAY'DEN kurulum (2026-08-13). Play App Signing paketi
+  // GOOGLE'IN anahtarıyla yeniden imzaladığı için hash yine değişti; hash
+  // cihaza değil imza anahtarına bağlı (aynı telefon şimdiye kadar ÜÇ
+  // farklı değer üretti). Bu değer daha önce "üçüncü taraf imzalı bir
+  // kurulum" diye kaydedilmişti — kimliği şimdi netleşti, Play'in kendisi.
+  // Kaynak: UMP'nin açılışta yazdığı satır (addTestDeviceHashedId), ki
+  // Ads SDK'sı da aynı değeri basıyor.
+  '88D815B20F99227E224E91EB84233D54',
 ];
 
 // Olay adları HAM DİZGİ olarak yazılı. `RewardAdPluginEvents` enum'u
