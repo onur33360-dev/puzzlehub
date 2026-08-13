@@ -601,6 +601,56 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   **replays every level's stored solution through the game's own `createBoard`** and asserts
   `isComplete()` — data and engine verified together, since either could be right while the
   pair is broken.
+- **`wordSearch` (Kelime Avı) was rebuilt on 2026-08-13: drag selection, endless levels, and
+  a 284-word pool in its own file.** It used to be tap-first-letter → tap-last-letter over
+  one fixed board of 8 hardcoded words, horizontal/vertical only.
+  **Two real bugs died with the old code and both were the silent kind.** `placeWord` made
+  100 random attempts and then just `return`ed — the word never entered `placed` but its
+  **chip still rendered under the board**, so the player could be shown a word that is not
+  on the board. And `highlightSel(y1,x1,y2,x2)` took four arguments and ignored three.
+  Seven things are load-bearing:
+  1. **The generator ENUMERATES every legal placement instead of sampling.** 8 directions ×
+     12² cells × ≤10 letters ≈ 11k operations — nothing on a phone, and being exhaustive
+     removes the whole class of "there was room but we got unlucky" failure that made the
+     old code fail silently. Longest word first. Measured: 200 levels, 1535 words, **0.93 ms
+     per level** — level generation blocks the main thread (Arrow's `staleMax` lesson).
+  2. **Forgiving input is ONE mechanism that buys three requirements.** The vector from the
+     start cell's centre to the finger is projected onto whichever of the 8 directions is
+     closest by angle, and the length falls out of that projection. Direction lock,
+     backtracking and fast drags are therefore *consequences*, not separate features — and
+     because the selection is computed from the finger's **position** rather than the cells
+     it passed through, a fast drag that skips cells still works. The test asserts no zigzag
+     is producible across 400 random drags.
+  3. **`pointerdown` on the board, `pointermove`/`up`/`cancel` on WINDOW.** The finger leaves
+     the board constantly. `pointercancel` is mandatory — a system gesture means `pointerup`
+     **never arrives** and the selection would hang forever (the "ghost frame" bug).
+  4. **No `setPointerCapture`** — the phCamera landmine; capture retargets the following
+     `click` and once made Arrow completely unplayable.
+  5. **`touch-action:none` on the GRID only, never a wrapper.** Same rule reels.js already
+     states for Discover: put it on the layer and the card locks the feed.
+  6. **The renderer stayed DOM and the choice was made before implementation** (`docs/04`).
+     Neither canvas criterion applies: the board is not repainted as a whole and there is no
+     continuous motion. The real problem was never rendering — it was the old code rebuilding
+     all of `innerHTML` on every action, which is simply incompatible with dragging.
+  7. **A round is a LEVEL** (`game_started` per level) and **score is added BEFORE
+     `game_ended`** — the second one is Jigsaw's recorded mistake, where best-score trailed a
+     level behind.
+  **Turkish casing is a correctness requirement, not a nicety.** `'i'.toUpperCase()` is `'I'`
+  in JS and the correct Turkish result is `'İ'`. The pool is stored already-uppercase so no
+  conversion happens at runtime, and comparisons still go through `toLocaleUpperCase('tr')`
+  for anything added later. Filler letters come from the 29-letter Turkish alphabet — a Q/W/X
+  on the board would hand the player a free hint, since they could rule those cells out.
+  `games/words-tr.js` is a **new shipped file, so it is registered in the three places**
+  (`index.html` chain, `sw.js` `SHELL_ASSETS`, `build-www.js` `SHIP`) and in `dom-sandbox.js`'s
+  `LOAD_ORDER`. `tools/wordsearch-test.js` covers it; its strongest assertions are the source
+  scans that prove the old tap mechanic is *gone* rather than merely bypassed.
+  **The Discover demo was deliberately left alone** (owner decision) — it is decorative and
+  takes no input, so the vertical-feed gesture conflict the drag work would otherwise raise
+  does not exist there.
+  **Device-verified end to end on a Galaxy A51** (1.69.0): horizontal, vertical and diagonal
+  finds; a diagonal drag ending **~20 px off target** still snapped to the right cells; found
+  words went green and their chips struck through; and completing level 1 auto-advanced to
+  level 2 with an entirely new word set while the score carried across (220).
 - **`jigsawCard` is ENDLESS since 2026-08-07 — completing a picture is a level, not the end
   of the game.** The `▸` next button was deleted and the game-over box no longer appears on
   a win; `finish()` runs the completion animation, adds score, toasts, then auto-advances
