@@ -103,7 +103,16 @@ body {
   color: var(--sly-text);
 }
 
-.screen { padding: 14px var(--sly-edge) 22px; }
+/* ÜST DOLGU GÜVENLİ ALANI EKLER — Android 16'da kenardan kenara çizim
+   zorunlu ve kapatılamıyor, yani WebView durum çubuğunun altına uzanıyor.
+   Dolgu TEK YERDE: ekran ekran yamamak yerine ortak kaba konuyor, yoksa
+   yeni bir ekran eklendiğinde birinin bunu hatırlaması gerekirdi.
+   Eski Android'de inset 0 döner ve hiçbir şey değişmez — yani bu kural
+   sürüme göre kendi kendini ayarlıyor, cihaz tespiti gerekmiyor.
+   Keşfet (.screen-fullbleed) HARİÇ: orada çipler kendi güvenli alan
+   payını zaten ayırıyor (reels.js), buraya da eklemek payı ikiye katlardı. */
+.screen { padding: calc(14px + env(safe-area-inset-top, 0px)) var(--sly-edge) 22px; }
+.screen.screen-fullbleed { padding: 0; }
 
 /* ============================================================
    1) EKRAN BAŞLIĞI  —  .sly-screen-head

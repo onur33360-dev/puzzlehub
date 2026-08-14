@@ -7,6 +7,25 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
+        <!--
+            BUYUK EKRANDA YON KILIDI MUAFIYETI (Android 16 / API 36).
+            API 36'yi hedefleyen uygulamalarda platform, 600dp ve uzeri
+            ekranlarda screenOrientation, yeniden boyutlanabilirlik ve
+            en boy orani kisitlarini YOK SAYIYOR. Bu uygulama dikey
+            tasarlandi (yerlesim matrisi de yalnizca dikey genislikleri
+            tariyor), yani tablette yatayda dogru gorunmez.
+
+            Bu ozellik, Google'in bu davranis icin verdigi gecici muafiyet.
+            DOGRULANMADI: elimizde tablet AVD yok, yalnizca telefon
+            emulatoru kuruldu. Derlemeyi etkilemiyor (tanimadigi bir
+            property'yi platform yok sayar), ama "tablette dikey kaldi"
+            diye rapor edilmis bir olcum de YOK. Tablet destegi ayri bir
+            is; o yapilana kadar buradaki niyet kayitli kalsin.
+        -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
             android:name=".MainActivity"

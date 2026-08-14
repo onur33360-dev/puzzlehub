@@ -1,7 +1,11 @@
 ext {
+    // minSdk 23'te KALIYOR — hedef API'yi yukseltmek en dusuk destegi
+    // yukseltmeyi gerektirmez ve her artis cihaz kaybi demektir.
     minSdkVersion = 23
-    compileSdkVersion = 35
-    targetSdkVersion = 35
+    // Android 16 / API 36 (2026-08-13). Play'in sarti: 31 Agustos 2026'dan
+    // sonra hedef API son surumden 1 yildan eskiyse GUNCELLEME YAYINLANAMIYOR.
+    compileSdkVersion = 36
+    targetSdkVersion = 36
     androidxActivityVersion = '1.9.2'
     androidxAppCompatVersion = '1.7.0'
     androidxCoordinatorLayoutVersion = '1.2.0'

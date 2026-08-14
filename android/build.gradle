@@ -7,7 +7,17 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.2'
+        // AGP 8.10.1 (2026-08-13): compileSdk 36 icin. 8.7.2 yalnizca 35'e
+        // kadar test edilmisti ve "daha yeni bir AGP kullanin" uyarisi
+        // veriyordu. Uyariyi android.suppressUnsupportedCompileSdk ile
+        // susturmak sorunu cozmez, GIZLER — API 36'ya karsi derlenen bir
+        // projede AGP'nin o API'yi bilmesi lint ve kaynak islemeyi etkiler.
+        //
+        // TAVANI GRADLE BELIRLIYOR: 8.11.x AGP, Gradle 8.13 istiyor; bizde
+        // wrapper 8.11.1. Dolayisiyla Gradle'i de yukseltmeden cikilabilecek
+        // en yuksek hat 8.10.x. Gradle yukseltmesi ayri bir risk, yayin
+        // oncesi ayni anda iki degisken oynatilmiyor.
+        classpath 'com.android.tools.build:gradle:8.10.1'
         classpath 'com.google.gms:google-services:4.4.2'
 
         // NOTE: Do not place your application dependencies here; they belong

@@ -2,7 +2,16 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <!-- viewport-fit=cover ZORUNLU (2026-08-13, hedef API 36 ile birlikte).
+       Android 16, hedefi 36 olan uygulamalarda kenardan kenara çizimi
+       ZORUNLU kılıyor ve devre dışı bırakma seçeneğini kaldırdı; WebView
+       artık durum çubuğunun ve gezinme çubuğunun ALTINA uzanıyor.
+       Bu anahtar kelime olmadan `env(safe-area-inset-*)` WebView'da HER
+       ZAMAN 0 döner — yani güvenli alan kullanan CSS sessizce sabit yedek
+       değerine düşer ve üst bar saatin üstüne biner.
+       Eski Android'de değişen bir şey yok: orada WebView zaten çubukların
+       altında değil, dolayısıyla inset 0 kalır ve dolgu devreye girmez. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="description" content="SlySwipe — Rahatlatıcı puzzle oyunları" />
   <meta name="theme-color" content="#8B5CF6" />
   <!-- Eski "hiçbir şeyi cache'leme" meta etiketleri (Cache-Control,
@@ -557,7 +566,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.69.2';
+    const APP_VERSION = '1.70.0';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile
