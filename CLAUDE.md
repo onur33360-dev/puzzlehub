@@ -601,6 +601,44 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   **replays every level's stored solution through the game's own `createBoard`** and asserts
   `isComplete()` — data and engine verified together, since either could be right while the
   pair is broken.
+- **The app targets API 36 (Android 16) since 2026-08-14, and `viewport-fit=cover` is
+  LOAD-BEARING — deleting it silently breaks the layout on Android 15+.** Play's rule forced
+  the move: after 2026-08-31 an app whose target API is more than a year behind the latest
+  **cannot publish updates**. `compileSdk`/`targetSdk` 35 → 36, `minSdk` stayed at 23
+  (raising the target does not require raising the floor, and every step up costs devices).
+  Two toolchain facts came out of it: SDK Platform 36 and build-tools 36 had to be installed
+  first, and **AGP was raised 8.7.2 → 8.10.1** because 8.7.2 is only tested to compileSdk 35.
+  The ceiling was Gradle, not AGP: 8.11.x demands Gradle 8.13 and the wrapper is on 8.11.1.
+  **The real risk was edge-to-edge, not the build.** Android 16 makes it mandatory for
+  apps targeting 36 and **removed the opt-out**, so the WebView now extends under the status
+  and navigation bars. Two things had to be true and only one was:
+  1. **`viewport-fit=cover` was MISSING from the viewport meta.** Without it
+     `env(safe-area-inset-*)` returns **0 in a WebView, always** — so the handful of rules
+     that already used safe-area were silently falling back to their fixed 6-8px values.
+     This is the failure mode to remember: the CSS *looks* correct and does nothing.
+  2. Safe-area was only ever used for the bottom edge; nothing reserved the status bar.
+  The padding went into the **shared containers** — `.screen` (ui-shell.css) and
+  `#screen-game` (style.css, which overrides `.screen` with an id selector so it needed its
+  own) — not screen by screen, or a new screen would depend on someone remembering. Discover
+  is excluded on purpose: its chips already reserve their own inset, and adding it there
+  would double the padding.
+  **The rule self-adjusts by OS version, so no device detection is needed:** on Android ≤14
+  the activity is not edge-to-edge, the inset is 0, and `calc(14px + 0px)` is exactly the old
+  value. Verified in both directions — Galaxy A51 (Android 13): no regression; Galaxy A54
+  (Android 16): four cold-start captures at 8/12/18/26 s with no interaction, header cleanly
+  below the status bar.
+  **One observation that looked like a bug and is not:** scrolling slides the header under
+  the translucent status bar, because the top bar scrolls with the content rather than being
+  sticky. That is normal edge-to-edge behaviour; a screenshot taken mid-scroll looks like an
+  overlap. Cold-start captures are what settle it.
+  **Predictive back needed no work** — `MainActivity` already uses
+  `getOnBackPressedDispatcher()` rather than the deprecated `onBackPressed()`.
+  **Large screens are the open edge.** Android 16 ignores `screenOrientation` on displays
+  ≥600dp, so this portrait-only app can rotate on a tablet. Google's temporary opt-out
+  property is in the manifest but is **unverified** — there is no tablet AVD here, and the
+  emulator cannot run on this machine at all (x86_64 needs hardware acceleration;
+  `HypervisorPresent` is false and there are no admin rights to enable it). Treat tablet
+  behaviour as untested, not as working.
 - **`wordSearch` (Kelime Avı) was rebuilt on 2026-08-13: drag selection, endless levels, and
   a 284-word pool in its own file.** It used to be tap-first-letter → tap-last-letter over
   one fixed board of 8 hardcoded words, horizontal/vertical only.
