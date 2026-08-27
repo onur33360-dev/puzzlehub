@@ -47,7 +47,21 @@ const SHELL_ASSETS = [
   // Kabuk tasarım sistemi. style.css'ten SONRA yukleniyor.
   './core/ui-shell.css',
   './core/rng.js',
-  './games/words-tr.js',
+  // Yerelleştirme cekirdegi + KANONIK YEDEK dil. Yalnizca bu ikisi
+  // precache'te: `en` her acilista yukleniyor (eksik anahtarin yedegi) ve
+  // onsuz uygulama hicbir dilde acilamaz.
+  // DIGER 14 DIL BILEREK YOK — locales/ klasoru SHIP'te (APK'ya giriyor)
+  // ama burada degil: precache 15 dosyayi da her APP_VERSION bump'inda
+  // yeniden indirirdi, ikonlar ve Jigsaw havuzu icin belgelenmis tuzagin
+  // aynisi. Kullanicinin dili zaten ilk kullanimda asagidaki son kurala
+  // takilip SHELL_CACHE'e yaziliyor (yani cevrimdisi calisiyor) — ve
+  // MEDIA_CACHE degil SHELL_CACHE olmasi DOGRU: ceviri metni uygulama
+  // koduyla birlikte degisir, surumden bagimsiz bir kovada bayatlardi.
+  // Fark su: precache 15 dosyayi pesin indirir, bu yalnizca 1 tanesini.
+  './core/i18n.js',
+  './locales/en.js',
+  './games/words.js',
+  './games/words/en.js',
   './games/games.js',
   './core/ui-kit.js',
   './core/daily.js',

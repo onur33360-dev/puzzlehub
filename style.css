@@ -70,8 +70,25 @@
   --radius-xl: 20px;
   --radius-full: 50px;
 
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display: 'Outfit', 'Inter', sans-serif;
+  /* YAZI TİPİ YIĞINI — 15 dil desteğiyle birlikte genişletildi.
+     Ölçülen kapsam: Inter → Latin + Kiril + Yunan. Outfit → YALNIZCA
+     Latin. Yani Rusça bir BAŞLIK, Outfit'te karşılığı olmadığı için
+     zaten Inter'e düşüyordu; Arapça/CJK/Devanagari ise ikisinde de yok.
+     Yığına isimle sistem fontları eklendi — Android'de bunlar Noto
+     ailesi, iOS'ta kendi karşılıkları. Tarayıcı EKSİK GLİFİ tek tek
+     arar (font fallback karakter bazlıdır, blok bazlı değil), yani
+     "Level 7 / レベル 7" gibi karışık bir satırda Latin kısmı Inter'de
+     kalır, kana kısmı Noto'dan gelir.
+     REPOYA FONT DOSYASI EKLENMEDİ ve bu bilinçli: dört yazı sistemi
+     için gerçek kapsama ~10 MB'lık web font demek olurdu ve Android'de
+     zaten cihazda var. Bkz. şartname: "Platform fallback yeterliyse
+     onu tercih et." */
+  --font-fallback: 'Noto Sans', 'Noto Sans Arabic', 'Noto Sans Devanagari',
+                   'Noto Sans CJK JP', 'Noto Sans JP', 'Noto Sans KR', 'Noto Sans SC',
+                   'Hiragino Sans', 'Apple SD Gothic Neo', 'PingFang SC',
+                   'Segoe UI', sans-serif;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, var(--font-fallback);
+  --font-display: 'Outfit', 'Inter', var(--font-fallback);
 }
 
 /* -webkit-tap-highlight-color GLOBAL: Android WebView, <div onclick> gibi
@@ -228,7 +245,7 @@ a { color:inherit; text-decoration:none; }
   position:relative; overflow:hidden;
 }
 .lig-card::before {
-  content:''; position:absolute; top:-50%; right:-30%;
+  content:''; position:absolute; top:-50%; inset-inline-end:-30%;
   width:200px; height:200px; border-radius:50%;
   background:radial-gradient(circle, rgba(var(--accent-rgb),0.12), transparent 70%);
   pointer-events:none;
@@ -240,7 +257,7 @@ a { color:inherit; text-decoration:none; }
 .lig-label { font-size:10px; font-weight:600; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase; }
 .lig-name { font-size:16px; font-weight:800; color:var(--yellow); }
 
-.lig-right { text-align:right; }
+.lig-right { text-align:end; }
 .lig-points { font-family:var(--font-display); font-size:28px; font-weight:900; color:var(--text); line-height:1; }
 .lig-points-label { font-size:10px; font-weight:700; color:var(--text-muted); letter-spacing:1px; display:block; }
 
@@ -317,7 +334,7 @@ a { color:inherit; text-decoration:none; }
 .cat-card-name { font-size:16px; font-weight:800; color:#fff; z-index:1; text-shadow:0 2px 8px rgba(0,0,0,0.3); }
 
 .cat-badge {
-  position:absolute; top:8px; right:8px;
+  position:absolute; top:8px; inset-inline-end:8px;
   padding:2px 8px; border-radius:var(--radius-full);
   font-size:10px; font-weight:800; color:#fff; z-index:2;
 }
@@ -450,10 +467,10 @@ a { color:inherit; text-decoration:none; }
   display:flex; align-items:center; justify-content:center;
   font-family:var(--font-display);
   font-size:15px; font-weight:700; color:#2f2410;
-  border-right:1px solid rgba(0,0,0,.16);
+  border-inline-end:1px solid rgba(0,0,0,.16);
   border-bottom:1px solid rgba(0,0,0,.16);
 }
-.dc-cell:nth-child(3n) { border-right:none; }
+.dc-cell:nth-child(3n) { border-inline-end:none; }
 .dc-cell:nth-child(n+7) { border-bottom:none; }
 /* Sudoku dışı oyunlar için sade emoji kutusu. */
 .dc-preview-emoji {
@@ -476,11 +493,11 @@ a { color:inherit; text-decoration:none; }
 .dc-btn:active { transform:scale(.94); }
 
 .dc-check {
-  position:absolute; top:10px; right:12px;
+  position:absolute; top:10px; inset-inline-end:12px;
   font-size:15px; font-weight:900; color:var(--green);
 }
 .dc-streak {
-  position:absolute; bottom:10px; right:12px;
+  position:absolute; bottom:10px; inset-inline-end:12px;
   font-size:11px; font-weight:800; color:var(--yellow);
 }
 
@@ -782,6 +799,91 @@ a { color:inherit; text-decoration:none; }
   font-size:14px; font-weight:700; color:var(--text-secondary);
 }
 
+/* ---------- Dil seçici (2026-08-15) ----------
+   Avatar seçicinin modal kabuğunu (.av-scrim/.av-box/.av-head/.av-close)
+   AYNEN kullanıyor; buradaki tek fark 16 satırlık liste düzeni.
+
+   YÜKSEKLİK SINIRI ZORUNLU: 16 satır her telefonda ekrana sığmaz ve
+   sığmadığında kapatma düğmesi görünmez alanda kalır — modal kilitlenmiş
+   gibi görünür. Kutu ekranın %70'iyle sınırlı, liste kendi içinde kayar.
+
+   Metinler MANTIKSAL hizada (text-align:start) — Arapça'da dir=rtl ile
+   kendiliğinden sağa yaslanır; `left` yazsaydık RTL'de yanlış kenarda
+   kalırdı. */
+.lang-box { max-height:70vh; }
+.lang-list {
+  display:flex; flex-direction:column; gap:6px;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  /* Kaydırma listenin İÇİNDE kalsın; modalın arkasındaki sayfa kaymasın. */
+  overscroll-behavior:contain;
+  padding-inline-end:4px;
+}
+.lang-row {
+  display:flex; flex-direction:column; gap:2px;
+  padding:11px 14px; border-radius:12px;
+  background:var(--bg-element);
+  border:1.5px solid transparent;
+  text-align:start;
+}
+.lang-row.sel {
+  border-color:var(--accent);
+  background:rgba(var(--accent-rgb),.16);
+}
+.lang-name { font-size:15px; font-weight:700; color:var(--text); }
+.lang-note { font-size:11.5px; color:var(--text-secondary); }
+
+/* ---------- Yardım sayfası (2026-08-19) ----------
+   Dil seçicinin ÇÖZDÜĞÜ sorunları yeniden çözmüyor: aynı modal kabuğu
+   (.av-scrim/.av-box/.av-head/.av-close), aynı 70vh tavanı, aynı
+   iç-kaydırma. Yeni bir tasarım sistemi kurmak, sekiz paragraf için
+   ikinci bir modal ailesi bakmak demek olurdu.
+
+   Metin hizası MANTIKSAL (text-align:start): Arapça'da dir=rtl ile
+   kendiliğinden sağa yaslanır. Fiziksel 'left' yazmak RTL'de yanlış kenar demek.
+
+   Bağlantılardaki ↗ oku .dir-ico taşıyor — YÖN bildiren tek işaret o.
+   ✉️ ve bölüm ikonları yön bildirmiyor, aynalanmıyorlar. */
+.help-box { max-height:78vh; }
+.help-list {
+  display:flex; flex-direction:column; gap:14px;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  padding-inline-end:4px;
+  text-align:start;
+}
+.help-sec { display:flex; flex-direction:column; gap:5px; }
+.help-sec-head {
+  display:flex; align-items:center; gap:8px;
+  font-size:14px; font-weight:800; color:var(--text);
+}
+.help-sec-ico { font-size:15px; line-height:1; }
+.help-sec-body {
+  margin:0; font-size:12.5px; line-height:1.55;
+  color:var(--text-secondary);
+  /* Uzun Almanca/Rusça bileşik sözcükler dar kutuda taşmasın —
+     kabuk genelinde uygulanan son çare garantisinin aynısı. */
+  overflow-wrap:anywhere;
+}
+.help-links {
+  display:flex; flex-direction:column; gap:8px;
+  padding-top:12px; margin-top:2px;
+  border-top:1px solid rgba(255,255,255,0.08);
+}
+.help-link {
+  display:flex; align-items:center; gap:8px;
+  padding:10px 12px; border-radius:12px;
+  background:var(--bg-element);
+  font-size:12.5px; font-weight:700;
+  color:var(--text); text-decoration:none;
+  overflow-wrap:anywhere;
+}
+
+/* ---------- Yön bildiren ikonlar ----------
+   Geri okları gibi YÖN TAŞIYAN işaretler RTL'de aynalanmalı. Yalnızca bu
+   sınıfı taşıyanlar dönüyor: emoji ve durum ikonları (💎 🔊 🏆) yön
+   bildirmiyor ve aynalanırsa yalnızca bozuk görünürler. */
+[dir="rtl"] .dir-ico { display:inline-block; transform:scaleX(-1); }
+
 /* ========== SETTINGS ========== */
 .profile-card-section { margin-bottom:20px; }
 .profile-card {
@@ -927,14 +1029,14 @@ a { color:inherit; text-decoration:none; }
 .game-card-visual .game-emoji { font-size:48px; filter:drop-shadow(0 4px 8px rgba(0,0,0,0.4)); z-index:1; }
 
 .game-rating {
-  position:absolute; top:8px; left:8px;
+  position:absolute; top:8px; inset-inline-start:8px;
   background:rgba(0,0,0,0.5); backdrop-filter:blur(4px);
   padding:2px 8px; border-radius:var(--radius-full);
   font-size:11px; font-weight:800; color:var(--yellow);
   display:flex; align-items:center; gap:3px; z-index:2;
 }
 .game-badge {
-  position:absolute; top:8px; right:8px;
+  position:absolute; top:8px; inset-inline-end:8px;
   padding:2px 8px; border-radius:var(--radius-full);
   font-size:10px; font-weight:800; color:#fff; z-index:2;
 }
@@ -942,7 +1044,7 @@ a { color:inherit; text-decoration:none; }
 .game-badge.yeni { background:var(--green); }
 
 .game-sub-tag {
-  position:absolute; top:8px; left:8px;
+  position:absolute; top:8px; inset-inline-start:8px;
   padding:2px 8px; border-radius:var(--radius-full);
   font-size:10px; font-weight:700; z-index:2;
   background:rgba(0,0,0,0.45); backdrop-filter:blur(4px); color:#fff;
@@ -1312,7 +1414,7 @@ a { color:inherit; text-decoration:none; }
   animation: plusStarsPulse 2s ease-in-out infinite;
 }
 .plus-title {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-display);
   font-size: 36px;
   font-weight: 900;
   color: #fff;
@@ -1325,7 +1427,7 @@ a { color:inherit; text-decoration:none; }
   background-clip: text;
 }
 .plus-subtitle {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 900;
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
@@ -1390,7 +1492,7 @@ a { color:inherit; text-decoration:none; }
 .plan-best {
   position: absolute;
   top: -10px;
-  right: 16px;
+  inset-inline-end: 16px;
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
   color: #000;
   font-size: 10px;
@@ -1428,7 +1530,7 @@ a { color:inherit; text-decoration:none; }
   width: 100%;
   padding: 18px;
   border-radius: 16px;
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 900;
   color: #000;
@@ -1530,7 +1632,7 @@ a { color:inherit; text-decoration:none; }
 .shop-badge {
   position: absolute;
   top: -8px;
-  right: -4px;
+  inset-inline-end: -4px;
   background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   color: #fff;
   font-size: 9px;

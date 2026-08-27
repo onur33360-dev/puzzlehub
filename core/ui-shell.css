@@ -21,6 +21,16 @@
    ------------------------------------------------------------ */
 
 :root {
+  /* ── YÖN ÇARPANI (RTL) ──────────────────────────────────────
+     Mantıksal CSS özellikleri (margin-inline-start, inset-inline-end…)
+     yönü kendileri çözüyor ve bu dosyada kullanılan yol o. Ama
+     `transform: translateX()` MANTIKSAL DEĞİL — piksel her zaman
+     sağa doğrudur. Arapça'da soldan sağa kayan bir anahtar düğmesi
+     ters çalışırdı, o yüzden işaret bu tek değişkenden geliyor.
+     Kullanımı: `translateX(calc(18px * var(--sly-dir)))`.
+     `dir` özniteliğini I18n.applyDom() <html>'e yazıyor. */
+  --sly-dir: 1;
+
   /* ── ZEMİN ──────────────────────────────────────────────────
      Referans tasarımın zemini tek düz renk DEĞİL: yukarıda hafif
      menekşeye çalan bir gece mavisi, aşağıda neredeyse siyah. İki
@@ -177,7 +187,7 @@ body {
   white-space: nowrap;
 }
 
-.sly-topbar-actions { display: flex; align-items: center; gap: var(--sly-gap-2); flex-shrink: 0; margin-left: auto; }
+.sly-topbar-actions { display: flex; align-items: center; gap: var(--sly-gap-2); flex-shrink: 0; margin-inline-start: auto; }
 
 /* PLUS düğmesi — altın. #plus-badge id'si ve .plus-text çocuğu
    ZORUNLU: PlusSystem.updateUI() ikisini de arıyor (abone olunca
@@ -257,7 +267,7 @@ body {
    (o çakışma games/board-wrap tarafında yaşanmıştı). */
 .sly-hero::before {
   content: ''; position: absolute; pointer-events: none;
-  width: 240px; height: 240px; right: -70px; top: -110px;
+  width: 240px; height: 240px; inset-inline-end: -70px; top: -110px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(var(--sly-violet-rgb),.30), transparent 68%);
 }
@@ -293,7 +303,7 @@ body {
    "yarım kalmış" görünüyordu. Bir kart eklenecekse bu toplam da
    büyümeli. */
 .sly-hero-art {
-  position: absolute; right: 6px; top: 50%;
+  position: absolute; inset-inline-end: 6px; top: 50%;
   transform: translateY(-50%);
   width: 152px; height: 148px; z-index: 1;
   pointer-events: none;
@@ -582,7 +592,7 @@ body {
    yerine mevcut sayacın yanında durması, listedeki hizayı bozmuyor. */
 .sly-task.is-done .sly-task-count { color: var(--sly-green); }
 .sly-task-tick {
-  margin-left: 5px; font-size: 11px; color: var(--sly-green);
+  margin-inline-start: 5px; font-size: 11px; color: var(--sly-green);
 }
 /* Ödül rozeti — referansın sağdaki elmas kutusu. */
 .sly-task-reward {
@@ -742,7 +752,7 @@ body {
   box-shadow: inset 0 0 0 1px rgba(var(--sly-gold-rgb),.38);
 }
 .sly-promo-cell.is-plus .sly-promo-title { color: var(--sly-gold); }
-.sly-promo-chev { margin-left: auto; flex-shrink: 0; color: var(--sly-text-3); font-size: 17px; }
+.sly-promo-chev { margin-inline-start: auto; flex-shrink: 0; color: var(--sly-text-3); font-size: 17px; }
 
 /* Dar ekranda tek sutuna inme kurali KALDIRILDI: auto-fit zaten
    yapiyor ve bir breakpointin varsaydigi genislik yok. */
@@ -838,7 +848,7 @@ body {
   border-color: rgba(255,255,255,.22);
   box-shadow: 0 6px 18px -7px rgba(var(--sly-violet-rgb),.95);
 }
-.sly-chip-n { opacity: .62; margin-left: 4px; font-weight: 600; }
+.sly-chip-n { opacity: .62; margin-inline-start: 4px; font-weight: 600; }
 
 /* ── Rozet ilerleme kartı (halka) ─────────────────────────── */
 .sly-ring-card {
@@ -907,7 +917,7 @@ body {
 .sly-row {
   display: flex; align-items: center; gap: 12px;
   width: 100%; padding: 13px 13px;
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--sly-line-soft);
   transition: background .14s ease;
 }
@@ -951,7 +961,7 @@ body {
 }
 .sly-switch::after {
   content: ''; position: absolute;
-  top: 2px; left: 2px; width: 20px; height: 20px;
+  top: 2px; inset-inline-start: 2px; width: 20px; height: 20px;
   border-radius: 50%;
   background: #C9C9E4;
   box-shadow: 0 2px 6px rgba(0,0,0,.5);
@@ -962,7 +972,7 @@ body {
   border-color: rgba(255,255,255,.24);
   box-shadow: 0 0 14px -4px rgba(var(--sly-violet-rgb),.9);
 }
-.sly-switch.on::after { transform: translateX(18px); background: #fff; }
+.sly-switch.on::after { transform: translateX(calc(18px * var(--sly-dir))); background: #fff; }
 
 /* ============================================================
    12) PROFİL BAŞLIĞI  —  .sly-profile-hero
@@ -1137,7 +1147,7 @@ body {
   .sly-hero-title { font-size: 25px; }
   /* Sanat gizlenmiyor, arkaya aliniyor: metnin arkasinda soluk bir
      doku olarak duruyor — kaldirmak karti bosaltirdi. */
-  .sly-hero-art { opacity: .28; right: -34px; }
+  .sly-hero-art { opacity: .28; inset-inline-end: -34px; }
   .sly-badge-grid { gap: 8px; }
 }
 

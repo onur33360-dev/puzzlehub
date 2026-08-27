@@ -37,11 +37,17 @@ const SHIP = [
   'core/components.css',
   'core/ui-shell.css',
   'core/rng.js',
+  'core/i18n.js',
+  // 15 dilin tamami APK'ya giriyor (klasor olarak). sw.js SHELL_ASSETS'te
+  // yalnizca locales/en.js var ve capraz denetim tek yonlu — "SW'de olan
+  // SHIP'te de olmali", tersi degil — dolayisiyla bu fark build'i kirmaz.
+  'locales',
   'core/ui-kit.js',
   'core/daily.js',
   'core/app.js',
   'games/games.js',
-  'games/words-tr.js',
+  'games/words.js',
+  'games/words',
   'reels/reels.js',
   'assets/icons',
   // Jigsaw'in yerel garanti gorsel havuzu (~1.1 MB, 6 dosya). APK'ya
@@ -69,7 +75,20 @@ function shellAssetsFromSw() {
   const m = src.match(/const SHELL_ASSETS = \[([\s\S]*?)\]/);
   if (!m) fail('sw.js icinde SHELL_ASSETS bulunamadi. Degisken adi mi degisti?');
   return m[1]
+    // CRLF NORMALIZE — ONCE. Depo Windows'ta CRLF ile duruyor ve JS
+    // regex'inde `.` satir sonlandiriciyi (\r dahil) ESLEMEZ, `$` da
+    // yalnizca girdi sonunda veya son \n oncesinde eslesir. Yani `\r` ile
+    // biten bir satirda /\/\/.*$/ HIC eslesmez ve yorum ayiklama sessizce
+    // hicbir sey yapmaz. Ayni sinif hata CLAUDE.md'de kaynak taramalari
+    // icin zaten kayitli; burada ayni tuzaga dusuldu ve olculdu.
+    .replace(/\r\n?/g, '\n')
     .split('\n')
+    // YORUMLARI AT. Gizli bir hataydi: satirda once `//` gelse bile
+    // tirnak taramasi yorumun icini de okuyordu ve Turkce kesme isareti
+    // ciftleri sahte "dosya adi" uretiyordu — SHIP + kesme + te (APK +
+    // kesme + ya ifadesi, var olmayan bir dosya adi dogurup build'i
+    // dusuruyordu. Yol adlari zaten yorumda degil kodda yaziyor.
+    .map(l => l.replace(/\/\/.*$/, ''))
     .map(l => (l.match(/'([^']+)'/) || [])[1])
     .filter(Boolean)
     .map(p => p.replace(/^\.\//, ''))

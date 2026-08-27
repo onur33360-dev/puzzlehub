@@ -5,23 +5,37 @@
 
 // ===== OYUN VERİLERİ =====
 
+// AD, AÇIKLAMA ve ZORLUK ARTIK BURADA YAZILI DEĞİL (2026-08-15).
+// Üçü de dile göre değişiyor; burada dursalardı modül YÜKLENİRKEN
+// dondurulurlardı ve dil değişiminde güncellenmezlerdi.
+//   name → t('game_name_' + id)
+//   desc → t('game_desc_' + id)
+//   difficulty → artık bir ANLAM anahtarı ('easy'|'medium'|'hard'),
+//                görünen etiket t('difficulty_' + difficulty)
+// Zorluğun anahtara dönmesi ayrıca bir hatayı kapatıyor: değer eskiden
+// 'Orta' gibi görünen bir metindi, yani yine metin kimlik olarak
+// kullanılıyordu (bkz. app.js GAME_IDS yorumu).
 const REEL_GAMES = [
-  { id:'blockPuzzle', name:'Bulmaca Blokları', emoji:'🧱', category:'puzzle', desc:'Blokları yerleştir, satırları temizle!', difficulty:'Orta', gradient:['#7c3aed','#5b21b6'], playable:true },
-  { id:'game2048', name:'2048', emoji:'🔢', category:'puzzle', desc:'Kaydır, birleştir, 2048\'e ulaş!', difficulty:'Kolay', gradient:['#d97706','#92400e'], playable:true },
-  { id:'memoryGame', name:'Hafıza Oyunu', emoji:'🧠', category:'puzzle', desc:'Kartları eşleştir, hafızanı test et!', difficulty:'Kolay', gradient:['#0891b2','#155e75'], playable:true },
-  { id:'wordSearch', name:'Kelime Avı', emoji:'📝', category:'puzzle', desc:'Parmağınla sürükle, kelimeyi bul!', difficulty:'Orta', gradient:['#16a34a','#166534'], playable:true },
-  { id:'sudoku', name:'Sudoku', emoji:'#️⃣', category:'puzzle', desc:'9x9 tabloyu doldur!', difficulty:'Zor', gradient:['#1d4ed8','#1e3a8a'], playable:true },
-  { id:'waterSort', name:'İksir Sıralama', emoji:'🧪', category:'puzzle', desc:'İksirleri sırala, renkleri ayır!', difficulty:'Orta', gradient:['#1e2a63','#080b22'], playable:true },
-  { id:'arrowPuzzle', name:'Ok Bulmaca', emoji:'🔮', category:'puzzle', desc:'Enerji kanallarını doğru sırayla boşalt!', difficulty:'Kolay', gradient:['#2a1a5e','#0d0824'], playable:true },
-  // 2026-08-09: oyun yazıldı, kart AÇILDI. Zorluk 'Zor' → 'Orta': ilk üç
+  { id:'blockPuzzle', emoji:'🧱', category:'puzzle', difficulty:'medium', gradient:['#7c3aed','#5b21b6'], playable:true },
+  { id:'game2048', emoji:'🔢', category:'puzzle', difficulty:'easy', gradient:['#d97706','#92400e'], playable:true },
+  { id:'memoryGame', emoji:'🧠', category:'puzzle', difficulty:'easy', gradient:['#0891b2','#155e75'], playable:true },
+  { id:'wordSearch', emoji:'📝', category:'puzzle', difficulty:'medium', gradient:['#16a34a','#166534'], playable:true },
+  { id:'sudoku', emoji:'#️⃣', category:'puzzle', difficulty:'hard', gradient:['#1d4ed8','#1e3a8a'], playable:true },
+  { id:'waterSort', emoji:'🧪', category:'puzzle', difficulty:'medium', gradient:['#1e2a63','#080b22'], playable:true },
+  { id:'arrowPuzzle', emoji:'🔮', category:'puzzle', difficulty:'easy', gradient:['#2a1a5e','#0d0824'], playable:true },
+  // 2026-08-09: oyun yazıldı, kart AÇILDI. Zorluk 'hard' → 'medium': ilk üç
   // seviye öğretici ve eğri 70 seviyeye yayılıyor, "Zor" etiketi kartın
   // yalan söylemesi olurdu. Gradyan da tasarım görselinin mavi-beyaz
   // dünyasına çekildi (eskisi kırmızıydı ve oyunla hiç ilgisi yoktu).
-  { id:'flowConnect', name:'Akış Bağlantı', emoji:'🔗', category:'puzzle', desc:'Renkleri bağla, tahtayı doldur!', difficulty:'Orta', gradient:['#2b6cb8','#0d1b3e'], playable:true, addedAt:'2026-08-09' },
-  { id:'jigsawCard', name:'Resim Kaydır', emoji:'🖼️', category:'puzzle', desc:'Fotoğrafı kaydırarak tamamla!', difficulty:'Orta', gradient:['#123a4a','#06121c'], playable:true },
-  { id:'snakeGame', name:'Yılan', emoji:'🐍', category:'arcade', desc:'Klasik yılan — elmasları topla, uza!', difficulty:'Kolay', gradient:['#16255e','#060b22'], playable:true, addedAt:'2026-08-08' },
-  { id:'flappyUfo', name:'Flappy UFO', emoji:'🛸', category:'arcade', desc:'Dokun, yüksel, geçitlerden süz!', difficulty:'Orta', gradient:['#132a63','#04081c'], playable:true, addedAt:'2026-08-08' },
+  { id:'flowConnect', emoji:'🔗', category:'puzzle', difficulty:'medium', gradient:['#2b6cb8','#0d1b3e'], playable:true, addedAt:'2026-08-09' },
+  { id:'jigsawCard', emoji:'🖼️', category:'puzzle', difficulty:'medium', gradient:['#123a4a','#06121c'], playable:true },
+  { id:'snakeGame', emoji:'🐍', category:'arcade', difficulty:'easy', gradient:['#16255e','#060b22'], playable:true, addedAt:'2026-08-08' },
+  { id:'flappyUfo', emoji:'🛸', category:'arcade', difficulty:'medium', gradient:['#132a63','#04081c'], playable:true, addedAt:'2026-08-08' },
 ];
+
+/** Kartın o anki dildeki adı / açıklaması. Tek kaynak locale tablosu. */
+function reelName(g) { return (typeof t === 'function') ? t('game_name_' + g.id) : g.id; }
+function reelDesc(g) { return (typeof t === 'function') ? t('game_desc_' + g.id) : ''; }
 
 // addedAt YALNIZCA yeni eklenenlerde var; alanı olmayan oyun "eski" sayılıyor.
 // Tarih tabanlı olması bilinçli: elle konan bir `yeni` bayrağını birinin
@@ -34,19 +48,17 @@ function _isNewGame(g) {
   return (Date.now() - t) < NEW_GAME_DAYS * 86400000;
 }
 
-const GAME_NAME_MAP = {
-  'blockPuzzle': 'Bulmaca Blokları',
-  'game2048': '2048',
-  'memoryGame': 'Hafıza Oyunu',
-  'wordSearch': 'Kelime Avı',
-  'sudoku': 'Sudoku',
-  'waterSort': 'İksir Sıralama',
-  'arrowPuzzle': 'Ok Bulmaca',
-  'flowConnect': 'Akış Bağlantı',
-  'jigsawCard': 'Resim Kaydır',
-  'snakeGame': 'Yılan',
-  'flappyUfo': 'Flappy UFO'
-};
+// GAME_NAME_MAP KALDIRILDI (2026-08-15, yerelleştirme).
+//
+// id → Türkçe ad eşlemesiydi ve iki işi vardı: kart başlığını yazmak ve
+// playGame()'i çağırmak. İkisi de artık başka yerden geliyor:
+//   • ad      → t('game_name_' + id), tek kaynak locale tablosu
+//   • başlatma→ playGame(id), çünkü playGame artık ID alıyor
+//     (eskiden GÖRÜNEN ADI alıyordu — bkz. app.js GAME_IDS'in yorumu)
+//
+// Burada tutulsaydı oyun adları İKİ yerde yaşardı ve biri çevrilip
+// diğeri Türkçe kalırdı. CLAUDE.md'nin "yeni oyun ÜÇ yere kaydedilir"
+// kuralı bu yüzden İKİ yere indi: GAME_IDS (app.js) ve REEL_GAMES.
 
 
 
@@ -355,16 +367,32 @@ MiniDemos.demo_wordSearch = function(gradient) {
 
   // Harfler ve kelimeler oyunun HAVUZUNDAN geliyor; kartın kendi kopyası
   // yok. Havuz yoksa (yükleme sırası bozulmuşsa) kart yine çalışsın.
-  const W = (typeof WORDS_TR !== 'undefined') ? WORDS_TR : null;
-  const ALPHA = W ? W.FILLER_BAG : 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ';
+  // AKTİF DİLİN havuzundan. Kartın kendi kopyası yok — 2026-08-16'ya
+  // kadar burada sabit Türkçe yedekler ('KEDİ','DENİZ','GÜNEŞ') ve sabit
+  // Türk alfabesi vardı; Japonca bir cihazda Keşfet kartı Türkçe harfler
+  // gösterirdi.
+  //
+  // PERFORMANS: `WordPools.forLocale()` sadece bir sözlük araması ve
+  // havuz `register()` anında ön işlenmiş — her kart için havuzu YENİDEN
+  // AYRIŞTIRMAK diye bir şey yok. Kelime seçimi kart kurulurken BİR KEZ
+  // yapılıyor, kaydırma sırasında değil. Akışın performansı için kritik
+  // olan kural bu (bkz. reels'in aktif-kart yaşam döngüsü).
+  const P = (typeof WordPools !== 'undefined') ? WordPools.forLocale() : null;
+  // Dolgu grapheme DİZİSİ; ızgara hücreleri de öyle. Latin'de fark yok,
+  // Devanagari'de hücre başına bir küme demek.
+  const ALPHA = (P && P.fillerBag.length) ? P.fillerBag : ['?'];
   function pickWords() {
-    if (!W) return ['KEDİ', 'DENİZ', 'GÜNEŞ'];
-    const src = W.byLength(4, 5);
-    if (src.length < 3) return ['KEDİ', 'DENİZ', 'GÜNEŞ'];
+    if (!P) return [];
+    // 4-5 grapheme: 8×8 önizleme ızgarasına sığan ve okunabilen aralık.
+    // Havuzda o aralık boşsa (Çince 2-4) sınır gevşetiliyor.
+    let src = P.words.filter(x => x.n >= 4 && x.n <= 5);
+    if (src.length < 3) src = P.words.filter(x => x.n >= 2 && x.n <= 5);
+    if (src.length < 3) return [];
     const out = [];
-    while (out.length < 3) {
-      const w = src[Math.floor(Math.random() * src.length)].w;
-      if (out.indexOf(w) === -1) out.push(w);
+    let guard = 0;
+    while (out.length < 3 && guard++ < 60) {
+      const w = src[Math.floor(Math.random() * src.length)];
+      if (!out.some(x => x.w === w.w)) out.push(w);
     }
     return out;
   }
@@ -391,7 +419,7 @@ MiniDemos.demo_wordSearch = function(gradient) {
   caption.style.cssText =
     'font:800 11px/1 var(--ph-font-display,inherit);letter-spacing:.10em;' +
     'color:rgba(255,255,255,.55);text-align:center;margin-bottom:9px';
-  caption.textContent = 'ÇAPRAZ DA SÜRÜKLE';
+  caption.textContent = t('demo_hint_wordsearch');
   scene.appendChild(caption);
 
   // position:relative — seçim kapsülü mutlak konumlanıyor.
@@ -413,12 +441,15 @@ MiniDemos.demo_wordSearch = function(gradient) {
     grid.push(new Array(SIZE).fill(''));
   }
   // Önce kelimeler, sonra dolgu — oyunun üreticisiyle aynı sıra.
+  // `w.g` GRAPHEME dizisi, `w.w` görüntülenen dize. Hücrelere dizinin
+  // elemanları konuyor — `w.w[k]` Devanagari'de yarım harf verirdi.
   const wordCells = WORDS.map((w, i) => {
     const p = PLACES[i];
     const list = [];
-    for (let k = 0; k < w.length; k++) {
+    for (let k = 0; k < w.g.length; k++) {
       const r = p.r + p.dr * k, c = p.c + p.dc * k;
-      grid[r][c] = w[k];
+      if (r >= SIZE || c >= SIZE) break;   // yerleşim kutunun dışına taşmasın
+      grid[r][c] = w.g[k];
       list.push({ r, c });
     }
     return list;
@@ -1085,7 +1116,7 @@ MiniDemos.demo_flowConnect = function(gradient) {
 
   const cap = document.createElement('div');
   cap.style.cssText = 'font:800 11px/1 var(--ph-font-display,inherit);letter-spacing:.10em;color:rgba(255,255,255,.55);text-align:center';
-  cap.textContent = 'PARMAĞINLA BAĞLA';
+  cap.textContent = t('demo_hint_flow');
   scene.appendChild(cap);
 
   const panel = document.createElement('div');
@@ -1105,7 +1136,7 @@ MiniDemos.demo_flowConnect = function(gradient) {
     'background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,0) 26%),' +
     'linear-gradient(135deg,'+gradient[0]+','+gradient[1]+');' +
     'box-shadow:0 6px 16px rgba(0,0,0,.42)';
-  cta.textContent = '▶  TAM OYUNU AÇ';
+  cta.textContent = t('discover_open_full');
   scene.appendChild(cta);
   el.appendChild(scene);
 
@@ -1279,7 +1310,7 @@ MiniDemos.demo_flowConnect = function(gradient) {
     e.stopPropagation();
     active = i;
     touched = true;
-    cap.textContent = 'AYNI RENKLERİ BİRLEŞTİR';
+    cap.textContent = t('demo_hint_watersort');
     if (typeof GameAudio !== 'undefined') { GameAudio.play('tap'); GameAudio.haptic('micro'); }
     paint();
   }
@@ -1297,7 +1328,7 @@ MiniDemos.demo_flowConnect = function(gradient) {
 
   function win() {
     solved = true;
-    cap.textContent = 'ÇÖZDÜN!';
+    cap.textContent = t('demo_solved');
     cta.style.display = '';
     if (typeof GameAudio !== 'undefined') { GameAudio.play('win'); GameAudio.haptic('win'); }
     if (typeof phParticleBurst === 'function') {
@@ -1312,7 +1343,7 @@ MiniDemos.demo_flowConnect = function(gradient) {
     poolIdx++;
     active = -1; touched = false; solved = false; pulses = [];
     hintT0 = performance.now();
-    cap.textContent = 'PARMAĞINLA BAĞLA';
+    cap.textContent = t('demo_hint_flow');
     cta.style.display = 'none';
     boot();
   }
@@ -1337,7 +1368,7 @@ MiniDemos.demo_flowConnect = function(gradient) {
     e.stopPropagation();
     incPlayCount('flowConnect');
     _recordInteraction('flowConnect', 'play');
-    if (typeof playGame === 'function') playGame(GAME_NAME_MAP.flowConnect);
+    if (typeof playGame === 'function') playGame('flowConnect');
   });
 
   load();
@@ -2115,22 +2146,31 @@ window.ReelsEngine = (function() {
     `);
   }
 
-  function _diffClass(d) {
-    if(d==='Kolay') return 'easy';
-    if(d==='Orta') return 'medium';
+  // Zorluk anahtarı → CSS sınıfı. Eskiden GÖRÜNEN METNİ karşılaştırıyordu
+  // ('Kolay' → 'easy'); yerelleştirmeden sonra o karşılaştırma her dilde
+  // 'hard'a düşerdi ve bütün kartlar kırmızı görünürdü. Artık anahtarın
+  // kendisi sınıf; Sudoku'nun expert/master'ı da 'hard' kovasına iniyor
+  // (kartta üç renk var, beş zorluk).
+  function _diffClass(key) {
+    if (key === 'easy') return 'easy';
+    if (key === 'medium') return 'medium';
     return 'hard';
   }
 
   // Zorluğu oyunun KENDİSİ bildirebilir. Sudoku'da zorluk oyuncu
   // tarafından seçiliyor; sabit etiket "Zor" yazıp Kolay bulmaca vermek
-  // kartın yalan söylemesi demekti. Oyun `difficultyLabel` gösterirse o
-  // kullanılır, yoksa REEL_GAMES'teki statik etikete düşülür.
+  // kartın yalan söylemesi demekti. Oyun `difficultyKey` gösterirse o
+  // kullanılır, yoksa REEL_GAMES'teki statik anahtara düşülür.
   // Genel bir mekanizma: seçilebilir zorluğu olan her oyun aynı şekilde
   // katılır, reels.js'in o oyunu tanımasına gerek kalmadan.
-  function _liveDifficulty(game) {
+  //
+  // SÖZLEŞME ARTIK ANAHTAR DÖNDÜRÜYOR (`difficultyKey`), görünen metin
+  // değil — çeviri bu tarafta yapılıyor. Eski `difficultyLabel` Türkçe
+  // bir dizge veriyordu ve doğrudan karta basılıyordu.
+  function _liveDifficultyKey(game) {
     try {
       const g = (typeof PuzzleGames !== 'undefined') ? PuzzleGames[game.id] : null;
-      if (g && typeof g.difficultyLabel === 'string') return g.difficultyLabel;
+      if (g && typeof g.difficultyKey === 'string') return g.difficultyKey;
     } catch(e) {}
     return game.difficulty;
   }
@@ -2150,6 +2190,11 @@ window.ReelsEngine = (function() {
     // Demo area
     const demoArea = document.createElement('div');
     demoArea.className = 'reel-demo-area';
+    // Oyun ÖNİZLEMESİ de oyun dünyasıdır → LTR. Kartın metin kısmı
+    // (.reel-info: ad, açıklama, ipucu) kapsayıcının dışında kalıyor
+    // ve kabuğun yönünü izliyor, yani Arapça'da doğru akıyor.
+    // Aynı gerekçe index.html'deki #game-container için de yazılı.
+    demoArea.setAttribute('dir', 'ltr');
     const overlay = document.createElement('div');
     overlay.className = 'reel-demo-overlay';
     demoArea.appendChild(overlay);
@@ -2166,12 +2211,12 @@ window.ReelsEngine = (function() {
     info.className = 'reel-info';
 
     const titleRow = document.createElement('div');
-    titleRow.innerHTML = '<span class="reel-game-emoji">'+game.emoji+'</span><span class="reel-game-name">'+game.name+'</span>';
+    titleRow.innerHTML = '<span class="reel-game-emoji">'+game.emoji+'</span><span class="reel-game-name">'+reelName(game)+'</span>';
     info.appendChild(titleRow);
 
     const desc = document.createElement('div');
     desc.className = 'reel-desc';
-    desc.textContent = game.desc;
+    desc.textContent = reelDesc(game);
     info.appendChild(desc);
 
     // Stats
@@ -2181,7 +2226,7 @@ window.ReelsEngine = (function() {
     stats.innerHTML =
       '<div class="reel-stat">⭐ <span class="reel-stat-val">'+rating+'</span></div>'+
       '<div class="reel-stat">🎮 <span class="reel-stat-val">'+getPlayCount(game.id)+'</span></div>'+
-      '<span class="reel-diff-badge '+_diffClass(_liveDifficulty(game))+'">'+_liveDifficulty(game)+'</span>';
+      '<span class="reel-diff-badge '+_diffClass(_liveDifficultyKey(game))+'">'+t('difficulty_'+_liveDifficultyKey(game))+'</span>';
     info.appendChild(stats);
 
     // High score
@@ -2189,7 +2234,7 @@ window.ReelsEngine = (function() {
     if(hi>0) {
       const hiEl = document.createElement('div');
       hiEl.className = 'reel-highscore';
-      hiEl.innerHTML = '🏆 En Yüksek: <span>'+hi.toLocaleString()+'</span>';
+      hiEl.innerHTML = t('discover_best', { score: '<span>' + I18n.n(hi) + '</span>' });
       info.appendChild(hiEl);
     }
 
@@ -2199,14 +2244,14 @@ window.ReelsEngine = (function() {
     // Soft-solid: oyunun kendi rengini koru ama üste ince bir catch-light
     // katmanı bindir (§14) — düz gradyan yerine "basılabilir" premium yüzey.
     btn.style.background = 'linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,0) 26%),linear-gradient(135deg,'+game.gradient[0]+','+game.gradient[1]+')';
-    btn.textContent = game.playable ? '▶  OYNA' : '🔒  YAKINDA';
+    btn.textContent = game.playable ? t('discover_play') : t('discover_locked');
     btn.addEventListener('click', function() {
       if(game.playable) {
         incPlayCount(game.id);
         _recordInteraction(game.id, 'play');
-        if(typeof playGame==='function') playGame(GAME_NAME_MAP[game.id]);
+        if(typeof playGame==='function') playGame(game.id);
       } else {
-        if(typeof showToast==='function') showToast('Yakında!');
+        if(typeof showToast==='function') showToast(t('discover_soon'));
       }
     });
     info.appendChild(btn);
@@ -2219,7 +2264,7 @@ window.ReelsEngine = (function() {
     // Favorite button
     const favBtn = document.createElement('div');
     favBtn.className = 'reel-action-btn'+(isFavorite(game.id)?' fav-active':'');
-    favBtn.innerHTML = '<div class="act-icon">'+(isFavorite(game.id)?'❤️':'🤍')+'</div><span class="act-label">Favori</span>';
+    favBtn.innerHTML = '<div class="act-icon">'+(isFavorite(game.id)?'❤️':'🤍')+'</div><span class="act-label">'+t('discover_fav_label')+'</span>';
     favBtn.addEventListener('click', function() {
       const isNow = toggleFavorite(game.id);
       _recordInteraction(game.id, 'fav');
@@ -2229,7 +2274,7 @@ window.ReelsEngine = (function() {
         GameAudio.play(isNow ? 'favorite' : 'unfavorite');
         GameAudio.haptic(isNow ? 'favorite' : 'micro');
       }
-      if(typeof showToast==='function') showToast(isNow?'❤️ Favorilere eklendi':'💔 Favorilerden çıkarıldı');
+      if(typeof showToast==='function') showToast(isNow?t('discover_favorited'):t('discover_unfavorited'));
     });
     actions.appendChild(favBtn);
 
@@ -2243,7 +2288,7 @@ window.ReelsEngine = (function() {
     if(idx === 0) {
       const hint = document.createElement('div');
       hint.className = 'reel-swipe-hint';
-      hint.innerHTML = '<span class="hint-arrow">⬆</span><span class="hint-text">Kaydır</span>';
+      hint.innerHTML = '<span class="hint-arrow">⬆</span><span class="hint-text">'+t('discover_swipe_hint')+'</span>';
       card.appendChild(hint);
       setTimeout(() => {
         hint.style.opacity = '0';
@@ -2325,11 +2370,13 @@ window.ReelsEngine = (function() {
   // olsaydı akış sessizce daralır ve oyuncu neden az oyun gördüğünü
   // unuturdu — filtrenin görünür olduğu an ile etkisini gösterdiği an
   // arasında gün geçebilirdi.
+  // `label` ARTIK BİR ANAHTAR, görünen metin değil: bu dizi modül
+  // yüklenirken kuruluyor ve metin orada dondurulurdu.
   const CHIPS = [
-    { id: 'all',    label: 'Tümü' },
-    { id: 'puzzle', label: 'Bulmaca' },
-    { id: 'arcade', label: 'Arcade' },
-    { id: 'fav',    label: '★ Favoriler' },
+    { id: 'all',    key: 'common_all' },
+    { id: 'puzzle', key: 'discover_chip_puzzle' },
+    { id: 'arcade', key: 'discover_chip_arcade' },
+    { id: 'fav',    key: 'discover_chip_favorites' },
   ];
 
   function _buildChips() {
@@ -2339,7 +2386,7 @@ window.ReelsEngine = (function() {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'reels-chip' + (c.id === _filter ? ' on' : '');
-      b.textContent = c.label;
+      b.textContent = t(c.key);
       b.dataset.chip = c.id;
       if (c.id === 'fav' && getFavorites().length === 0) b.classList.add('off');
       b.addEventListener('click', () => _setFilter(c.id));

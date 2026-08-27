@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    UYGULAMA BASINA DIL (Android 13+ / API 33).
+
+    NE ISE YARAR: bu liste sayesinde SlySwipe, Android Ayarlar > Uygulamalar
+    > SlySwipe > Dil ekraninda GORUNUR ve kullanici sistem genelinden BAGIMSIZ
+    olarak yalnizca bu uygulama icin bir dil secebilir.
+
+    NEDEN BURADA BIR CEVIRI YOK: uygulamanin metinleri Android kaynaklarinda
+    degil, locales/*.js icinde yasiyor (bkz. core/i18n.js). Bu dosya yalnizca
+    "hangi dilleri destekliyoruz" beyani; platform bunu values-XX klasorlerinden
+    CIKARMAK yerine buradan okur, ki localeConfig tam olarak bunun icin var.
+
+    NASIL BAGLANIR: kullanicinin sistemden yaptigi secim WebView'in
+    navigator.languages degerine yansir ve I18n bunu "Sistem Varsayilani"
+    modunda zaten okuyor — yani ayri, kirilgan bir native kopru YOK.
+    Uygulama ici secim ise ph_lang'e yazilir ve sistemi gecersiz kilar.
+
+    ETIKETLER BCP-47: pt-BR ve zh-Hans burada AYNEN bu yazimla gecer;
+    values- klasor yaziminin (pt-rBR / zh-rCN) buraya bir etkisi yok.
+
+    YENI DIL EKLERKEN: core/i18n.js icindeki SUPPORTED listesiyle bu dosya
+    AYNI kalmali. tools/i18n-test.js ikisini karsilastiriyor ve ayrisirlarsa
+    calismayi dusuruyor — cunku burada eksik kalan bir dil, uygulamada
+    calisiyor ama sistem dil ekraninda hic gorunmuyor olurdu.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="tr" />
+    <locale android:name="en" />
+    <locale android:name="es" />
+    <locale android:name="pt-BR" />
+    <locale android:name="de" />
+    <locale android:name="fr" />
+    <locale android:name="it" />
+    <locale android:name="ru" />
+    <locale android:name="ar" />
+    <locale android:name="ja" />
+    <locale android:name="ko" />
+    <locale android:name="zh-Hans" />
+    <locale android:name="id" />
+    <locale android:name="hi" />
+    <locale android:name="pl" />
+</locale-config>

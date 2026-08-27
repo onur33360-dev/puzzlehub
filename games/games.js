@@ -1291,10 +1291,10 @@ PuzzleGames.game2048 = (() => {
     // vazgeç: burada reklamsız bedava hak vermek ekonomiyi delerdi.
     if (typeof offerRewardChoice !== 'function') return;
     offerRewardChoice({
-      title: 'Geri Alma',
-      adText: 'Reklam İzle → +1',
+      title: t('g2048_undo_title'),
+      adText: t('g2048_undo_ad'),
       gemCost: undoCost(),
-      gemText: '+1 Geri Alma',
+      gemText: t('g2048_undo_plus'),
       onGrant: () => { undosLeft++; refreshUndo(); doUndo(); }
     });
   }
@@ -1451,13 +1451,13 @@ PuzzleGames.game2048 = (() => {
       // "Devam et" = ölümcül hamleyi geri al. 2048'de anlamlı olan tek
       // devam biçimi bu; rastgele karo silmek tahtayı oyuncunun
       // kurmadığı bir duruma sokardı.
-      showGameOver(false, 'Hamle Kalmadı', 'En yüksek karo: ' + enBuyukKaro(), {
+      showGameOver(false, t('g2048_over_title'), t('g2048_over_msg', { tile: enBuyukKaro() }), {
         accent: '#7C4FE0', accentLight: '#A886FF', accentGlow: 'rgba(168,134,255,.7)',
         mark: '✧',
         stats: [
-          { label: 'Skor', value: score.toLocaleString() },
+          { label: t('common_score'), value: I18n.n(score) },
           // Rekor bu turda kırıldıysa kapsül altın vurguyla işaretlenir.
-          { label: '👑 En İyi', value: best.toLocaleString(), record: score >= best && score > 0 },
+          { label: t('common_best_crown'), value: I18n.n(best), record: score >= best && score > 0 },
         ],
         onContinue: history.length ? () => { doUndo(); refreshUndo(); } : undefined,
       });
@@ -1617,9 +1617,9 @@ PuzzleGames.game2048 = (() => {
     wrapEl.className = 'g2-wrap';
     wrapEl.innerHTML =
       '<div class="g2-scores">' +
-        '<div class="g2-score"><span class="g2-score-lbl">Skor</span>' +
+        '<div class="g2-score"><span class="g2-score-lbl">' + t('common_score') + '</span>' +
           '<span class="g2-score-val" data-role="score">0</span></div>' +
-        '<div class="g2-score"><span class="g2-score-lbl">👑 En İyi</span>' +
+        '<div class="g2-score"><span class="g2-score-lbl">' + t('common_best_crown') + '</span>' +
           '<span class="g2-score-val" data-role="best">0</span></div>' +
       '</div>' +
       '<div class="g2-board" data-role="board">' +
@@ -1714,7 +1714,7 @@ PuzzleGames.memoryGame = (() => {
   }
   function render() {
     container.innerHTML = `
-      <div class="mem-info"><div>Hamle: <span id="mem-moves">${moves}</span></div><div>Eşleşme: <span>${matched}/${EMOJIS.length}</span></div></div>
+      <div class="mem-info"><div>${t('memory_moves')}: <span id="mem-moves">${moves}</span></div><div>${t('memory_matches')}: <span>${matched}/${EMOJIS.length}</span></div></div>
       <div class="mem-grid">${cards.map((c,i)=>`<div class="mem-card ${c.done?'done':c.up?'up':'down'}" data-i="${i}">${c.up||c.done?c.emoji:'❓'}</div>`).join('')}</div>`;
     container.querySelectorAll('.mem-card:not(.done):not(.up)').forEach(el => {
       addEv(el, 'click', () => flipCard(+el.dataset.i));
@@ -1738,14 +1738,14 @@ PuzzleGames.memoryGame = (() => {
           gameEvent('game_ended', {
             gameId: 'memoryGame', result: 'won', score: Math.max(1000 - moves * 20, 100),
           });
-          showGameOver(true, 'Eşleştirme Tamamlandı', 'Tüm kartları eşledin.', {
+          showGameOver(true, t('memory_done_title'), t('memory_done_msg'), {
           accent: 'var(--ph-jewel-2-shadow)',
           accentLight: 'var(--ph-jewel-2-highlight)',
           accentGlow: 'var(--ph-jewel-2-glow)',
           mark: '✦',
           stats: [
-            { label: 'Hamle', value: moves },
-            { label: 'Eşleşme', value: matched + '/' + EMOJIS.length },
+            { label: t('memory_moves'), value: moves },
+            { label: t('memory_matches'), value: matched + '/' + EMOJIS.length },
           ],
         }); }
       } else {
@@ -1784,7 +1784,26 @@ PuzzleGames.wordSearch = (() => {
   // Havuz zaten büyük harf, ama karşılaştırmalar yine buradan geçiyor:
   // ileride havuza küçük harfli bir kelime eklenirse sessizce eşleşmemek
   // yerine doğru büyütülmeli.
-  const TRUP = (s) => String(s).toLocaleUpperCase('tr');
+  // 2026-08-16: artık HAVUZUN dilinden geliyor. Türkçe'de 'i'→'İ' hâlâ
+  // doğru, ama CJK/Arapça/Devanagari'de büyük harf kavramı yok ve
+  // zorlamak kelimeyi bozabilir — o havuzlar `upperLocale: null` diyor
+  // ve dönüşüm hiç yapılmıyor.
+  const UP = (s) => (typeof WordPools !== 'undefined')
+    ? WordPools.upper(activePool(), s) : String(s);
+
+  // ── GRAPHEME ──────────────────────────────────────────────────────
+  // Tahtanın kuralı: BİR HÜCRE = BİR GRAPHEME. `word[i]` ve
+  // `word.length` Latin/Kiril'de doğru, Devanagari'de YANLIŞ ("क्ष" üç
+  // code point, tek görsel harf). Bütün üretici ve doğrulayıcı artık
+  // grapheme DİZİSİ üzerinde çalışıyor. Ayrıntılı gerekçe: games/words.js
+  const GR = (s) => (typeof WordPools !== 'undefined')
+    ? WordPools.graphemes(s) : Array.from(String(s));
+
+  // Aktif havuz. Dil değişince başka bir nesne döner — o yüzden hiçbir
+  // yerde modül seviyesinde saklanmıyor, her seferinde soruluyor.
+  function activePool() {
+    return (typeof WordPools !== 'undefined') ? WordPools.forLocale() : null;
+  }
 
   // Sekiz yön: [satır, sütun]. Ters yönler AYRI kayıt — bir kelimenin
   // ters yerleştirilmesi ile ters okunması farklı şeyler ve ikisi de
@@ -1800,12 +1819,30 @@ PuzzleGames.wordSearch = (() => {
   // duruyor) — şartnamenin kuralı: zorluk yerleşimden ve yönden gelsin,
   // ekrandaki çip sayısından değil. Izgara da telefonda okunabilirlik
   // için 12'de tavan yapıyor; daha büyüğü harfleri okunmaz yapardı.
+  // UZUNLUK ARTIK DİLE GÖRE. Tek bir min/max bütün dillere dayatılamaz:
+  // Çince'de dört karakterlik bir kelime zaten uzundur, Almanca'da
+  // "Schmetterling" 13 grapheme'dir ve 3-6 aralığı o havuzu boşaltır.
+  // Kademe sayısı ve sırası havuz dosyalarındaki `len` ile aynı (5).
+  // Havuz yoksa Latin varsayılanına düşülür — oyun çökmemeli.
+  const LEN_DEFAULT = [[3, 6], [3, 7], [4, 8], [4, 9], [4, 10]];
+  function tierOf(lv) { return lv <= 5 ? 0 : lv <= 10 ? 1 : lv <= 20 ? 2 : lv <= 40 ? 3 : 4; }
+
   function paramsFor(lv) {
-    if (lv <= 5)  return { size: 10, count: 5, dirs: DIRS_EASY, minLen: 3, maxLen: 6, overlapBias: 0 };
-    if (lv <= 10) return { size: 10, count: 6, dirs: DIRS_MED,  minLen: 3, maxLen: 7, overlapBias: 1 };
-    if (lv <= 20) return { size: 11, count: 6, dirs: DIRS_ALL,  minLen: 4, maxLen: 8, overlapBias: 2 };
-    if (lv <= 40) return { size: 11, count: 7, dirs: DIRS_ALL,  minLen: 4, maxLen: 9, overlapBias: 3 };
-    return          { size: 12, count: 8, dirs: DIRS_ALL,  minLen: 4, maxLen: 10, overlapBias: 4 };
+    const pool = activePool();
+    const tier = tierOf(lv);
+    const lens = (pool && pool.len) || LEN_DEFAULT;
+    const [minLen, maxLen] = lens[Math.min(tier, lens.length - 1)];
+    // CJK hücreleri Latin'den geniş çizilir; ızgara tavanı havuzdan.
+    const cap = (pool && pool.sizeCap) || 12;
+    const base = [
+      { size: 10, count: 5, dirs: DIRS_EASY, overlapBias: 0 },
+      { size: 10, count: 6, dirs: DIRS_MED,  overlapBias: 1 },
+      { size: 11, count: 6, dirs: DIRS_ALL,  overlapBias: 2 },
+      { size: 11, count: 7, dirs: DIRS_ALL,  overlapBias: 3 },
+      { size: 12, count: 8, dirs: DIRS_ALL,  overlapBias: 4 },
+    ][tier];
+    return { size: Math.min(base.size, cap), count: base.count, dirs: base.dirs,
+             minLen: minLen, maxLen: maxLen, overlapBias: base.overlapBias };
   }
 
   // ── Kelime torbası ──────────────────────────────────────────────────
@@ -1814,31 +1851,77 @@ PuzzleGames.wordSearch = (() => {
   // aynı: bağımsız çekiliş kümelenir, bazı kelimeler üst üste gelirken
   // bazıları hiç çıkmaz. Torba tükenmeden bir kelime ikinci kez gelmez.
   let bag = [];
-  function refillBag(pool) {
-    bag = pool.slice();
+  let bagCode = null;              // torbanın hangi dile ait olduğu
+  function refillBag(src) {
+    bag = src.slice();
     for (let i = bag.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       const t = bag[i]; bag[i] = bag[j]; bag[j] = t;
     }
   }
+
+  // ── SON KULLANILANLAR ────────────────────────────────────────────
+  // Torba tek başına "bir tur içinde tekrar yok" garantisi veriyor, ama
+  // torbanın SONU ile yeni torbanın BAŞI arka arkaya gelebiliyor —
+  // Keşfet akışının "epok dikişi" ile birebir aynı sorun. Bu pencere
+  // onu kapatıyor: son N kelime bir daha seçilmiyor.
+  // N, bir tahtadaki kelime sayısının birkaç katı; havuzun yarısından
+  // büyük olamaz, yoksa seçilecek kelime kalmaz.
+  const RECENT_MAX = 24;
+  let recent = [];
+  function noteRecent(w) {
+    recent.push(w);
+    if (recent.length > RECENT_MAX) recent.shift();
+  }
+
   function pickWords(p) {
-    const src = (typeof WORDS_TR !== 'undefined' && WORDS_TR)
-      ? WORDS_TR.byLength(p.minLen, Math.min(p.maxLen, p.size))
-      : [];
-    // Havuz yoksa (yükleme sırası bozulmuşsa) oyun çökmesin.
-    if (!src.length) return ['OYUN', 'SKOR', 'PUAN', 'RENK', 'HARF'];
+    const pool = activePool();
+    // Havuz yoksa (yükleme sırası bozulmuşsa) oyun çökmesin: boş dizi
+    // dönüyor ve buildBoard son çare tahtasına düşüyor. Eskiden burada
+    // TÜRKÇE yedek kelimeler vardı — 15 dilde yanlış olurdu.
+    if (!pool || !pool.words.length) return [];
+
+    // Dil değiştiyse torba da değişmeli: eski dilin kelimeleriyle yeni
+    // dilde tahta kurulamaz.
+    if (bagCode !== pool.code) { bag = []; recent = []; bagCode = pool.code; }
+
+    const maxFit = Math.min(p.maxLen, p.size);
+    const src = pool.words.filter(x => x.n >= p.minLen && x.n <= maxFit);
+    if (!src.length) return [];
+    // Pencere havuza göre kısılıyor: küçük havuzda 24 kelime yasaklamak
+    // seçilecek bir şey bırakmazdı.
+    const pencere = Math.min(RECENT_MAX, Math.floor(src.length / 2));
+
     const words = [];
     let guard = 0;
-    while (words.length < p.count && guard++ < 500) {
+    while (words.length < p.count && guard++ < 800) {
       if (!bag.length) refillBag(src);
       const item = bag.pop();
       if (!item) break;
-      const w = TRUP(item.w);
-      // Aynı tahtada aynı kelime iki kez olmasın; uzunluk da tahtaya sığsın.
-      if (w.length > p.size || words.indexOf(w) !== -1) continue;
-      words.push(w);
+      if (words.indexOf(item.w) !== -1) continue;
+      // `idx !== -1` KONTROLÜ ŞART. Onsuz: geçmiş penceresinden kısayken
+      // (`recent.length - pencere` negatif), BULUNMAYAN bir kelimenin
+      // lastIndexOf'u -1 döner ve -1 >= -18 DOĞRUdur — yani her kelime
+      // reddedilir, döngü boş çıkar ve aşağıdaki yedek yol havuzu SABİT
+      // sırayla doldurur. Sonuç: ardışık seviyeler aynı kelimelerle
+      // başlar. Tam olarak engellemeye çalıştığı şeyi üretiyordu ve
+      // tools/wordsearch-locale-test.js bunu 20 tekrar olarak yakaladı.
+      const idx = recent.lastIndexOf(item.w);
+      if (pencere && idx !== -1 && idx >= recent.length - pencere) continue;
+      words.push(item.w);
     }
-    return words;
+    // Pencere yüzünden yeterli kelime bulunamadıysa (küçük havuz + yüksek
+    // kademe) pencereyi yok sayıp tamamla — tahtasız kalmaktansa tekrar.
+    if (words.length < p.count) {
+      for (const item of src) {
+        if (words.length >= p.count) break;
+        if (words.indexOf(item.w) === -1) words.push(item.w);
+      }
+    }
+    words.forEach(noteRecent);
+    // Üretici GRAPHEME DİZİSİ ile çalışıyor; görüntülenecek dize de
+    // yanında taşınıyor ki hiçbir yerde yeniden birleştirme yapılmasın.
+    return words.map(w => ({ w: w, g: GR(w) }));
   }
 
   // ── Üretici ─────────────────────────────────────────────────────────
@@ -1864,7 +1947,10 @@ PuzzleGames.wordSearch = (() => {
   // TÜKETİCİ olduğu için "yer vardı ama şansımız yaver gitmedi" durumu
   // ortadan kalkıyor. Eski kodun 100 rastgele denemesi tam da bu yüzden
   // sessizce başarısız oluyordu.
-  function placeOne(grid, word, p) {
+  // `word` bir GRAPHEME DİZİSİ. fits/placeOne `.length` ve `[i]`
+  // kullandığı için dizi geçmek yeterli oldu — kodun kendisi değişmedi,
+  // yalnızca ne taşıdığı değişti. Bu, Devanagari'de doğru olan tek yol.
+  function placeOne(grid, word, disp, p) {
     const opts = [];
     for (let di = 0; di < p.dirs.length; di++) {
       const d = p.dirs[di];
@@ -1890,14 +1976,31 @@ PuzzleGames.wordSearch = (() => {
       grid[rr][cc] = word[i];
       cells.push(rr + ',' + cc);
     }
-    return { word, cells };
+    // `word` görüntülenen dize, `g` grapheme dizisi. İkisi de saklanıyor
+    // ki hiçbir yerde tekrar segment etmek gerekmesin.
+    return { word: disp, g: word, cells };
   }
 
-  // Bir kelimenin tahtada kaç kez geçtiğini say (8 yönde). Dolgu harfleri
-  // kazara hedef kelimeyi ikinci kez üretebiliyor; o zaman oyuncu doğru
-  // bir yol çizip reddedilir ya da yanlış yeri yeşile boyarız.
-  function countOccurrences(grid, word, size) {
-    let n = 0;
+  // Bir kelimenin tahtadaki FARKLI YERLEŞİMLERİ. Dönen küme, her
+  // yerleşimi hücre kümesine göre teklileştirir.
+  //
+  // NEDEN YÖN DEĞİL HÜCRE KÜMESİ SAYILIYOR — ölçülmüş bir hata (2026-08-16):
+  // Eski sayaç 8 yönü ayrı ayrı sayıyordu. Oyun ters okumayı ZATEN kabul
+  // ediyor (validate() ileri ve geri diziyi karşılaştırıyor), yani aynı
+  // hücrelerin iki yönden eşleşmesi İKİNCİ BİR YERLEŞİM DEĞİL, tek
+  // yerleşimin iki okunuşudur. Ama sayaç ikisini de sayınca:
+  //   • "星星" gibi YİNELEMELİ (palindrom) kelimeler doğuştan 2 dönüyordu,
+  //   • fillBlanks'in "temiz mi" koşulu hiçbir zaman sağlanamıyordu,
+  //   • 12 yeniden atma boşa gidiyor ve tahta yine de kabul ediliyordu.
+  // Ölçüm: zh-Hans'te kelimelerin %2.9'u "ikiz" görünüyordu; çoğu sahte
+  // pozitifti, ama İÇLERİNDE gerçek ikizler de saklanıyordu — sahte
+  // pozitif gürültüsü gerçek olanı görünmez yapıyordu.
+  //
+  // Hücre kümesi kanonikleştirmesi doğru ölçü: bir doğru parçasının
+  // hücre kümesi yönünden bağımsızdır, o yüzden sıralanmış anahtar
+  // ileri ve geri okuma için AYNI çıkar.
+  function occurrenceKeys(grid, word, size) {
+    const keys = new Set();
     for (let di = 0; di < DIRS_ALL.length; di++) {
       const d = DIRS_ALL[di];
       for (let r = 0; r < size; r++) {
@@ -1906,39 +2009,54 @@ PuzzleGames.wordSearch = (() => {
           const ec = c + d[1] * (word.length - 1);
           if (er < 0 || er >= size || ec < 0 || ec >= size) continue;
           let ok = true;
+          const cells = [];
           for (let i = 0; i < word.length; i++) {
-            if (grid[r + d[0] * i][c + d[1] * i] !== word[i]) { ok = false; break; }
+            const rr = r + d[0] * i, cc = c + d[1] * i;
+            if (grid[rr][cc] !== word[i]) { ok = false; break; }
+            cells.push(rr + ',' + cc);
           }
-          if (ok) n++;
+          if (ok) keys.add(cells.sort().join('|'));
         }
       }
     }
-    return n;
+    return keys;
+  }
+
+  // Geriye dönük ad: artık FARKLI yerleşim sayısını veriyor.
+  function countOccurrences(grid, word, size) {
+    return occurrenceKeys(grid, word, size).size;
   }
 
   function fillBlanks(grid, placedWords, p) {
-    const FB = (typeof WORDS_TR !== 'undefined' && WORDS_TR)
-      ? WORDS_TR.FILLER_BAG : 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ';
+    // DOLGU AKTİF DİLİN ALFABESİNDEN. Eskiden sabit Türk alfabesiydi;
+    // Rusça bir tahtada Latin harf, Arapça bir tahtada 'Ç' görünmesi
+    // demekti — hem yanlış hem bedava ipucu (o hücre kesin kelime değil).
+    const pool = activePool();
+    const FB = (pool && pool.fillerBag.length) ? pool.fillerBag : ['?'];
     const blanks = [];
     for (let r = 0; r < p.size; r++)
       for (let c = 0; c < p.size; c++)
         if (!grid[r][c]) blanks.push([r, c]);
 
     // Dolguyu birkaç kez yeniden atıyoruz ve hedef kelimenin İKİNCİ bir
-    // kopyasını üretmediğinden emin oluyoruz. Sınırlı deneme: bu bir
-    // cila, doğruluk şartı değil — sonsuz döngüye asla girmemeli.
+    // YERLEŞİMİNİ üretmediğinden emin oluyoruz. Sınırlı deneme: sonsuz
+    // döngüye asla girmemeli.
+    //
+    // TEMİZ ÇIKIP ÇIKMADIĞINI ARTIK DÖNDÜRÜYOR. Eskiden sessizce pes
+    // ediyordu ve tahta ikiziyle birlikte kabul ediliyordu; sonuç,
+    // oyuncunun geçerli bir yol çizip BAŞKA hücrelerin yeşile dönmesiydi
+    // (validate() kanonik hücreleri boyar). Kararı buildBoard veriyor.
     for (let attempt = 0; attempt < 12; attempt++) {
       for (let i = 0; i < blanks.length; i++) {
         grid[blanks[i][0]][blanks[i][1]] = FB[Math.floor(Math.random() * FB.length)];
       }
       let clean = true;
       for (let i = 0; i < placedWords.length; i++) {
-        if (countOccurrences(grid, placedWords[i].word, p.size) > 1) { clean = false; break; }
+        if (countOccurrences(grid, placedWords[i].g, p.size) > 1) { clean = false; break; }
       }
-      if (clean) return;
+      if (clean) return true;
     }
-    // Temizlenemediyse tahta yine oynanabilir (kelimeler yerinde);
-    // yalnızca kazara bir ikizi olabilir. Oyunu bunun için bozmuyoruz.
+    return false;
   }
 
   function buildBoard(lv) {
@@ -1951,28 +2069,48 @@ PuzzleGames.wordSearch = (() => {
       const placedList = [];
       // UZUN KELİME ÖNCE: yer daralmadan yerleşsin. Kısa olanı sona
       // bırakmak, başarısızlık ihtimalini belirgin biçimde düşürüyor.
-      const sorted = words.slice().sort((a, b) => b.length - a.length);
+      const sorted = words.slice().sort((a, b) => b.g.length - a.g.length);
       let ok = true;
       for (let i = 0; i < sorted.length; i++) {
-        const res = placeOne(grid, sorted[i], p);
+        const res = placeOne(grid, sorted[i].g, sorted[i].w, p);
         if (!res) { ok = false; break; }
         placedList.push(res);
       }
       if (!ok) continue;
-      fillBlanks(grid, placedList, p);
+      // TEKİLLİK ARTIK TAHTA KABUL ŞARTI. Dolgu 12 denemede ikizi
+      // temizleyemediyse sorun dolguda değil YERLEŞİMDE olabilir: iki
+      // hedef kelimenin kesişimi ya da yinelemeli bir kelime (星星),
+      // üçüncü bir yerde aynı diziyi kazara kurabiliyor. Böyle bir
+      // tahtayı kabul etmek, oyuncunun geçerli bir yol çizip BAŞKA
+      // hücrelerin yeşile döndüğünü görmesi demek. Yeni kelime kümesiyle
+      // baştan denemek ucuz (döngü zaten 24 kez dönüyor).
+      if (!fillBlanks(grid, placedList, p)) continue;
       return { size: p.size, grid: grid, placed: placedList };
     }
     // SON ÇARE: en küçük ayarla, kesin yerleşen bir tahta. Buraya
     // düşmek beklenmiyor ama oyun asla boş ekranla kalmamalı.
-    const p2 = { size: 10, count: 4, dirs: [D_E, D_S], minLen: 3, maxLen: 6, overlapBias: 0 };
+    // Uzunluk aralığı yine DİLDEN geliyor: sabit 3-6 yazmak Çince'de
+    // (2-4) ve Almanca'da (3-13) yanlış olurdu ve son çare tam da
+    // havuzun zorlandığı anda devreye giriyor.
+    const pool = activePool();
+    const lens = (pool && pool.len) || LEN_DEFAULT;
+    const p2 = { size: Math.min(10, (pool && pool.sizeCap) || 12), count: 4,
+                 dirs: [D_E, D_S], minLen: lens[0][0], maxLen: lens[0][1], overlapBias: 0 };
     const words = pickWords(p2);
     const grid = Array.from({ length: p2.size }, () => Array(p2.size).fill(''));
     const placedList = [];
     for (let i = 0; i < words.length; i++) {
-      const res = placeOne(grid, words[i], p2);
+      const res = placeOne(grid, words[i].g, words[i].w, p2);
       if (res) placedList.push(res);
     }
-    fillBlanks(grid, placedList, p2);
+    // SON ÇARE TEKİLLİĞİ ZORLAMIYOR ve bu bilinçli: buraya ancak havuz
+    // gerçekten tükendiğinde düşülüyor ve o noktada oyuncuya BİR TAHTA
+    // vermek, kusursuz bir tahta vermekten önemli. `fillBlanks` yine de
+    // 12 deneme yapıyor, yani ikiz ihtimali burada da düşük — sadece
+    // garanti edilmiyor. Buraya düşmenin kendisi zaten bir uyarıdır.
+    if (!fillBlanks(grid, placedList, p2)) {
+      console.warn('[wordSearch] son çare tahtası tekil değil (havuz tükendi?)');
+    }
     return { size: p2.size, grid: grid, placed: placedList };
   }
 
@@ -2050,7 +2188,14 @@ PuzzleGames.wordSearch = (() => {
       .ws-w{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:700;
         background:rgba(255,255,255,0.06);color:rgba(255,255,255,.75);
         transition:background .2s,color .2s}
-      .ws-w.done{background:rgba(34,197,94,0.16);color:#86efac;text-decoration:line-through}
+      /* ÜSTÜ ÇİZİLİ YOK ve bu bilinçli (2026-08-16). Latin'de zararsız
+         olan line-through, Devanagari/CJK/Arapça'da glif GÖVDESİNİN
+         ortasından geçiyor: "गिटार"ın şirorekhası ve matraları,
+         "星星"in yoğun konturu çizginin altında okunmaz hâle geliyor.
+         "Bulundu" sinyali zaten iki kanaldan taşınıyor — yeşil zemin ve
+         yeşil metin — yani çizgi YEDEKTİ; kaldırmak bilgi kaybetmiyor,
+         yalnızca okunabilirliği geri veriyor. */
+      .ws-w.done{background:rgba(34,197,94,0.16);color:#86efac}
       .ws-flash{animation:wsFlash .5s ease-out}
       @keyframes wsFlash{0%{filter:brightness(1)}40%{filter:brightness(1.5)}100%{filter:brightness(1)}}
     `);
@@ -2060,8 +2205,8 @@ PuzzleGames.wordSearch = (() => {
     const words = placed.map(p => p.word);
     container.innerHTML =
       '<div class="ws-wrap">' +
-        '<div class="ws-hud">SEVİYE <b data-ws-lv></b>' +
-          '<span>·</span><b data-ws-prog></b> KELİME</div>' +
+        '<div class="ws-hud">' + t('wordsearch_hud_level') + ' <b data-ws-lv></b>' +
+          '<span>·</span><b data-ws-prog></b> ' + t('wordsearch_hud_words') + '</div>' +
         '<div class="ws-grid"><div class="ws-line"></div></div>' +
         '<div class="ws-words"></div>' +
       '</div>';
@@ -2245,10 +2390,17 @@ PuzzleGames.wordSearch = (() => {
   }
 
   function validate(cells) {
-    const str = cells.map(k => { const p = k.split(','); return grid[+p[0]][+p[1]]; }).join('');
-    const rev = [...str].reverse().join('');
+    // GRAPHEME DİZİSİ olarak topluyoruz. Eskiden dizeler birleştirilip
+    // `[...str].reverse()` ile ters çevriliyordu; yayma işleci CODE POINT
+    // verir, grapheme değil — "क्ष" gibi bir hücre üç parçaya ayrılıp
+    // ters yazılınca bambaşka (ve geçersiz) bir dizi çıkardı. Ters
+    // okuma bu oyunun temel özelliği olduğu için Devanagari'de her
+    // ters kelime reddedilirdi.
+    const seq = cells.map(k => { const p = k.split(','); return grid[+p[0]][+p[1]]; });
+    const rev = seq.slice().reverse();
+    const esit = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
     const hit = placed.find(p =>
-      foundWords.indexOf(p.word) === -1 && (p.word === str || p.word === rev));
+      foundWords.indexOf(p.word) === -1 && (esit(p.g, seq) || esit(p.g, rev)));
     if (!hit) {
       // Yanlış seçim: sessizce geri al. Uyarı penceresi yok — bu oyun
       // akışı bozmamak üzerine kurulu (bkz. akış-değil-stres ilkesi).
@@ -2267,7 +2419,10 @@ PuzzleGames.wordSearch = (() => {
     });
     const chip = wordsEl.querySelector('[data-w="' + hit.word + '"]');
     if (chip) chip.classList.add('done');
-    score += hit.word.length * 10;
+    // Puan GRAPHEME sayısından: `.word.length` code unit sayardı ve
+    // Devanagari'de "पत्थर" (4 hücre) 6 puanlık gibi görünürdü — oyuncunun
+    // gördüğü hücre sayısıyla aldığı puan ayrışırdı.
+    score += hit.g.length * 10;
     updateGameScore(score);
     updateHud();
     GameAudio.play('match'); GameAudio.haptic(12);
@@ -2302,9 +2457,23 @@ PuzzleGames.wordSearch = (() => {
   // Test aracı motoru dışarıdan sürebilsin diye açılıyor (flowConnect'in
   // `engine` deseni). Oyun kuralları TEK yerde kalsın: ikinci bir
   // uygulama, iki uygulamanın sessizce ayrışması demek olurdu.
+  // DİL DEĞİŞİMİ. Kabuk `I18n.onChange` içinden çağırıyor (bkz. app.js).
+  // SEVİYE VE SKOR KORUNUR, tahta atılır: eski dilin bulunmuş kelimeleri
+  // yeni dile eşleştirilmeye ÇALIŞILMAZ — "DENİZ" ile "OCEAN" arasında
+  // oyuncunun emeğini taşıyan bir ilişki yok, uydurmak yanlış olurdu.
+  // `startLevel(level)` zaten yeni dilin havuzundan çekiyor; `pickWords`
+  // torbanın dilini görüp kendini sıfırlıyor.
+  function onLocaleChange() {
+    if (!container) return;          // oyun açık değil → yapacak bir şey yok
+    startLevel(level);
+  }
+
+  // Test aracı motoru dışarıdan sürebilsin diye açılıyor (flowConnect'in
+  // `engine` deseni). Oyun kuralları TEK yerde kalsın: ikinci bir
+  // uygulama, iki uygulamanın sessizce ayrışması demek olurdu.
   return {
-    init, cleanup,
-    engine: { paramsFor, buildBoard, countOccurrences, DIRS_ALL, TRUP },
+    init, cleanup, onLocaleChange,
+    engine: { paramsFor, buildBoard, countOccurrences, pickWords, DIRS_ALL, UP, GR },
   };
 })();
 
@@ -2366,13 +2535,18 @@ PuzzleGames.sudoku = (() => {
   // "yalnızca tek aday yeter"i de KAPSADIĞI için kolay bulmacalar orta/zor
   // kovasına sızıyordu (ölçüldü: 40 "zor" bulmacanın 8'i yalnızca tek
   // adayla çözülebiliyordu — etiket yalan söylüyordu). Taban bunu keser.
+  // `label` alanı KALDIRILDI (2026-08-15): görünen etiket dile göre
+  // değişiyor ve bu nesne modül yüklenirken bir kez kuruluyor — etiketi
+  // burada tutmak onu ilk dilde dondururdu. Anahtarlar (easy/medium/…)
+  // zaten anlamsal, yani etiket onlardan türetiliyor: t('difficulty_' + k).
   const DIFFICULTIES = {
-    easy:   { label: 'Kolay', ceil: 1, floor: 1, minClues: 40 },
-    medium: { label: 'Orta',  ceil: 2, floor: 2, minClues: 32 },
-    hard:   { label: 'Zor',   ceil: 3, floor: 3, minClues: 30 },
-    expert: { label: 'Uzman', ceil: 3, floor: 3, minClues: 26 },
-    master: { label: 'Usta',  ceil: 3, floor: 3, minClues: 23 },
+    easy:   { ceil: 1, floor: 1, minClues: 40 },
+    medium: { ceil: 2, floor: 2, minClues: 32 },
+    hard:   { ceil: 3, floor: 3, minClues: 30 },
+    expert: { ceil: 3, floor: 3, minClues: 26 },
+    master: { ceil: 3, floor: 3, minClues: 23 },
   };
+  const diffLabel = (k) => t('difficulty_' + k);
 
   // Taban tutmazsa türetilmiş tohumla yeniden denenir. Sınırlı: mobilde
   // sınırsız döngü kabul edilemez. Denemeler orijinal tohumdan
@@ -2599,7 +2773,7 @@ PuzzleGames.sudoku = (() => {
       solution: Array.from(best.solved),
       clues: best.clues,
       difficulty: key,
-      label: cfg.label,
+      label: diffLabel(key),
       rating: best.rating,
       // Taban tutturulamadıysa dürüstçe bildirilir; çağıran taraf isterse
       // farklı bir tohumla tekrar isteyebilir. Sessizce yanlış etiketli
@@ -2923,10 +3097,10 @@ PuzzleGames.sudoku = (() => {
 
     wrapEl = document.createElement('div'); wrapEl.className = 'sdk-wrap';
     const topRow = isDaily
-      ? `<div class="sdk-daily-badge">🗓️ Günlük · ${DIFFICULTIES[currentDifficulty].label}</div>`
+      ? `<div class="sdk-daily-badge">🗓️ ${t('sudoku_daily_badge')} · ${diffLabel(currentDifficulty)}</div>`
       : `<div class="sdk-diffs" data-role="diffs">` +
           Object.keys(DIFFICULTIES).map(k =>
-            `<div class="sdk-diff${k === currentDifficulty ? ' on' : ''}" data-d="${k}">${DIFFICULTIES[k].label}</div>`
+            `<div class="sdk-diff${k === currentDifficulty ? ' on' : ''}" data-d="${k}">${diffLabel(k)}</div>`
           ).join('') +
         `</div>`;
     wrapEl.innerHTML =
@@ -3172,14 +3346,14 @@ PuzzleGames.sudoku = (() => {
     // kaldığı yerden sürer — tahta korunur, sıfırlanmaz. Turu da kabuk
     // yeniden açar (bkz. app.js _runGameOverContinuation), o yüzden burada
     // yayınlanan 'lost' devam edilse bile doğru kalır: tur bitmişti.
-    showGameOver(false, 'Büyü Tükendi', 'Canların tükendi.', {
+    showGameOver(false, t('sudoku_over_title'), t('sudoku_over_msg'), {
       accent: 'var(--ph-jewel-5-shadow)',
       accentLight: 'var(--ph-jewel-5-highlight)',
       accentGlow: 'var(--ph-jewel-5-glow)',
       mark: '✧',
       stats: [
-        { label: 'Dolu', value: filled + '/81' },
-        { label: 'Kalan', value: 81 - filled },
+        { label: t('sudoku_filled'), value: filled + '/81' },
+        { label: t('sudoku_remaining'), value: 81 - filled },
       ],
       onContinue: () => {
         lives.gain(1);
@@ -3226,16 +3400,16 @@ PuzzleGames.sudoku = (() => {
       GameAudio.play('win'); GameAudio.haptic('win');
       phAtmosphereFlare(atmoEl, 2.2, 620);
 
-      let title = 'Sudoku Çözüldü';
-      let msg = 'Tabloyu tamamladın.';
-      let stat2 = { label: 'Skor', value: finalScore.toLocaleString() };
+      let title = t('sudoku_win_title');
+      let msg = t('sudoku_win_msg');
+      let stat2 = { label: t('common_score'), value: I18n.n(finalScore) };
       if (isDaily && typeof DailyChallenge !== 'undefined') {
         // complete() aynı gün içinde idempotent — günlüğü tekrar
         // çözmek seriyi ikiye katlamaz.
         const st = DailyChallenge.complete('sudoku');
-        title = 'Günlük Tamamlandı';
-        msg = 'Bugünün bulmacasını çözdün.';
-        stat2 = { label: 'Seri', value: st.streak, record: true };
+        title = t('sudoku_daily_title');
+        msg = t('sudoku_daily_msg');
+        stat2 = { label: t('sudoku_streak'), value: st.streak, record: true };
         if (typeof renderDailyChallenge === 'function') renderDailyChallenge();
       }
       showGameOver(true, title, msg, {
@@ -3244,7 +3418,7 @@ PuzzleGames.sudoku = (() => {
         accentGlow: 'var(--ph-jewel-5-glow)',
         mark: '✦',
         stats: [
-          { label: 'Süre', value: secs + ' sn' },
+          { label: t('common_time'), value: t('common_seconds', { n: secs }) },
           stat2,
         ],
       });
@@ -3277,7 +3451,11 @@ PuzzleGames.sudoku = (() => {
     get seed() { return currentSeed; },
     get difficulty() { return currentDifficulty; },
     // Keşfet kartının gerçeği söylemesi için: oyuncunun kayıtlı seçimi.
-    get difficultyLabel() { return DIFFICULTIES[savedDifficulty()].label; },
+    // ANAHTAR döner, görünen etiket DEĞİL — etiketi reels.js kendi
+    // dilinde üretiyor. Sözleşme 2026-08-15'te `difficultyLabel`den
+    // `difficultyKey`e taşındı, çünkü eskisi Türkçe bir metin veriyordu
+    // ve kart onu doğrudan basıyordu.
+    get difficultyKey() { return savedDifficulty(); },
   };
 })();
 
@@ -3312,9 +3490,13 @@ PuzzleGames.blockPuzzle = (() => {
            `--bp-sh:var(--ph-jewel-${n}-shadow);--bp-glow:var(--ph-jewel-${n}-glow);`;
   }
 
-  // UI metinleri Türkçe (bkz. CLAUDE.md §6 — bu konvansiyon, düzeltilecek
-  // bir tutarsızlık değil). Eskiden 'Nice!/Great!/LEGENDARY!' idi.
-  const COMBO_WORDS = ['','Güzel!','Harika!','Muhteşem!','İnanılmaz!','EFSANE!'];
+  // ANAHTAR DİZİSİ, metin dizisi DEĞİL — çözümleme çizim anında yapılıyor
+  // (bkz. aşağıda `t(COMBO_KEYS[...])`). Metinleri burada tutmak, modül
+  // yüklenirken dondururdu: dil değişince övgü sözcükleri eski dilde
+  // kalırdı. Aynı gerekçe SETTING_GROUPS'un `state` alanının fonksiyon
+  // olmasının gerekçesi.
+  const COMBO_KEYS = ['', 'block_praise_1', 'block_praise_2', 'block_praise_3',
+                      'block_praise_4', 'block_praise_5'];
 
   let board, pieces, score, combo, highScore, locked, container;
   let boardEl, trayEl, wrapEl, atmoEl;
@@ -4416,8 +4598,9 @@ PuzzleGames.blockPuzzle = (() => {
 
   // ───────── COMBO YAZISI ─────────
   function showCombo(level) {
-    const word = COMBO_WORDS[Math.min(level, COMBO_WORDS.length-1)];
-    if (!word) return;
+    const key = COMBO_KEYS[Math.min(level, COMBO_KEYS.length-1)];
+    if (!key) return;
+    const word = t(key);
     const el = document.createElement('div');
     el.textContent = level > 1 ? `${word} x${level}` : word;
     const fs = Math.min(28+level*6, 54);
@@ -4956,7 +5139,7 @@ PuzzleGames.blockPuzzle = (() => {
     if (bump) { cap.classList.remove('bump'); void cap.offsetWidth; cap.classList.add('bump'); }
     sb.querySelector('.bp-hi b').textContent = highScore.toLocaleString();
     const cb = sb.querySelector('.bp-combo');
-    if (combo > 1) { cb.textContent = 'SERİ x'+combo; cb.classList.remove('on'); void cb.offsetWidth; cb.classList.add('on'); }
+    if (combo > 1) { cb.textContent = t('block_combo', { n: combo }); cb.classList.remove('on'); void cb.offsetWidth; cb.classList.add('on'); }
     else cb.classList.remove('on');
     // updateGameScore ÇAĞRILMIYOR: skor artık oyunun kendi cam kapsülünde
     // yaşıyor ve uygulama başlığındaki sayaç init'te gizleniyor. İkisini
@@ -5350,12 +5533,12 @@ PuzzleGames.blockPuzzle = (() => {
             gameEvent('game_ended', { gameId: 'blockPuzzle', result: 'lost', score });
             snd('crystalOver');
             haptic([100,50,100]);
-            setTimeout(()=>showGameOver(false,'Yer Kalmadı','Sığacak blok kalmadı.',{
+            setTimeout(()=>showGameOver(false,t('block_over_title'),t('block_over_msg'),{
               accent:'var(--ph-jewel-1-shadow)',accentLight:'var(--ph-jewel-1-highlight)',accentGlow:'var(--ph-jewel-1-glow)',
               mark:'✧',
               stats:[
-                {label:'Skor',value:score.toLocaleString()},
-                {label:'En İyi',value:highScore.toLocaleString(),record:score>=highScore&&score>0},
+                {label:t('common_score'),value:I18n.n(score)},
+                {label:t('common_best'),value:I18n.n(highScore),record:score>=highScore&&score>0},
               ],
             }),300);
           }
@@ -5366,12 +5549,12 @@ PuzzleGames.blockPuzzle = (() => {
         gameEvent('game_ended', { gameId: 'blockPuzzle', result: 'lost', score });
         snd('crystalOver');
         haptic([100,50,100]);
-        setTimeout(()=>showGameOver(false,'Yer Kalmadı','Sığacak blok kalmadı.',{
+        setTimeout(()=>showGameOver(false,t('block_over_title'),t('block_over_msg'),{
               accent:'var(--ph-jewel-1-shadow)',accentLight:'var(--ph-jewel-1-highlight)',accentGlow:'var(--ph-jewel-1-glow)',
               mark:'✧',
               stats:[
-                {label:'Skor',value:score.toLocaleString()},
-                {label:'En İyi',value:highScore.toLocaleString(),record:score>=highScore&&score>0},
+                {label:t('common_score'),value:I18n.n(score)},
+                {label:t('common_best'),value:I18n.n(highScore),record:score>=highScore&&score>0},
               ],
             }),300);
       }
@@ -5513,7 +5696,7 @@ PuzzleGames.blockPuzzle = (() => {
       <div class="bp-bar">
         <span class="bp-combo"></span>
         <span class="ph-capsule bp-score">◈ <span class="ph-capsule-num">0</span></span>
-        <span class="bp-hi">EN İYİ<b>${highScore.toLocaleString()}</b></span>
+        <span class="bp-hi">${I18n.upper(t('common_best'))}<b>${I18n.n(highScore)}</b></span>
       </div>
       <div class="ph-dais bp-dais"><div class="bp-charge"></div><canvas class="bp-board"></canvas></div>
       <div class="bp-tray"></div>
@@ -7028,11 +7211,11 @@ PuzzleGames.waterSort = (() => {
   function render() {
     wrapEl.innerHTML = `
       <div class="wsrt-bar">
-        <span class="wb-lbl">Seviye ${level+1}</span>
+        <span class="wb-lbl">${t('common_level_n', { n: level+1 })}</span>
         <span class="wb-moves" id="wsrt-moves"></span>
         <div class="wb-right">
-          <button class="wsrt-icon-btn" id="wsrt-prev" title="Önceki Seviye (reklam)">◀</button>
-          <button class="wsrt-icon-btn" id="wsrt-restart" title="Yeniden Başlat (reklam)">🔄</button>
+          <button class="wsrt-icon-btn" id="wsrt-prev" title="${t('watersort_prev_level_ad')}">◀</button>
+          <button class="wsrt-icon-btn" id="wsrt-restart" title="${t('watersort_restart_ad')}">🔄</button>
         </div>
       </div>
       <div class="wsrt-dais"><div class="wsrt-tubes"><canvas class="wsrt-cv"></canvas></div></div>
@@ -7442,7 +7625,7 @@ PuzzleGames.waterSort = (() => {
   function prevLevelWithAd() {
     if (animating || level <= 0) return;      // level SIFIR TABANLI
     if (typeof runRewardedAction !== 'function') { loadLevel(level - 1); return; }
-    runRewardedAction({ icon: '◀', text: 'Önceki Seviye' }, () => {
+    runRewardedAction({ icon: '◀', text: t('watersort_prev_level') }, () => {
       // loadLevel yeni bir game_started yayınlıyor; açık tur Değişmez 2
       // gereği 'quit' ile kapanıyor. Doğru olan bu: oyuncu bu seviyeyi
       // terk edip başka bir seviyeye geçti, tamamlamadı.
@@ -7465,7 +7648,7 @@ PuzzleGames.waterSort = (() => {
   function restartWithAd() {
     if (animating) return;
     if (typeof runRewardedAction !== 'function') { restartLevel(); return; }
-    runRewardedAction({ icon: '🔄', text: 'Yeniden Başlat' }, () => restartLevel(), { skipDailyLimit: true });
+    runRewardedAction({ icon: '🔄', text: t('common_restart') }, () => restartLevel(), { skipDailyLimit: true });
   }
 
   function restartLevel() {
@@ -7505,15 +7688,15 @@ PuzzleGames.waterSort = (() => {
     });
     const extra = extraMovesFor(level);
     const solved = tubes.filter(t => t.colors.length && isTubeSolved(t, CAP)).length;
-    showGameOver(false, 'Hamleler Bitti', `+${extra} hamle ile devam edebilirsin.`, {
+    showGameOver(false, t('watersort_over_title'), t('watersort_over_msg', { extra }), {
       accent: 'var(--ph-jewel-1-shadow)',
       accentLight: 'var(--ph-jewel-1-highlight)',
       accentGlow: 'var(--ph-jewel-1-glow)',
       mark: '✧',
       continueCost: econ('EXTRA_MOVES_DIAMONDS', 20),
       stats: [
-        { label: 'Hamle', value: movesUsed + ' / ' + moveLimit },
-        { label: 'Biten Tüp', value: solved },
+        { label: t('common_moves'), value: movesUsed + ' / ' + moveLimit },
+        { label: t('watersort_tubes_done'), value: solved },
       ],
       // Devam: AYNI tur sürüyor. Yeni game_started YAYINLANMIYOR —
       // app.js'teki _runGameOverContinuation turu reopen ile geri açıyor.
@@ -7521,7 +7704,7 @@ PuzzleGames.waterSort = (() => {
         moveLimit += extra;
         animating = false;                  // döküş döngüsü bitmemişse kilidi bırak
         updateControlsBar();
-        showToast('🧪 +' + extra + ' hamle!');
+        showToast(t('watersort_extra_moves', { extra }));
       },
       // Tekrar Oyna: gerçekten yeni bir tur (restartLevel game_started yayınlar).
       onRestart: () => { animating = false; restartLevel(); },
@@ -7580,8 +7763,8 @@ PuzzleGames.waterSort = (() => {
         el.remove();
         const starStr = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
         phShowCelebration({
-          title: `Seviye ${level+1} Tamam!`,
-          subtitle: `${starStr}  +${bonus} bonus`,
+          title: t('common_level_done', { n: level+1 }),
+          subtitle: `${starStr}  ${t('common_bonus_plus', { n: bonus })}`,
           sfx: 'win',
         }).then(() => {
           level++;
@@ -8827,9 +9010,9 @@ PuzzleGames.arrowPuzzle = (() => {
     // .ph-capsule-num ortak sayı stilini taşır (tabular-nums dahil):
     // sayaç düşerken çevresindeki metin kaymaz.
     hudEl.innerHTML =
-      'Seviye <span class="ph-capsule-num">' + level + '</span>' +
+      t('common_level') + ' <span class="ph-capsule-num">' + level + '</span>' +
       '<span class="ar-hud-sep">·</span>' +
-      'Kalan <span class="ph-capsule-num">' + board.arrows.size + '</span>';
+      t('arrow_remaining') + ' <span class="ph-capsule-num">' + board.arrows.size + '</span>';
   }
 
   // ───────── Etkileşim ─────────
@@ -9009,15 +9192,14 @@ PuzzleGames.arrowPuzzle = (() => {
     gameEvent('game_ended', { gameId: 'arrowPuzzle', result: 'lost' });
     GameAudio.play('lose');
     GameAudio.haptic('error');
-    showGameOver(false, 'Enerji Tükendi',
-      'Kanallar söndü. Reklam izleyip devam edebilir ya da seviyeyi baştan alabilirsin.', {
+    showGameOver(false, t('arrow_over_title'), t('arrow_over_msg'), {
       accent: 'var(--ph-jewel-1-shadow)',
       accentLight: 'var(--ph-jewel-1-highlight)',
       accentGlow: 'var(--ph-jewel-1-glow)',
       mark: '✧',
       stats: [
-        { label: 'Seviye', value: level },
-        { label: 'En İyi', value: phHighScore('arrowPuzzle') || '—' },
+        { label: t('common_level'), value: level },
+        { label: t('common_best'), value: phHighScore('arrowPuzzle') || '—' },
       ],
       onContinue: () => {
         lives.reset();
@@ -9286,14 +9468,14 @@ PuzzleGames.arrowPuzzle = (() => {
   function requestHint() {
     if (dead || cleared || hintCooling) return;
     const free = freeArrows(board);
-    if (!free.length) { showToast('✨ Şu an serbest ok yok'); return; }
+    if (!free.length) { showToast(t('arrow_no_free')); return; }
     // Kabuk yoksa (test) doğrudan göster — akış kilitlenmesin.
     if (typeof offerRewardChoice !== 'function') { revealHint(); return; }
     offerRewardChoice({
-      title: 'İpucu',
-      adText: 'Reklam İzle → İpucu',
+      title: t('common_hint'),
+      adText: t('arrow_hint_ad'),
       gemCost: econ('HINT_DIAMONDS', 10),
-      gemText: 'İpucu',
+      gemText: t('common_hint'),
       onGrant: revealHint
     });
   }
@@ -9330,10 +9512,10 @@ PuzzleGames.arrowPuzzle = (() => {
     const pop = document.createElement('div');
     pop.className = 'ar-pop';
     const label = () => GameAudio.muted
-      ? '<span>🔇</span> Ses Kapalı' : '<span>🔊</span> Ses Açık';
+      ? '<span>🔇</span> ' + t('arrow_sound_off') : '<span>🔊</span> ' + t('arrow_sound_on');
     pop.innerHTML =
       '<button class="ar-pop-item" data-act="sound">' + label() + '</button>' +
-      '<button class="ar-pop-item" data-act="exit"><span>←</span> Menüye Dön</button>';
+      '<button class="ar-pop-item" data-act="exit"><span>←</span> ' + t('common_back_to_menu') + '</button>';
     wrapEl.querySelector('[data-role="settings"]').after(pop);
     const soundBtn = pop.querySelector('[data-act="sound"]');
     addEv(soundBtn, 'click', () => {
@@ -9372,7 +9554,7 @@ PuzzleGames.arrowPuzzle = (() => {
             '<span class="ar-dia-ico">◆</span>' +
             '<span class="ar-dia-num" data-role="dia">0</span>' +
           '</div>' +
-          '<button class="ar-icon-btn" data-role="settings" aria-label="Ayarlar">⚙</button>' +
+          '<button class="ar-icon-btn" data-role="settings" aria-label=' + JSON.stringify(t('arrow_settings')) + '>⚙</button>' +
         '</div>' +
       '</div>' +
       '<div class="ar-status">' +
@@ -9391,21 +9573,21 @@ PuzzleGames.arrowPuzzle = (() => {
       '<div class="ar-actionbar">' +
         '<button class="ar-action ar-action-hint" data-role="hint">' +
           '<span class="ar-action-ico">💡</span>' +
-          '<span class="ar-action-lbl">İpucu</span>' +
+          '<span class="ar-action-lbl">' + t('common_hint') + '</span>' +
           // Rozet ARTIK sabit değil: kalan reklam hakkını gösteriyor
           // (📺3), hak bitince elmasa dönüyor (💎), Plus'ta taç.
           // AdBudget.updateUI() dolduruyor.
           '<span class="ar-action-tag" data-ph-ad-budget-short>📺</span>' +
         '</button>' +
         '<div class="ar-zoom" data-role="zoom">' +
-          '<button class="ar-zoom-btn" data-role="zoom-out" aria-label="Uzaklaş">−</button>' +
+          '<button class="ar-zoom-btn" data-role="zoom-out" aria-label="' + t('arrow_zoom_out') + '">−</button>' +
           '<input class="ar-zoom-slider" data-role="zoom-slider" type="range" ' +
-                 'min="1" max="' + CAM_MAX_SCALE + '" step="0.01" value="1" aria-label="Yakınlaştır">' +
-          '<button class="ar-zoom-btn" data-role="zoom-in" aria-label="Yakınlaş">+</button>' +
+                 'min="1" max="' + CAM_MAX_SCALE + '" step="0.01" value="1" aria-label="' + t('arrow_zoom_slider') + '">' +
+          '<button class="ar-zoom-btn" data-role="zoom-in" aria-label="' + t('arrow_zoom_in') + '">+</button>' +
         '</div>' +
         '<button class="ar-action ar-action-grid on" data-role="grid" aria-pressed="true">' +
           '<span class="ar-action-ico">#</span>' +
-          '<span class="ar-action-lbl">Izgara</span>' +
+          '<span class="ar-action-lbl">' + t('arrow_grid') + '</span>' +
         '</button>' +
       '</div>';
     container.appendChild(wrapEl);
@@ -9962,7 +10144,7 @@ PuzzleGames.jigsawCard = (() => {
   }
 
   function updateHud() {
-    if (levelEl) levelEl.textContent = 'Seviye ' + level + ' · ' + N + '×' + N +
+    if (levelEl) levelEl.textContent = t('common_level_n', { n: level }) + ' · ' + N + '×' + N +
                                        ' · ' + (image ? image.category : '-');
     movesEl.textContent = moves;
     const s = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
@@ -10130,7 +10312,7 @@ PuzzleGames.jigsawCard = (() => {
     // SONRA yükleniyor (econ/gameEvent ile aynı gerekçe). Bulunamadığı tek
     // yer tools/*.js'in kabuksuz vm kum havuzu; orada reklam kavramı yok.
     if (typeof runRewardedAction !== 'function') { reset(0); return; }
-    runRewardedAction({ icon: '🔀', text: 'Karıştır' }, () => reset(0), { skipDailyLimit: true });
+    runRewardedAction({ icon: '🔀', text: t('common_shuffle') }, () => reset(0), { skipDailyLimit: true });
   }
 
   function init(cont, opts) {
@@ -10143,10 +10325,10 @@ PuzzleGames.jigsawCard = (() => {
     atmoEl = phAtmosphere(container, { stars: 16, beams: 1, motes: 5, skyPct: 34 });
     container.insertAdjacentHTML('beforeend',
       '<div class="' + P + '-wrap">' +
-        '<div class="ph-capsule" data-role="level">Seviye 1</div>' +
+        '<div class="ph-capsule" data-role="level">' + t('common_level_n', { n: 1 }) + '</div>' +
         '<div class="ph-capsule ' + P + '-hud">' +
-          '<span class="' + P + '-stat"><b data-role="moves">0</b><span>Hamle</span></span>' +
-          '<span class="' + P + '-stat"><b data-role="time">00:00</b><span>Süre</span></span>' +
+          '<span class="' + P + '-stat"><b data-role="moves">0</b><span>' + t('common_moves') + '</span></span>' +
+          '<span class="' + P + '-stat"><b data-role="time">00:00</b><span>' + t('common_time') + '</span></span>' +
         '</div>' +
         '<div class="' + P + '-goal"><i data-role="goal"></i><span>Hedef</span></div>' +
         '<div class="' + P + '-board-wrap ph-dais">' +
@@ -10161,7 +10343,7 @@ PuzzleGames.jigsawCard = (() => {
           // (bkz. finish → advance). Elle atlama, sonsuz ilerlemenin
           // "her resim bir seviye" anlamını boşa çıkarıyordu: beğenmediğini
           // atlayıp geçen oyuncu için tamamlama sayacı bir şey ölçmez.
-          '<button class="ph-icon-btn" data-role="reset" aria-label="Karıştır">↻</button>' +
+          '<button class="ph-icon-btn" data-role="reset" aria-label="' + t('common_shuffle') + '">↻</button>' +
         '</div>' +
       '</div>');
     wrapEl = container.querySelector('.' + P + '-wrap');
@@ -10700,12 +10882,12 @@ PuzzleGames.snakeGame = (() => {
     });
     deathT = setTimeout(() => {
       deathT = 0;
-      showGameOver(false, 'Yılan Öldü', 'Kendine çarptın. Uzunluk: ' + snake.length, {
+      showGameOver(false, t('snake_over_title'), t('snake_over_msg', { length: snake.length }), {
         accent: '#16a341', accentLight: '#8dffa8', accentGlow: 'rgba(60,255,120,.65)',
         mark: '✧',
         stats: [
-          { label: 'Skor', value: score.toLocaleString() },
-          { label: 'En İyi', value: best.toLocaleString(), record: score >= best && score > 0 },
+          { label: t('common_score'), value: I18n.n(score) },
+          { label: t('common_best'), value: I18n.n(best), record: score >= best && score > 0 },
         ],
         onContinue: revive,
         onRestart: newGame,
@@ -10726,11 +10908,11 @@ PuzzleGames.snakeGame = (() => {
     GameAudio.haptic('win');
     deathT = setTimeout(() => {
       deathT = 0;
-      showGameOver(true, 'Tahta Doldu!', 'Yılan bütün tahtayı kapladı.', {
+      showGameOver(true, t('snake_win_title'), t('snake_win_msg'), {
         accent: '#16a341', accentLight: '#8dffa8', accentGlow: 'rgba(60,255,120,.65)',
         mark: '✦',
         stats: [
-          { label: 'Skor', value: score.toLocaleString() },
+          { label: t('common_score'), value: I18n.n(score) },
           { label: 'Uzunluk', value: snake.length },
         ],
         onRestart: newGame,
@@ -10750,7 +10932,7 @@ PuzzleGames.snakeGame = (() => {
     stopTimer();
     if (arenaEl) arenaEl.classList.remove('hit');
     paint();
-    if (typeof showToast === 'function') showToast('🐍 Yön seç ve devam et');
+    if (typeof showToast === 'function') showToast(t('snake_resume'));
   }
 
   function newGame() {
@@ -11888,13 +12070,12 @@ PuzzleGames.flappyUfo = (() => {
     });
     overT = setTimeout(() => {
       overT = 0;
-      showGameOver(false, 'Düştün!',
-        score === 1 ? '1 geçit geçtin.' : score + ' geçit geçtin.', {
+      showGameOver(false, t('flappy_over_title'), tp('flappy_over_msg', score), {
           accent: '#1d5fd6', accentLight: '#9ed8ff', accentGlow: 'rgba(70,170,255,.65)',
           mark: '✧',
           stats: [
-            { label: 'Skor', value: score.toLocaleString() },
-            { label: 'En İyi', value: best.toLocaleString(), record: score >= best && score > 0 },
+            { label: t('common_score'), value: I18n.n(score) },
+            { label: t('common_best'), value: I18n.n(best), record: score >= best && score > 0 },
           ],
           onContinue: revive,
           onRestart: newGame,
@@ -11920,7 +12101,7 @@ PuzzleGames.flappyUfo = (() => {
     setStart(false);
     updateChrome();
     paint();
-    if (typeof showToast === 'function') showToast('🛸 Dokun ve devam et');
+    if (typeof showToast === 'function') showToast(t('flappy_resume'));
   }
 
   function newGame() {
@@ -12071,7 +12252,7 @@ PuzzleGames.flappyUfo = (() => {
   function syncScore() {
     const hi = phHighScore(GID);
     if (scoreEl) scoreEl.textContent = String(score);
-    if (bestEl) bestEl.textContent = 'EN İYİ: ' + hi;
+    if (bestEl) bestEl.textContent = t('flappy_best', { score: hi });
     if (startBestEl) startBestEl.textContent = String(hi);
     // Kabuğun skor kapsülü gizli (ownsScoreDisplay) ama değeri güncel
     // tutuluyor: "Skor 2x" düğmesi o elemanı okuyor.
@@ -12254,7 +12435,7 @@ PuzzleGames.flappyUfo = (() => {
         '<canvas class="fufo-cv"></canvas>' +
         '<div class="fufo-hud">' +
           '<span class="fufo-score">0</span>' +
-          '<span class="fufo-best">EN İYİ: 0</span>' +
+          '<span class="fufo-best">' + t('flappy_best', { score: 0 }) + '</span>' +
         '</div>' +
         // Duraklat — tasarımdaki sol üst düğme. Arenanın çocuğu ama kendi
         // pointer olayını YUTUYOR (bkz. onPauseTap), yoksa aynı dokunuş hem
@@ -12263,17 +12444,17 @@ PuzzleGames.flappyUfo = (() => {
           '<i></i><i></i>' +
         '</button>' +
         '<div class="fufo-paused-veil"><span>DURAKLATILDI</span>' +
-          '<small>Devam etmek için dokun</small></div>' +
+          '<small>' + t('flappy_tap_continue') + '</small></div>' +
         '<div class="fufo-start">' +
           '<div class="fufo-card">' +
             '<span class="fufo-card-l">' +
-              '<span class="fufo-card-lbl">EN İYİ SKOR</span>' +
+              '<span class="fufo-card-lbl">' + t('flappy_best_label') + '</span>' +
               '<span class="fufo-card-val">0</span>' +
             '</span>' +
             '<span class="fufo-card-ico">🏆</span>' +
           '</div>' +
           '<div class="fufo-play"><i class="fufo-play-ico"></i></div>' +
-          '<span class="fufo-hint">Yükselmek için dokun</span>' +
+          '<span class="fufo-hint">' + t('flappy_tap_rise') + '</span>' +
         '</div>' +
       '</div>';
     container.appendChild(wrapEl);
@@ -13272,13 +13453,13 @@ PuzzleGames.flowConnect = (() => {
 
   function requestHint() {
     if (locked || !board) return;
-    if (!board.segs) { showToast('💡 Bu tahtada ipucu yok'); return; }
+    if (!board.segs) { showToast(t('flow_no_hint')); return; }
     if (typeof offerRewardChoice !== 'function') { revealHint(); return; }
     offerRewardChoice({
-      title: 'İpucu',
-      adText: 'Reklam İzle → İpucu',
+      title: t('common_hint'),
+      adText: t('flow_hint_ad'),
       gemCost: econ('HINT_DIAMONDS', 10),
-      gemText: 'İpucu',
+      gemText: t('common_hint'),
       onGrant: revealHint,
     });
   }
@@ -13290,7 +13471,7 @@ PuzzleGames.flowConnect = (() => {
   function revealHint() {
     let pick = -1;
     for (let i = 0; i < board.K; i++) if (!board.isConnected(i)) { pick = i; break; }
-    if (pick < 0) { showToast('✨ Zaten hepsi bağlı'); return; }
+    if (pick < 0) { showToast(t('flow_all_connected')); return; }
     const route = board.segs[pick];
     // Rotanın geçtiği hücreleri başka renklerden geri al.
     route.forEach((c) => {
@@ -13351,8 +13532,8 @@ PuzzleGames.flowConnect = (() => {
     const starStr = '⭐'.repeat(st) + '☆'.repeat(3 - st);
     setTimeout(() => {
       phShowCelebration({
-        title: 'Seviye ' + (level + 1) + ' Tamam!',
-        subtitle: starStr + '  +' + bonus + ' puan',
+        title: t('common_level_done', { n: level + 1 }),
+        subtitle: starStr + '  ' + t('flow_level_points', { points: bonus }),
         sfx: 'star',
       }).then(() => {
         locked = false;
@@ -13379,7 +13560,7 @@ PuzzleGames.flowConnect = (() => {
     const b = createBoard(src);
     // Üreteç boş dönerse (olmamalı) seviye sayacı ilerlememeli, yoksa
     // oyuncu boş bir tahtayla baş başa kalır.
-    if (!b) { showToast('⚠️ Seviye üretilemedi'); locked = false; return; }
+    if (!b) { showToast(t('flow_gen_failed')); locked = false; return; }
     board = b;
     undoStack = [];
     moves = 0; active = -1; hintUsed = 0;
@@ -13522,10 +13703,10 @@ PuzzleGames.flowConnect = (() => {
       'align-items:center;justify-content:center;gap:4px;position:relative;z-index:1';
     wrapEl.innerHTML =
       '<div class="fc-top">' +
-        '<span class="ph-capsule">Seviye <span class="ph-capsule-num" data-role="lvl">1</span></span>' +
+        '<span class="ph-capsule">' + t('common_level') + ' <span class="ph-capsule-num" data-role="lvl">1</span></span>' +
         '<div class="fc-moves">' +
           '<div class="fc-moves-row">' +
-            '<span class="fc-moves-lbl">HAMLE</span>' +
+            '<span class="fc-moves-lbl">' + I18n.upper(t('common_moves')) + '</span>' +
             '<span class="fc-moves-num" data-role="moves">0</span>' +
           '</div>' +
           '<span class="fc-stars" data-role="stars">★★★</span>' +
@@ -13536,15 +13717,15 @@ PuzzleGames.flowConnect = (() => {
       '<div class="fc-wrap"><div class="fc-board"><canvas class="fc-cv"></canvas></div></div>' +
       '<div class="fc-ctrl">' +
         '<button class="fc-btn" data-act="undo"><span class="fc-btn-ico">↩</span>' +
-          '<span class="fc-btn-lbl">Geri Al</span><span class="fc-tag">ücretsiz</span></button>' +
+          '<span class="fc-btn-lbl">' + t('common_undo') + '</span><span class="fc-tag">' + t('common_free') + '</span></button>' +
         '<button class="fc-btn" data-act="reset"><span class="fc-btn-ico">🔄</span>' +
-          '<span class="fc-btn-lbl">Sıfırla</span><span class="fc-tag">ücretsiz</span></button>' +
+          '<span class="fc-btn-lbl">' + t('common_reset') + '</span><span class="fc-tag">' + t('common_free') + '</span></button>' +
         '<button class="fc-btn" data-act="hint"><span class="fc-btn-ico">💡</span>' +
           // 📺 emojisi BİLEREK yok: bu küçük etikette WebView'da tofu
           // (boş kutu) olarak çıkıyor — masaüstü tarayıcıda doğrulandı.
           // Düz metin her yazı tipinde okunur.
-          '<span class="fc-btn-lbl">İpucu</span><span class="fc-tag">💎' +
-          econ('HINT_DIAMONDS', 10) + ' · reklam</span></button>' +
+          '<span class="fc-btn-lbl">' + t('common_hint') + '</span><span class="fc-tag">💎' +
+          econ('HINT_DIAMONDS', 10) + ' · ' + t('common_ad_short') + '</span></button>' +
       '</div>';
     container.appendChild(wrapEl);
 

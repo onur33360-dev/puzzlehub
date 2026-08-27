@@ -452,7 +452,7 @@
     var(--ph-bg-2);
   box-shadow: var(--ph-shadow-2);
   color: var(--ph-text-primary);
-  cursor: pointer; text-align: left;
+  cursor: pointer; text-align: start;
   transition: transform var(--ph-duration-micro) var(--ph-ease-standard);
 }
 .daily-card:active { transform: scale(.97); }

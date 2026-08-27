@@ -91,9 +91,9 @@ const EconomyConfig = {
   // claimDailyReward() içinde ÇIPLAK SAYI olarak duruyordu; buraya
   // taşındı, çünkü kural "her ekonomi sayısı EconomyConfig'te".
   STREAK_MILESTONES: [
-    { days: 7,  amount: 50,  label: '7 gün seri bonusu! 🔥' },
-    { days: 14, amount: 100, label: '14 gün seri! 🎉' },
-    { days: 30, amount: 200, label: '30 gün seri! 👑' },
+    { days: 7,  amount: 50,  labelKey: 'streak_milestone_7' },
+    { days: 14, amount: 100, labelKey: 'streak_milestone_14' },
+    { days: 30, amount: 200, labelKey: 'streak_milestone_30' },
   ],
 
   // --- Premium (PlusSystem) ---
@@ -103,16 +103,23 @@ const EconomyConfig = {
 
 // ==================== VERİ ====================
 
+// HÂLÂ OKUYANI YOK (bkz. CLAUDE.md) — sunum verisi olarak duruyor, ileride
+// bir ana sayfa kataloğu kurulursa ham madde bu. 2026-08-15'te `name`/`desc`
+// alanları SİLİNDİ ve yerine `id` geldi: o iki alan oyunun TÜRKÇE adını
+// taşıyordu, yani tam olarak `GAME_MAP`'i `GAME_IDS`'e çevirten kalıptı —
+// kullanıcıya görünen metin kimlik olamaz. Katalog kurulduğunda ad ve
+// açıklama `t('game_name_' + g.id)` / `t('game_desc_' + g.id)` ile okunur,
+// böylece ölü veri yeniden canlandığında da çevrilmiş gelir.
 const PUZZLE_GAMES = [
-  { name:'2048', emoji:'🔢', rating:4.8, badge:null, desc:'Sayı birleştir', bg:'linear-gradient(135deg,#d97706,#92400e)' },
-  { name:'Bulmaca Blokları', emoji:'🧱', rating:4.5, badge:null, desc:'Blok yerleştir', bg:'linear-gradient(135deg,#7c3aed,#5b21b6)' },
-  { name:'Hafıza Oyunu', emoji:'🧠', rating:4.3, badge:null, desc:'Kartları eşleştir', bg:'linear-gradient(135deg,#0891b2,#155e75)' },
-  { name:'Kelime Avı', emoji:'📝', rating:4.6, badge:null, desc:'Gizli kelimeleri bul', bg:'linear-gradient(135deg,#16a34a,#166534)' },
-  { name:'Sudoku', emoji:'#️⃣', rating:4.7, badge:null, desc:'9x9 tabloyu doldur', bg:'linear-gradient(135deg,#1d4ed8,#1e3a8a)' },
-  { name:'Resim Kaydır', emoji:'🖼️', rating:4.9, badge:'yeni', desc:'Fotoğrafı kaydır, tamamla', bg:'linear-gradient(135deg,#123a4a,#06121c)' },
-  { name:'Yılan', emoji:'🐍', rating:4.8, badge:'yeni', desc:'Klasik yılan — elmasları topla', bg:'linear-gradient(135deg,#16255e,#060b22)' },
-  { name:'Flappy UFO', emoji:'🛸', rating:4.7, badge:'yeni', desc:'Dokun, yüksel, geçitlerden süz', bg:'linear-gradient(135deg,#132a63,#04081c)' },
-  { name:'Akış Bağlantı', emoji:'🔗', rating:4.8, badge:'yeni', desc:'Renkleri bağla, tahtayı doldur', bg:'linear-gradient(135deg,#2b6cb8,#0d1b3e)' },
+  { id:'game2048',    emoji:'🔢', rating:4.8, badge:null,   bg:'linear-gradient(135deg,#d97706,#92400e)' },
+  { id:'blockPuzzle', emoji:'🧱', rating:4.5, badge:null,   bg:'linear-gradient(135deg,#7c3aed,#5b21b6)' },
+  { id:'memoryGame',  emoji:'🧠', rating:4.3, badge:null,   bg:'linear-gradient(135deg,#0891b2,#155e75)' },
+  { id:'wordSearch',  emoji:'📝', rating:4.6, badge:null,   bg:'linear-gradient(135deg,#16a34a,#166534)' },
+  { id:'sudoku',      emoji:'#️⃣', rating:4.7, badge:null,   bg:'linear-gradient(135deg,#1d4ed8,#1e3a8a)' },
+  { id:'jigsawCard',  emoji:'🖼️', rating:4.9, badge:'yeni', bg:'linear-gradient(135deg,#123a4a,#06121c)' },
+  { id:'snakeGame',   emoji:'🐍', rating:4.8, badge:'yeni', bg:'linear-gradient(135deg,#16255e,#060b22)' },
+  { id:'flappyUfo',   emoji:'🛸', rating:4.7, badge:'yeni', bg:'linear-gradient(135deg,#132a63,#04081c)' },
+  { id:'flowConnect', emoji:'🔗', rating:4.8, badge:'yeni', bg:'linear-gradient(135deg,#2b6cb8,#0d1b3e)' },
 ];
 
 // Mockup panel 1 "Bugünün Görevleri" ile birebir üç görev.
@@ -124,12 +131,16 @@ const PUZZLE_GAMES = [
 // eskisi evrensel değildi, çünkü Ok Bulmaca ve Resim Kaydır'da skor
 // kavramı yok (bkz. GameEvents yorumu) — o iki oyunu oynayan oyuncu
 // görevi hiç ilerletemezdi. "Kazanmak" ise 10 oyunun hepsinde tanımlı.
+// `name` yerine `nameKey`: tanım modül yüklenirken kuruluyor, metin ise
+// çizim anında çözülmeli. Metni burada tutmak, dil değiştiğinde görev
+// adlarını eski dilde dondururdu (aynı gerekçe SETTING_GROUPS'un `state`
+// alanının fonksiyon olmasının gerekçesi).
 const DAILY_MISSIONS = [
-  { id:'play3', icon:'🎮', tone:'blue',  name:'3 oyun oyna',
+  { id:'play3', icon:'🎮', tone:'blue',  nameKey:'quest_play_3',
     total:3, reward:EconomyConfig.QUEST_PLAY_REWARD },
-  { id:'daily', icon:'🎯', tone:'red',   name:'Günlük meydan okumayı tamamla',
+  { id:'daily', icon:'🎯', tone:'red',   nameKey:'quest_daily_challenge',
     total:1, reward:EconomyConfig.QUEST_DAILY_REWARD },
-  { id:'win1',  icon:'⭐', tone:'amber', name:'1 oyun kazan',
+  { id:'win1',  icon:'⭐', tone:'amber', nameKey:'quest_win_1',
     total:1, reward:EconomyConfig.QUEST_WIN_REWARD },
 ];
 
@@ -137,9 +148,9 @@ const DAILY_MISSIONS = [
 // yok, yerine "Haftalık Ödül" sandığı var. Dizi silinmedi: sandığın
 // "tüm görevleri tamamla" koşulu kurulduğunda tüketilecek kaynak bu.
 const WEEKLY_MISSIONS = [
-  { icon:'🔥', name:'7 Gün Giriş', desc:'7 gün üst üste gir', progress:4, total:7, reward:'+200' },
-  { icon:'⭐', name:'15 Oyun Kazan', desc:'15 oyun kazanma', progress:6, total:15, reward:'+300' },
-  { icon:'🎯', name:'Her Kategoriden 1', desc:'Her kategoriden oyna', progress:2, total:4, reward:'+150' },
+  { icon:'🔥', nameKey:'weekly_login7_name',  descKey:'weekly_login7_desc',  progress:4, total:7,  reward:'+200' },
+  { icon:'⭐', nameKey:'weekly_win15_name',   descKey:'weekly_win15_desc',   progress:6, total:15, reward:'+300' },
+  { icon:'🎯', nameKey:'weekly_variety_name', descKey:'weekly_variety_desc', progress:2, total:4,  reward:'+150' },
 ];
 
 const LEADERBOARD = [
@@ -174,50 +185,75 @@ const LEADERBOARD = [
 // (giriş yapılmıyor, veri localStorage'da). Çalışmayan bir satır koymak,
 // olmayan bir sistemi vaat etmek olurdu — "Özel Görevler"in Plus
 // listesinden çıkarılmasıyla aynı gerekçe.
+// METİNLER ARTIK ANAHTAR (2026-08-15). Bu dizi modül YÜKLENİRKEN bir kez
+// kuruluyor; görünen metni burada tutmak onu açılıştaki dilde dondururdu
+// ve dil değiştiğinde ayarlar ekranı eski dilde kalırdı. Aynı gerekçe
+// `state`in neden fonksiyon olduğunun gerekçesiyle birebir aynı (aşağıda).
+// Çözüm de aynı: değeri çağrı anında oku — renderSettings her çizimde
+// t()'yi yeniden çağırıyor.
 const SETTING_GROUPS = [
-  { title:'Hesap', rows: [
-    { icon:'👤', label:'Avatarını Düzenle', note:'Profilinde görünen karakter', fn:'openAvatarPicker()' },
-    // TODO: profil çerçevesi sistemi kurulunca gerçek ekrana bağlanacak
-    { icon:'🖼️', label:'Profil Çerçevesi', value:'Yakında', action:'Profil çerçeveleri yakında!' },
+  { titleKey:'settings_group_account', rows: [
+    { icon:'👤', labelKey:'settings_avatar', noteKey:'settings_avatar_note', fn:'openAvatarPicker()' },
+    // PROFİL ÇERÇEVESİ ARAYÜZDEN GİZLİ (2026-08-19, release öncesi).
+    // hidden:true satırı renderSettings'te eliyor ama TANIMI SİLMİYOR:
+    // sistem kurulduğunda tek yapılacak iş bu bayrağı kaldırmak.
+    // Release'te "Yakında" göstermek, tarihi olmayan bir söz vermektir —
+    // "⭐ 50 XP" etiketinin kaldırılmasıyla aynı gerekçe (bkz. CLAUDE.md).
+    { icon:'🖼️', labelKey:'settings_frame', valueKey:'common_soon',
+      actionKey:'settings_frame_toast', hidden:true },
     // Cihaz değiştiren / uygulamayı silip kuran kullanıcı için ZORUNLU:
     // abonelik satan her uygulamanın sunması gereken standart yol.
-    { icon:'🔄', label:'Satın Almaları Geri Yükle', note:'Aboneliğini yeni cihaza taşı', fn:'restorePurchases()' },
+    { icon:'🔄', labelKey:'settings_restore', noteKey:'settings_restore_note', fn:'restorePurchases()' },
   ]},
 
-  { title:'Premium ve Elmas', rows: [
-    { icon:'👑', label:"Plus'a Geç", note:'Reklamsız deneyim, her gün +20💎', tone:'gold', fn:'showPlusPage()' },
-    { icon:'💎', label:'Elmas Mağazası', note:'Paket satın al veya ücretsiz kazan', tone:'accent', fn:'openShop()' },
-    // Tema seçici bu turda kurulmadı; tek tema var ve "Özel Temalar"
-    // Plus'ın reklam ettiği bir avantaj — satır Plus sayfasına gidiyor.
-    { icon:'🎨', label:'Tema', value:'Gece Menekşesi', fn:'showPlusPage()' },
+  { titleKey:'settings_group_premium', rows: [
+    { icon:'👑', labelKey:'settings_plus', noteKey:'settings_plus_note', tone:'gold', fn:'showPlusPage()' },
+    { icon:'💎', labelKey:'settings_shop', noteKey:'settings_shop_note', tone:'accent', fn:'openShop()' },
+    // TEMA SATIRI ARAYÜZDEN GİZLİ (2026-08-19). Tek tema var ve satırın
+    // tüm işlevi Plus sayfasına gidip "Özel Temalar — yakında" vaadini
+    // göstermekti. ThemeSystem kodu DURUYOR (THEMES, apply, isLocked);
+    // gizlenen yalnızca giriş noktası.
+    { icon:'🎨', labelKey:'settings_theme', valueKey:'theme_night_violet',
+      fn:'showPlusPage()', hidden:true },
   ]},
 
-  { title:'Tercihler', rows: [
+  { titleKey:'settings_group_prefs', rows: [
     // GERÇEK anahtar: GameAudio.muted okunuyor, toggleMute() yazıyor.
     // `state` bir FONKSİYON, düz bir boolean DEĞİL — bu dizi modül
     // yüklenirken kuruluyor ve o an okunan bir değer ilk açılıştaki
     // durumda donardı. renderSettings her çizimde yeniden çağırıyor.
-    { icon:'🔊', label:'Ses Efektleri', toggle:true,
+    { icon:'🔊', labelKey:'settings_sound', toggle:true,
       state: () => (typeof GameAudio !== 'undefined') && !GameAudio.muted,
       fn:'toggleSoundSetting()' },
-    { icon:'🔔', label:'Bildirimler', value:'Yakında', action:'Bildirimler yakında!' },
-    { icon:'🌐', label:'Dil', value:'Türkçe', action:'Şu an yalnızca Türkçe destekleniyor.' },
+    // Bildirimler RELEASE İÇİN HAZIR DEĞİL. Profil Çerçevesi ve Tema ile
+    // aynı muamele: hidden:true satırı çizdirmiyor ama TANIMI SİLMİYOR —
+    // bayrağı kaldırmak satırı olduğu gibi geri getiriyor. Altyapı duruyor.
+    { icon:'🔔', labelKey:'settings_notifications', valueKey:'common_soon',
+      actionKey:'settings_notifications_toast', hidden:true },
+    // Dil satırı ARTIK GERÇEK. 2026-08-15'e kadar "Şu an yalnızca Türkçe
+    // destekleniyor." diyen bir toast'tı. `value` bir FONKSİYON: seçili
+    // dilin adı çalışma anında okunmalı, yoksa dil değişince satır eski
+    // adı gösterirdi.
+    { icon:'🌐', labelKey:'settings_language',
+      value: () => currentLanguageLabel(),
+      fn:'openLanguagePicker()' },
   ]},
 
-  { title:'Destek', rows: [
-    { icon:'❓', label:'Yardım', action:'Yardım merkezi yakında!' },
-    { icon:'⭐', label:'Puanla', action:'Uygulama puanlama yakında!' },
-    { icon:'📤', label:'Paylaş', action:'Paylaşım yakında!' },
+  { titleKey:'settings_group_support', rows: [
+    { icon:'❓', labelKey:'settings_help', fn:'openHelp()' },
+    { icon:'⭐', labelKey:'settings_rate', fn:'rateApp()' },
+    { icon:'📤', labelKey:'settings_share', fn:'shareApp()' },
     // Sürüm tek kaynaktan (index.html APP_VERSION) okunur; burada sabit
     // yazmak bump'ta kaydırır. typeof guard'ı app.js'in izole yüklendiği
     // (test) durumda ReferenceError'ı önler.
-    { icon:'ℹ️', label:'Hakkında',
+    { icon:'ℹ️', labelKey:'settings_about',
       value:'v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0'),
       action:'SlySwipe v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.28.0') },
   ]},
 ];
 
-const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+// Gün kısaltmaları da anahtar: haftalık seri satırı bunları basıyor.
+const DAY_KEYS = ['day_mon','day_tue','day_wed','day_thu','day_fri','day_sat','day_sun'];
 const DAY_ICONS = ['✅','✅','✅','🎁','🏃','💎','🏆'];
 
 // ==================== ELMAS SİSTEMİ ====================
@@ -276,14 +312,14 @@ const DiamondSystem = {
     const total = plus
       ? Math.round(amount * EconomyConfig.PLUS_DIAMOND_MULTIPLIER)
       : amount;
-    this.add(total, plus && reason ? reason + ' (Plus +%50)' : reason);
+    this.add(total, plus && reason ? reason + t('diamonds_plus_bonus') : reason);
     return total;
   },
 
   spend(amount) {
     const current = this.get();
     if (current < amount) {
-      showToast('💎 Yeterli elmas yok!');
+      showToast(t('diamonds_not_enough'));
       return false;
     }
     this.set(current - amount);
@@ -353,9 +389,9 @@ function openAvatarPicker() {
     document.body.appendChild(el);
   }
   el.innerHTML = `<div class="av-box">
-      <span class="av-head">Avatarını Seç</span>
+      <span class="av-head">${t('avatar_picker_title')}</span>
       <div class="av-grid">${grid}</div>
-      <button class="av-close" onclick="closeAvatarPicker()">Kapat</button>
+      <button class="av-close" onclick="closeAvatarPicker()">${t('common_close')}</button>
     </div>`;
   el.style.display = 'flex';
 }
@@ -368,6 +404,253 @@ function closeAvatarPicker() {
   const el = document.getElementById('avatar-picker');
   if (el) el.style.display = 'none';
 }
+
+// ==================== DİL SEÇİCİ ====================
+//
+// Avatar seçicinin modal dilini AYNEN kullanıyor (.av-scrim/.av-box):
+// ikinci bir modal ailesi kurmak, aynı şeyin iki ayrı görünümü demekti.
+// Tek fark liste düzeni (.lang-list), çünkü 16 satır bir ızgaraya değil
+// bir listeye sığar.
+
+/** Ayarlar satırında görünen değer: seçili dilin KENDİ adı. */
+function currentLanguageLabel() {
+  if (typeof I18n === 'undefined') return '';
+  // Sistem modunda hangi dilin geçerli OLDUĞUNU da söylüyoruz. Yalnızca
+  // "Sistem Varsayılanı" yazmak, kullanıcının o an hangi dilde olduğunu
+  // ayarlar ekranından okuyamaması demekti.
+  const hit = I18n.SUPPORTED.filter(s => s.code === I18n.locale)[0];
+  const name = hit ? hit.native : I18n.locale;
+  return I18n.mode === 'system' ? name : name;
+}
+
+function openLanguagePicker() {
+  if (typeof I18n === 'undefined') return;
+  const isSystem = I18n.mode === 'system';
+  const cur = I18n.locale;
+
+  // İLK SATIR "Sistem Varsayılanı" ve bu bir dil DEĞİL, bir kip.
+  // Seçildiğinde manuel geçersiz kılma temizlenir ve cihazın dili yeniden
+  // okunur — yani telefonun dili sonradan değişirse uygulama takip eder.
+  let rows = `<button class="lang-row${isSystem ? ' sel' : ''}" onclick="pickLanguage(null)">
+      <span class="lang-name">${t('settings_language_system')}</span>
+      <span class="lang-note">${t('settings_language_system_note')}</span>
+    </button>`;
+
+  // Diller KENDİ adlarıyla ve ÇEVRİLMEDEN listeleniyor: uygulamayı
+  // anlamadığı bir dilde açan kullanıcı listede "Almanca"yı değil
+  // "Deutsch"u arar.
+  rows += I18n.SUPPORTED.map(s =>
+    `<button class="lang-row${!isSystem && s.code === cur ? ' sel' : ''}"
+       onclick="pickLanguage('${s.code}')" lang="${s.code}">
+      <span class="lang-name">${s.native}</span>
+    </button>`
+  ).join('');
+
+  let el = document.getElementById('lang-picker');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'lang-picker';
+    el.className = 'av-scrim';
+    el.onclick = (ev) => { if (ev.target === el) closeLanguagePicker(); };
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="av-box lang-box">
+      <span class="av-head">${t('settings_language_title')}</span>
+      <div class="lang-list">${rows}</div>
+      <button class="av-close" onclick="closeLanguagePicker()">${t('common_close')}</button>
+    </div>`;
+  el.style.display = 'flex';
+}
+
+function pickLanguage(code) {
+  if (typeof GameAudio !== 'undefined') { GameAudio.play('tab'); GameAudio.haptic('micro'); }
+  // Modal ÖNCE kapanıyor: I18n.set() dinleyicileri tetikleyip ekranı
+  // yeniden çizecek, açık bir modalın altındaki ekranın değişmesi ise
+  // "bir şey oldu ama göremedim" hissi verirdi.
+  closeLanguagePicker();
+  I18n.set(code);
+}
+
+function closeLanguagePicker() {
+  const el = document.getElementById('lang-picker');
+  if (el) el.style.display = 'none';
+}
+// ══════════════════════════════════════════════════════════════════
+//  DESTEK SATIRLARI — Paylaş / Puanla / Yardım  (2026-08-19)
+// ══════════════════════════════════════════════════════════════════
+// Üçü de release öncesine kadar "Yakında" toast'ıydı. Ortak kural:
+// HİÇBİRİ ÇÖKMEZ. Üçü de platformdan bir şey istiyor (paylaşım sayfası,
+// mağaza uygulaması) ve o şey yoksa kullanıcıya sessizce anlamlı bir
+// yedek sunuyorlar — hata penceresi değil.
+
+// ADRESLER SABİT ve BİLEREK ÇEVRİLMİYOR: bunlar metin değil kimlik.
+// Paket adı üç yerde geçiyor ve hepsi burada tek noktadan türüyor
+// (CLAUDE.md: paket kimliği ilk yayından sonra DEĞİŞTİRİLEMEZ).
+const STORE_ID  = 'com.skyroonlabs.slyswipe';
+const STORE_URL = 'https://play.google.com/store/apps/details?id=' + STORE_ID;
+const MARKET_URI = 'market://details?id=' + STORE_ID;
+const PRIVACY_URL = 'https://onur33360-dev.github.io/slyswipe/gizlilik.html';
+const SUPPORT_MAIL = 'onur33360@gmail.com';
+
+/**
+ * PAYLAŞ — gerçek Android paylaşım sayfası (@capacitor/share 7.0.4).
+ *
+ * NEDEN EKLENTİ: navigator.share Android WebView'da YOK — cihazda
+ * ölçüldü (typeof navigator.share === "undefined"). Web Share API bir
+ * Chrome özelliği; güvenli köken olması yetmiyor. Bağımlılıksız
+ * intent:// denemesi de açılmıyor, çünkü Capacitor'ün launchIntent'i
+ * onu ACTION_VIEW olarak işliyor, oysa intent:// Intent.parseUri() ister.
+ *
+ * `url` ALANI BİLEREK GEÇİLMİYOR. SharePlugin.java ikisi de verilirse
+ * birleştiriyor (text = text + " " + url) ve share_text zaten {url}
+ * taşıyor — ikisini de geçmek bağlantıyı İKİ KEZ yazardı. Android'de
+ * URL için ayrı bir intent alanı yok; tek hedef EXTRA_TEXT, yani metnin
+ * içine gömmek ile ayrı geçmek aynı sonucu veriyor.
+ *
+ * İPTAL BİR HATA DEĞİL. Eklenti geri tuşunda reject("Share canceled")
+ * yapıyor (SharePlugin.java: RESULT_CANCELED), açık bir sayfa varken de
+ * reject("Can't share while sharing is in progress"). İkisi de kullanıcı
+ * davranışı; yedeğe düşmek panoya sessizce kopyalar, "paylaşılamadı"
+ * demek ise düpedüz yanlış geri bildirim olurdu.
+ *
+ * YEDEK ZİNCİRİ: eklenti → navigator.share (web) → clipboard → toast.
+ */
+function shareApp() {
+  const metin = t('share_text', { url: STORE_URL });
+  const P = (typeof Capacitor !== 'undefined' && Capacitor.Plugins) ? Capacitor.Plugins.Share : null;
+
+  if (P && typeof P.share === 'function') {
+    try {
+      P.share({ title: 'SlySwipe', text: metin, dialogTitle: t('share_dialog_title') })
+        .catch((e) => {
+          const m = (e && (e.message || e.errorMessage)) || '';
+          if (/cancel|in progress/i.test(m)) return;
+          shareFallback(metin);
+        });
+      return;
+    } catch (e) { /* köprü patlarsa aşağıdaki yollara düş */ }
+  }
+
+  // Web yüzeyi: bazı tarayıcılarda gerçek paylaşım sayfası var.
+  try {
+    if (navigator.share) {
+      navigator.share({ title: 'SlySwipe', text: metin })
+        .catch((e) => {
+          if (e && e.name === 'AbortError') return;
+          shareFallback(metin);
+        });
+      return;
+    }
+  } catch (e) { /* share çağrısının kendisi patlarsa yedeğe düş */ }
+
+  shareFallback(metin);
+}
+
+function shareFallback(metin) {
+  const bitir = (anahtar) => { if (typeof showToast === 'function') showToast(t(anahtar)); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(metin)
+        .then(() => bitir('share_copied'))
+        .catch(() => bitir('share_failed'));
+      return;
+    }
+  } catch (e) { /* pano da yoksa aşağıya düş */ }
+  bitir('share_failed');
+}
+
+/**
+ * PUANLA — önce Play uygulaması (market://), sonra HTTPS.
+ *
+ * SIRA ÖNEMLİ: market:// Play uygulamasını doğrudan açar ve kullanıcıyı
+ * tarayıcıdan geçirmez. Play uygulaması yoksa (emülatör, bazı ROM'lar)
+ * o şema hiçbir şey yapmaz — bu yüzden HTTPS yedeği ZORUNLU.
+ *
+ * ZAMAN AŞIMI ile yedek: market:// başarısız olduğunda senkron bir HATA
+ * ATMAZ, sessizce hiçbir şey yapmaz. Yani try/catch tek başına yetmez.
+ * Sayfa hâlâ görünürse mağaza açılmamış demektir ve HTTPS'e geçiyoruz;
+ * mağaza AÇILDIYSA sayfa arka plana düşer ve ikinci gezinme atlanır.
+ *
+ * Kapalı testte listeleme tester hesabına bağlı olabilir; bu işlevin işi
+ * yalnızca GÜVENLİ YÖNLENDİRME — sayfanın içeriğini garanti etmiyor.
+ */
+function rateApp() {
+  try {
+    window.location.href = MARKET_URI;
+  } catch (e) { /* şema tanınmadı */ }
+
+  setTimeout(() => {
+    if (document.visibilityState === 'hidden') return;   // mağaza açıldı
+    try {
+      window.open(STORE_URL, '_blank');
+    } catch (e) {
+      try { window.location.href = STORE_URL; }
+      catch (e2) { if (typeof showToast === 'function') showToast(t('rate_failed')); }
+    }
+  }, 700);
+}
+
+/**
+ * YARDIM — mevcut modal kabuğunu (.av-scrim/.av-box) yeniden kullanır.
+ *
+ * YENİ TASARIM SİSTEMİ KURULMADI: dil seçici zaten bu kabuğu kullanıyor
+ * ve yükseklik/kaydırma sorunları orada çözülmüş durumda (70vh tavan,
+ * liste kendi içinde kayar, overscroll-behavior:contain). Yardım da aynı
+ * kutuya giriyor, yalnızca içerik düzeni farklı.
+ *
+ * Bölümler DİZİDEN geliyor: sekiz bölümün her biri iki anahtar taşıyor
+ * ve yeni bölüm eklemek diziye bir satır demek.
+ */
+const HELP_SECTIONS = [
+  { ico: '🎯', k: 'help_start' },
+  { ico: '🧭', k: 'help_discover' },
+  { ico: '🎮', k: 'help_games' },
+  { ico: '📺', k: 'help_ads' },
+  { ico: '👑', k: 'help_plus' },
+  { ico: '🛒', k: 'help_purchase' },
+  { ico: '🔒', k: 'help_privacy' },
+  { ico: '✉️', k: 'help_support' },
+];
+
+function openHelp() {
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const bolumler = HELP_SECTIONS.map((s) => `
+    <div class="help-sec">
+      <span class="help-sec-head"><span class="help-sec-ico">${s.ico}</span>${esc(t(s.k + '_title'))}</span>
+      <p class="help-sec-body">${esc(t(s.k + '_body'))}</p>
+    </div>`).join('');
+
+  // Gizlilik ve destek satırları GERÇEK adreslere gidiyor. Adresler
+  // çeviriye girmiyor (kimlik, metin değil) ve rel=noopener zorunlu.
+  const baglantilar = `
+    <div class="help-links">
+      <a class="help-link" href="${PRIVACY_URL}" target="_blank" rel="noopener noreferrer">
+        <span class="dir-ico">↗</span> ${esc(t('help_privacy_link'))}</a>
+      <a class="help-link" href="mailto:${SUPPORT_MAIL}">
+        <span>✉️</span> ${esc(SUPPORT_MAIL)}</a>
+    </div>`;
+
+  let el = document.getElementById('help-sheet');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'help-sheet';
+    el.className = 'av-scrim';
+    el.onclick = (ev) => { if (ev.target === el) closeHelp(); };
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="av-box help-box">
+      <span class="av-head">${esc(t('help_title'))}</span>
+      <div class="help-list">${bolumler}${baglantilar}</div>
+      <button class="av-close" onclick="closeHelp()">${esc(t('common_close'))}</button>
+    </div>`;
+  el.style.display = 'flex';
+}
+
+function closeHelp() {
+  const el = document.getElementById('help-sheet');
+  if (el) el.style.display = 'none';
+}
+
 
 // ==================== STREAK SİSTEMİ ====================
 
@@ -460,7 +743,7 @@ const StreakSystem = {
     // sürekliliğinin karşılığı, aboneliğin değil.
     if (typeof DiamondSystem !== 'undefined') {
       const ms = EconomyConfig.STREAK_MILESTONES.find(m => m.days === data.count);
-      if (ms) DiamondSystem.add(ms.amount, ms.label);
+      if (ms) DiamondSystem.add(ms.amount, t(ms.labelKey));
     }
 
     // Seri uzadı — seri rozetlerinin (7/30/50/100/250/500) koşulu tam
@@ -519,29 +802,40 @@ const StreakSystem = {
 
 // ==================== GÜNLÜK ÖDÜL TAKVİMİ ====================
 
+// `day` ve `label` alanları KALDIRILDI (2026-08-15): ikisi de görünen
+// metindi ve bu dizi modül yüklenirken kuruluyor. Gün adı artık
+// DAY_KEYS'ten sırayla, etiket ise miktardan türetiliyor
+// (t('diamonds_reward_label', {amount})) — yani "5 Elmas" gibi bir metni
+// hem burada hem çeviri tablosunda tutmak gerekmiyor. Pazar'ın ünlemli
+// biçimi ayrı bir anahtar, çünkü vurgu tasarımın parçası.
 const DAILY_REWARD_TABLE = [
-  { day: 'Pzt', amount: 5,   icon: '💎', label: '5 Elmas' },
-  { day: 'Sal', amount: 10,  icon: '💎', label: '10 Elmas' },
-  { day: 'Çar', amount: 15,  icon: '🎁', label: '15 Elmas' },
-  { day: 'Per', amount: 20,  icon: '💎', label: '20 Elmas' },
-  { day: 'Cum', amount: 30,  icon: '🎉', label: '30 Elmas' },
-  { day: 'Cmt', amount: 40,  icon: '✨', label: '40 Elmas' },
-  { day: 'Paz', amount: 100, icon: '👑', label: '100 Elmas!' },
+  { amount: 5,   icon: '💎' },
+  { amount: 10,  icon: '💎' },
+  { amount: 15,  icon: '🎁' },
+  { amount: 20,  icon: '💎' },
+  { amount: 30,  icon: '🎉' },
+  { amount: 40,  icon: '✨' },
+  { amount: 100, icon: '👑', big: true },
 ];
+
+/** Günlük ödülün görünen etiketi ("5 Elmas" / "100 Elmas!"). */
+function dailyRewardLabel(r) {
+  return t(r.big ? 'diamonds_reward_label_big' : 'diamonds_reward_label', { amount: r.amount });
+}
 
 // Yalnızca ELMAS ödülünü öder. Seriyi ARTIRMAZ — seri açılışta
 // ilerliyor (bkz. StreakSystem.checkIn). İkisi 2026-08-11'e kadar aynı
 // eylemdi ve seri de bu yüzden çalışmıyordu.
 function claimDailyReward() {
   if (StreakSystem.rewardClaimedToday()) {
-    showToast('✅ Bugünkü ödülü zaten aldın!');
+    showToast(t('diamonds_already_claimed'));
     return;
   }
   StreakSystem.markRewardClaimed();
   const dayIdx = StreakSystem.getDayInWeek();
   const reward = DAILY_REWARD_TABLE[dayIdx];
   // addReward: günlük ödül Plus'ın +%50 çarpanına TABİ (bkz. 4d).
-  DiamondSystem.addReward(reward.amount, 'Günlük ödül!');
+  DiamondSystem.addReward(reward.amount, t('diamonds_daily_reward'));
 
   // Plus günlük bonusu — tablonun ÜSTÜNE, ayrı bir satır olarak.
   // Tabloyu Plus'a göre değiştirmek yerine ayrı satır olmasının sebebi:
@@ -550,7 +844,7 @@ function claimDailyReward() {
   // add() ile veriliyor, addReward() ile DEĞİL: bu zaten bir Plus faydası,
   // üstüne bir de Plus çarpanı uygulamak aynı avantajı iki kez saymak olur.
   if (PlusSystem.isActive()) {
-    DiamondSystem.add(EconomyConfig.PLUS_DAILY_DIAMONDS, 'Plus günlük bonusu 👑');
+    DiamondSystem.add(EconomyConfig.PLUS_DAILY_DIAMONDS, t('diamonds_plus_daily'));
   }
 
   // Seri kilometre taşları (7/14/30) BURADAN KALDIRILDI —
@@ -851,7 +1145,7 @@ const DailyQuests = {
       else if (m.id === 'daily') raw = dailyDone ? 1 : 0;
       const progress = Math.min(raw, m.total);
       return {
-        id: m.id, icon: m.icon, tone: m.tone, name: m.name,
+        id: m.id, icon: m.icon, tone: m.tone, name: t(m.nameKey),
         total: m.total, reward: m.reward,
         progress, done: progress >= m.total,
       };
@@ -883,13 +1177,13 @@ const DailyQuests = {
       // kazanım, dolayısıyla Plus'ın +%50 çarpanına tabi. add() ile
       // ayrımı korunuyor — seviye tamamlama (+3) hâlâ çarpansız,
       // abonelik oyun içi ilerlemeyi hızlandırmıyor.
-      DiamondSystem.addReward(r.reward, 'Görev: ' + r.name);
+      DiamondSystem.addReward(r.reward, t('quest_toast', { name: r.name }));
     });
 
     if (rows.every(r => r.done) && !d.bonusPaid) {
       d.bonusPaid = true;
       changed = true;
-      DiamondSystem.addReward(EconomyConfig.QUEST_ALL_BONUS, 'Tüm günlük görevler! 🎉');
+      DiamondSystem.addReward(EconomyConfig.QUEST_ALL_BONUS, t('quest_all_done'));
     }
 
     if (changed) this._save(d);
@@ -932,8 +1226,8 @@ const DailyQuests = {
   shopLabel() {
     const rows = this.rows();
     const done = rows.filter(r => r.done).length;
-    if (done === rows.length) return '✅ Bugün tamamlandı';
-    return '🎯 ' + done + '/' + rows.length + ' görev tamamlandı';
+    if (done === rows.length) return t('quest_done_today');
+    return t('quest_shop_progress', { done, total: rows.length });
   },
 
   // Öde + çiz. renderMissions() zaten settle() çağırıyor; buradaki
@@ -983,56 +1277,56 @@ GameEvents.on('game_ended', function (ev) { DailyQuests.onRoundEnded(ev); });
 // üç kaynak. Yeni bir rozet eklendiğinde `group` alanı verilir; çip
 // listesi buradan türediği için ekran kodu dokunulmadan büyür.
 const BADGE_GROUPS = [
-  { id:'all',     label:'Tümü' },
-  { id:'oyun',    label:'Oyun' },
-  { id:'seri',    label:'Seri' },
-  { id:'ekonomi', label:'Ekonomi' },
+  { id:'all',     labelKey:'common_all' },
+  { id:'oyun',    labelKey:'badge_group_games' },
+  { id:'seri',    labelKey:'badge_group_streak' },
+  { id:'ekonomi', labelKey:'badge_group_economy' },
 ];
 
 const BADGES = [
   // Sıra ZORLUĞA GÖRE ARTAN. Vitrin "en değerli 3"ü seçerken ödülü
   // ölçüt alıyor, yani ödül miktarları aynı zamanda zorluk sıralaması.
-  { id:'first_game',    icon:'🎮', tone:'blue',   group:'oyun',    name:'İlk Oyun',
-    desc:'İlk oyununu başlat',        reward:EconomyConfig.BADGE_FIRST_GAME,
+  { id:'first_game',    icon:'🎮', tone:'blue',   group:'oyun',    nameKey:'badge_first_game',
+    descKey:'badge_first_game_desc',        reward:EconomyConfig.BADGE_FIRST_GAME,
     test: () => GameEvents.stats().totalGamesStarted >= 1 },
 
-  { id:'games_10',      icon:'🔟', tone:'purple', group:'oyun',    name:'10 Oyun',
-    desc:'10 oyun oyna',              reward:EconomyConfig.BADGE_10_GAMES,
+  { id:'games_10',      icon:'🔟', tone:'purple', group:'oyun',    nameKey:'badge_ten_games',
+    descKey:'badge_ten_games_desc',              reward:EconomyConfig.BADGE_10_GAMES,
     test: () => GameEvents.stats().totalGamesStarted >= 10 },
 
   // ph_streak: uygulamayı AÇMA serisi. DailyChallenge'ın "günlüğü çözme"
   // serisi DEĞİL — ikisi farklı davranışı ödüllendiriyor (katılım vs
   // başarı) ve karıştırılmamalı (bkz. core/daily.js başlığı).
-  { id:'streak_7',      icon:'🔥', tone:'red',    group:'seri',    name:'7 Gün Seri',
-    desc:'7 gün üst üste giriş yap',  reward:EconomyConfig.BADGE_STREAK_7,
+  { id:'streak_7',      icon:'🔥', tone:'red',    group:'seri',    nameKey:'badge_streak_7',
+    descKey:'badge_streak_7_desc',  reward:EconomyConfig.BADGE_STREAK_7,
     test: () => StreakSystem.getCount() >= 7 },
 
-  { id:'diamonds_500',  icon:'💎', tone:'cyan',   group:'ekonomi', name:'500 Elmas',
-    desc:'Toplam 500💎 kazan',        reward:EconomyConfig.BADGE_DIAMONDS_500,
+  { id:'diamonds_500',  icon:'💎', tone:'cyan',   group:'ekonomi', nameKey:'badge_diamonds_500',
+    descKey:'badge_diamonds_500_desc',        reward:EconomyConfig.BADGE_DIAMONDS_500,
     // BAKİYE değil, YAŞAM BOYU kazanım. Bakiyeyle yazılsaydı oyuncu
     // elmasını harcadığı an rozet geri alınırdı.
     test: () => DiamondSystem.earned() >= 500 },
 
-  { id:'streak_30',     icon:'👑', tone:'gold',   group:'seri',    name:'30 Gün Seri',
-    desc:'30 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_30,
+  { id:'streak_30',     icon:'👑', tone:'gold',   group:'seri',    nameKey:'badge_streak_30',
+    descKey:'badge_streak_30_desc', reward:EconomyConfig.BADGE_STREAK_30,
     test: () => StreakSystem.getCount() >= 30 },
 
   // Uzun seri basamakları (2026-08-11). Hepsi AYNI sayaçtan okuyor
   // (ph_streak), yani yeni bir takip yazılmadı — bu bölümün kuralı.
-  { id:'streak_50',     icon:'⚡', tone:'purple', group:'seri',    name:'50 Gün Seri',
-    desc:'50 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_50,
+  { id:'streak_50',     icon:'⚡', tone:'purple', group:'seri',    nameKey:'badge_streak_50',
+    descKey:'badge_streak_50_desc', reward:EconomyConfig.BADGE_STREAK_50,
     test: () => StreakSystem.getCount() >= 50 },
 
-  { id:'streak_100',    icon:'🌟', tone:'cyan',   group:'seri',    name:'100 Gün Seri',
-    desc:'100 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_100,
+  { id:'streak_100',    icon:'🌟', tone:'cyan',   group:'seri',    nameKey:'badge_streak_100',
+    descKey:'badge_streak_100_desc', reward:EconomyConfig.BADGE_STREAK_100,
     test: () => StreakSystem.getCount() >= 100 },
 
-  { id:'streak_250',    icon:'💫', tone:'blue',   group:'seri',    name:'250 Gün Seri',
-    desc:'250 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_250,
+  { id:'streak_250',    icon:'💫', tone:'blue',   group:'seri',    nameKey:'badge_streak_250',
+    descKey:'badge_streak_250_desc', reward:EconomyConfig.BADGE_STREAK_250,
     test: () => StreakSystem.getCount() >= 250 },
 
-  { id:'streak_500',    icon:'🏆', tone:'gold',   group:'seri',    name:'500 Gün Seri',
-    desc:'500 gün üst üste giriş yap', reward:EconomyConfig.BADGE_STREAK_500,
+  { id:'streak_500',    icon:'🏆', tone:'gold',   group:'seri',    nameKey:'badge_streak_500',
+    descKey:'badge_streak_500_desc', reward:EconomyConfig.BADGE_STREAK_500,
     test: () => StreakSystem.getCount() >= 500 },
 ];
 
@@ -1158,12 +1452,12 @@ const Badges = {
     el.innerHTML =
       '<div class="bdg-pop-card">' +
         '<span class="bdg-pop-badge bdg-' + item.def.tone + '">' + item.def.icon + '</span>' +
-        '<span class="bdg-pop-kicker">Rozet Kazanıldı</span>' +
+        '<span class="bdg-pop-kicker">' + t('badges_earned_kicker') + '</span>' +
         '<span class="bdg-pop-name"></span>' +
         '<span class="bdg-pop-reward">+' + item.granted + '💎</span>' +
       '</div>';
     // Ad textContent ile: rozet adı HTML olarak yorumlanmasın.
-    el.querySelector('.bdg-pop-name').textContent = item.def.name;
+    el.querySelector('.bdg-pop-name').textContent = t(item.def.nameKey);
     document.body.appendChild(el);
     if (typeof GameAudio !== 'undefined') { GameAudio.play('win'); GameAudio.haptic('win'); }
     // ~2 sn görünür, sonra kendi kapanır. Kapanış animasyonu bitmeden
@@ -1204,10 +1498,14 @@ const Badges = {
     }
   },
 
+  // `total` YEREL DEĞİŞKENİ ESKİDEN `t` İDİ ve bu, global `t()` çeviri
+  // fonksiyonunu gölgeliyordu: satır `t is not a function` ile patlıyordu.
+  // i18n sonrası `t` artık ayrılmış bir ad — tek harflik yerel değişken
+  // olarak kullanılamaz.
   shopLabel() {
-    const n = this.count(), t = this.total();
-    if (n >= t) return '🏆 Tüm rozetler kazanıldı';
-    return '🏆 ' + n + '/' + t + ' rozet kazanıldı';
+    const n = this.count(), total = this.total();
+    if (n >= total) return t('badges_all_earned');
+    return t('badges_shop_progress', { n, total });
   },
 };
 
@@ -1279,10 +1577,10 @@ const AdBudget = {
   // Oyuncu bütçesini GÖRMELİ, yoksa "hakkım bitti" sürprizi olur ve
   // bilinçli seçim (reklam mı, elmas mı) yapamaz.
   label() {
-    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return '👑 Plus: sınırsız';
+    if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return t('ad_budget_plus');
     const left = this.remaining();
-    if (left === 0) return '📺 Yarın tekrar gel';
-    return '📺 ' + left + '/' + this.limit() + ' reklam hakkın kaldı';
+    if (left === 0) return t('ad_budget_empty');
+    return t('ad_budget_left', { left, limit: this.limit() });
   },
 
   // Oyun içi küçük rozetler için kısa hâl — uzun cümle 28px'lik bir
@@ -1533,12 +1831,12 @@ const AdConsent = {
   // Profil'deki "Gizlilik Seçenekleri" satırı buraya bağlı.
   showPrivacyOptions() {
     const ad = adMobPlugin();
-    if (!ad || !ad.showPrivacyOptionsForm) { showToast('Bu cihazda kullanılamıyor'); return; }
+    if (!ad || !ad.showPrivacyOptionsForm) { showToast(t('settings_privacy_unavailable')); return; }
     ad.showPrivacyOptionsForm()
       .then(() => ad.requestConsentInfo(this._debugOptions() || {}))
       .then((info) => { if (info) this._info = info; renderSettings(); })
       .catch((e) => {
-        showToast('Gizlilik formu açılamadı');
+        showToast(t('settings_privacy_failed'));
         if (typeof console !== 'undefined') console.warn('[UMP] ' + (e && e.message || e));
       });
   },
@@ -1685,7 +1983,7 @@ const RewardedAd = {
     const fail = (why, msg) => {
       if (settled) return;
       settled = true; cleanup(); release();
-      showToast(msg || '📺 Reklam şu an yüklenemedi, sonra tekrar dene');
+      showToast(msg || t('ad_load_failed'));
       if (typeof console !== 'undefined') console.warn('[AdMob] ' + why);
     };
     const finish = () => {
@@ -1693,7 +1991,7 @@ const RewardedAd = {
       settled = true; cleanup(); release();
       preloadNext();
       if (earned && onComplete) onComplete();
-      else if (!earned) showToast('📺 Ödül için reklamı sonuna kadar izlemelisin');
+      else if (!earned) showToast(t('ad_must_finish'));
     };
 
     // RIZA ÖNCE. Açılışta zaten başlatıldı; burada aynı promise bekleniyor,
@@ -1702,7 +2000,7 @@ const RewardedAd = {
     AdConsent.ensure(ad).then(() => {
       if (!AdConsent.canRequestAds()) {
         fail('riza yok (canRequestAds=false)',
-             '📺 Reklam gösterilemiyor — gizlilik tercihlerini Profil’den değiştirebilirsin');
+             t('ad_blocked_consent'));
         return null;
       }
       return this._ensureInit(ad)
@@ -1766,15 +2064,15 @@ const RewardedAd = {
     overlay.className = 'ad-overlay';
     overlay.innerHTML = `
       <div class="ad-modal">
-        <div class="ad-header">📺 Ödüllü Video</div>
+        <div class="ad-header">${t('ad_reward_title')}</div>
         <div class="ad-body">
           <div class="ad-reward-preview">${reward.icon} ${reward.text}</div>
           <div class="ad-timer">
             <div class="ad-timer-bar"><div class="ad-timer-fill"></div></div>
-            <span class="ad-timer-text">Reklam simülasyonu: 3 saniye</span>
+            <span class="ad-timer-text">${t('ad_reward_sim')}</span>
           </div>
         </div>
-        <button class="ad-skip" style="display:none">Kapat ✕</button>
+        <button class="ad-skip" style="display:none">${t('ad_close')}</button>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -1850,7 +2148,7 @@ function runRewardedAction(reward, onReward, opts) {
   // UI zaten devre dışı bırakılmış olmalı; bu savunma katmanı (oyun
   // içinden doğrudan çağrılan yollar için).
   if (sayilir && !AdBudget.canWatch()) {
-    showToast('📺 Bugünkü elmas hakkın bitti — yarın tekrar gel!');
+    showToast(t('ad_daily_limit'));
     return false;
   }
   RewardedAd.show(reward, () => {
@@ -2060,15 +2358,15 @@ const InterstitialAds = {
     overlay.className = 'ad-overlay';
     overlay.innerHTML = `
       <div class="ad-modal">
-        <div class="ad-header">📺 Reklam</div>
+        <div class="ad-header">${t('ad_interstitial_title')}</div>
         <div class="ad-body">
-          <div class="ad-reward-preview">Geçiş reklamı simülasyonu</div>
+          <div class="ad-reward-preview">${t('ad_interstitial_sim')}</div>
           <div class="ad-timer">
             <div class="ad-timer-bar"><div class="ad-timer-fill"></div></div>
-            <span class="ad-timer-text">2 saniye sonra kapatılabilir</span>
+            <span class="ad-timer-text">${t('ad_interstitial_wait')}</span>
           </div>
         </div>
-        <button class="ad-skip" style="display:none">Kapat ✕</button>
+        <button class="ad-skip" style="display:none">${t('ad_close')}</button>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -2119,17 +2417,17 @@ function offerRewardChoice(opts) {
       // hakka işlemiyor. Günlük hak satırı da kaldırıldı — burada artık
       // yanlış bir sınırı anlatıyordu.
       '<button class="ph-offer-btn primary" data-a="ad">' +
-        (plus ? '👑 ' : '📺 ') + (opts.adText || 'Reklam İzle') +
+        (plus ? '👑 ' : '📺 ') + (opts.adText || t('ad_watch')) +
       '</button>' +
       (gemCost != null
         ? '<button class="ph-offer-btn" data-a="gem"' + (gemOk ? '' : ' disabled') + '>💎 ' +
             gemCost + ' → ' + (opts.gemText || 'Al') + '</button>' +
-          '<div class="ph-offer-balance">Bakiyen: 💎 ' + balance.toLocaleString() + '</div>'
+          '<div class="ph-offer-balance">' + t('offer_balance', { amount: I18n.n(balance) }) + '</div>'
         : '') +
-      '<button class="ph-offer-btn" data-a="no">Vazgeç</button>' +
+      '<button class="ph-offer-btn" data-a="no">' + t('common_cancel') + '</button>' +
     '</div>';
   // Başlık textContent ile: oyun adı/etiketi HTML olarak yorumlanmasın.
-  panel.querySelector('.ph-offer-title').textContent = opts.title || 'Yardım';
+  panel.querySelector('.ph-offer-title').textContent = opts.title || t('offer_help');
   // BURADA BİR data-ph-ad-budget SATIRI ARAMAYIN — 2026-08-07'de günlük
   // hak satırı bu modalden kaldırıldı (fayda eylemleri artık günlük
   // elmas hakkına işlemiyor), ama onu dolduran querySelector satırı
@@ -2155,7 +2453,7 @@ function offerRewardChoice(opts) {
       return;
     }
     close();
-    runRewardedAction({ icon: '🎁', text: opts.adText || 'Ödül' }, () => opts.onGrant('ad'),
+    runRewardedAction({ icon: '🎁', text: opts.adText || t('offer_reward') }, () => opts.onGrant('ad'),
                       { skipDailyLimit: true });
   });
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
@@ -2430,9 +2728,13 @@ function _yearlyNote() {
       style: 'currency', currency: cur, maximumFractionDigits: 0,
     }).format(y / 12);
   } catch (e) { return ''; }
-  if (!m || m <= 0) return perMonth + '/ay';
+  // Ay eki ve tasarruf cümlesi AYRI anahtarlar: bazı dillerde yüzde
+  // işareti sayıdan önce gelir (tr "%72"), bazılarında sonra (en "72%"),
+  // yani "%" + sayı birleştirmesi çeviriye bırakılmalı.
+  if (!m || m <= 0) return perMonth + t('plus_period_month');
   const save = Math.round((1 - (y / 12) / m) * 100);
-  return save > 0 ? perMonth + '/ay • %' + save + ' tasarruf' : perMonth + '/ay';
+  return save > 0 ? t('plus_savings', { perMonth, percent: save })
+                  : perMonth + t('plus_period_month');
 }
 
 function refreshPrices() {
@@ -2585,8 +2887,8 @@ const ThemeSystem = {
   DEFAULT: 'gece',
 
   THEMES: [
-    { id: 'gece',    name: 'Gece Moru',      plusOnly: false, ready: true  },
-    { id: 'tapinak', name: 'Gölge Tapınak',  plusOnly: true,  ready: false },
+    { id: 'gece',    nameKey: 'theme_night_violet', plusOnly: false, ready: true  },
+    { id: 'tapinak', nameKey: 'theme_shadow_temple', plusOnly: true,  ready: false },
   ],
 
   find(id) { return this.THEMES.find(t => t.id === id) || null; },
@@ -2600,22 +2902,26 @@ const ThemeSystem = {
   },
 
   isLocked(id) {
-    const t = this.find(id);
-    if (!t || !t.plusOnly) return false;
+    const th = this.find(id);
+    if (!th || !th.plusOnly) return false;
     return !PlusSystem.isActive();
   },
 
   // Tema seçicinin TEK giriş noktası. Bugün çağıran yok (seçici yok);
   // seçici geldiğinde kilidi yeniden düşünmek yerine bunu çağıracak.
+  // Yerel tema değişkeni `th`, `t` DEĞİL: `t` global çeviri fonksiyonunun
+  // adı ve onu gölgelemek satırı "t is not a function" ile patlatıyor
+  // (Badges.shopLabel'de tam olarak bu yaşandı). i18n sonrası `t` artık
+  // ayrılmış bir ad — tek harflik yerel değişken olarak kullanılamaz.
   apply(id) {
-    const t = this.find(id);
-    if (!t) return false;
+    const th = this.find(id);
+    if (!th) return false;
     if (this.isLocked(id)) {
-      showToast('👑 Bu tema Plus üyeliğe özel');
+      showToast(t('theme_plus_only'));
       showPlusPage();
       return false;
     }
-    if (!t.ready) { showToast('🎨 Bu tema yakında'); return false; }
+    if (!th.ready) { showToast(t('theme_soon')); return false; }
     try { localStorage.setItem(this._key, id); } catch (e) {}
     return true;
   }
@@ -2640,14 +2946,14 @@ function _handlePurchaseResult(res, onSuccess) {
   if (res && res.ok) { onSuccess(); return; }
   if (res && res.cancelled) return;
   if (res && res.unavailable) {
-    showToast('🛒 Satın alma yalnızca uygulamada kullanılabilir');
+    showToast(t('purchase_app_only'));
     return;
   }
   if (res && res.notFound) {
-    showToast('🛒 Ürün şu an mağazada bulunamadı');
+    showToast(t('purchase_not_found'));
     return;
   }
-  showToast('🛒 Satın alma tamamlanamadı, sonra tekrar dene');
+  showToast(t('purchase_failed'));
   if (res && res.error && typeof console !== 'undefined') {
     console.warn('[RC] purchase: ' + (res.error.message || res.error));
   }
@@ -2655,16 +2961,16 @@ function _handlePurchaseResult(res, onSuccess) {
 
 function purchasePlus() {
   if (PlusSystem.isActive()) {
-    showToast('⭐ Zaten Plus üyesisin!');
+    showToast(t('plus_already'));
     return;
   }
   const productId = IAP.PLUS[_selectedPlan];
-  if (!productId) { showToast('🛒 Plan seçilemedi'); return; }
+  if (!productId) { showToast(t('plus_plan_failed')); return; }
   Billing.purchase(productId).then((res) => {
     _handlePurchaseResult(res, () => {
       // Hak durumu Billing.purchase içinde zaten senkronlandı; burada
       // yalnızca geri bildirim ve ekran tazeleme var.
-      showToast('👑 Plus aktif — iyi oyunlar!');
+      showToast(t('plus_active'));
       renderSettings();
       closePlusPage();
     });
@@ -2676,14 +2982,14 @@ function purchasePlus() {
 // algısının tek panzehiri.
 function restorePurchases() {
   if (!Billing.available()) {
-    showToast('🛒 Satın alma yalnızca uygulamada kullanılabilir');
+    showToast(t('purchase_app_only'));
     return;
   }
-  showToast('🔄 Satın almalar geri yükleniyor…');
+  showToast(t('purchase_restoring'));
   Billing.restore().then((res) => {
-    if (!res.ok) { showToast('🔄 Geri yükleme başarısız, sonra tekrar dene'); return; }
-    showToast(res.active ? '👑 Plus üyeliğin geri yüklendi!'
-                         : 'ℹ️ Geri yüklenecek bir satın alma bulunamadı');
+    if (!res.ok) { showToast(t('purchase_restore_failed')); return; }
+    showToast(res.active ? t('purchase_restored_plus')
+                         : t('purchase_restore_none'));
     renderSettings();
   });
 }
@@ -2710,12 +3016,18 @@ function closePlusPage() {
 //
 // amount + bonus = ürünün vaat ettiği toplam (100 / 550 / 1800 / 6500) ve
 // IAP.DIAMONDS kimlikleri bu toplamları adlandırıyor.
+// `badge` bir METİN değil, bir ETİKET KİMLİĞİ ('popular' | 'best').
+// 2026-08-15'e kadar Türkçe metindi ve renderShop() ona `===` ile
+// bakıp kartın CSS sınıfına karar veriyordu — yani metin çevrildiği an
+// hem "Popüler" hem "En İyi" vurgusu sessizce kaybolurdu. Kullanıcıya
+// görünen metin kimlik olamaz; aynı kalıp GAME_MAP'te de düzeltildi.
 const DIAMOND_PACKAGES = [
   { id: 'small', amount: 100, bonus: 0, badge: null },
-  { id: 'medium', amount: 500, bonus: 50, badge: 'Popüler' },
+  { id: 'medium', amount: 500, bonus: 50, badge: 'popular' },
   { id: 'large', amount: 1500, bonus: 300, badge: null },
-  { id: 'mega', amount: 5000, bonus: 1500, badge: 'En İyi! ⭐' },
+  { id: 'mega', amount: 5000, bonus: 1500, badge: 'best' },
 ];
+const SHOP_BADGE_KEY = { popular: 'shop_tag_popular', best: 'shop_tag_best' };
 
 // `soon: true` ARTIK KULLANILMIYOR (2026-08-01) — dört kaynağın dördü de
 // gerçek. Alan silinmedi: bir sonraki yarım sistem için doğru desen bu
@@ -2728,10 +3040,10 @@ const DIAMOND_PACKAGES = [
 // ödül miktarı DailyQuests'ten okunuyor. Görev satırı 2026-08-01'de
 // "Yakında"dan çıktı — sistem artık gerçekten var.
 const FREE_DIAMOND_SOURCES = [
-  { icon: '📺', title: 'Reklam İzle', desc: '', reward: '+10💎', action: 'watchAdForDiamonds', dynamic: 'ad' },
-  { icon: '🎯', title: 'Günlük Görevler', desc: '', reward: '', action: 'goToHome', dynamic: 'quests' },
-  { icon: '📅', title: 'Günlük Ödül', desc: 'Her gün giriş yap', reward: '+5-100💎', action: 'goToHome' },
-  { icon: '🏆', title: 'Başarımlar', desc: '', reward: '', action: 'showAchievements', dynamic: 'badges' },
+  { icon: '📺', titleKey: 'shop_free_ad', descKey: null, reward: '+10💎', action: 'watchAdForDiamonds', dynamic: 'ad' },
+  { icon: '🎯', titleKey: 'shop_free_quests', descKey: null, reward: '', action: 'goToHome', dynamic: 'quests' },
+  { icon: '📅', titleKey: 'shop_free_daily', descKey: 'shop_free_daily_note', reward: '+5-100💎', action: 'goToHome' },
+  { icon: '🏆', titleKey: 'shop_free_badges', descKey: null, reward: '', action: 'showAchievements', dynamic: 'badges' },
 ];
 
 // SIRA YÜK TAŞIYOR: ekran ÖNCE açılır, içerik sonra dolar — showPlusPage()
@@ -2760,8 +3072,8 @@ function renderShop() {
   grid.innerHTML = DIAMOND_PACKAGES.map(pkg => {
     const totalAmount = pkg.amount + pkg.bonus;
     return `
-      <div class="shop-package ${pkg.badge === 'En İyi! ⭐' ? 'shop-best' : ''} ${pkg.badge === 'Popüler' ? 'shop-popular' : ''}" onclick="buyPackage('${pkg.id}')">
-        ${pkg.badge ? '<div class="shop-badge">' + pkg.badge + '</div>' : ''}
+      <div class="shop-package ${pkg.badge === 'best' ? 'shop-best' : ''} ${pkg.badge === 'popular' ? 'shop-popular' : ''}" onclick="buyPackage('${pkg.id}')">
+        ${pkg.badge ? '<div class="shop-badge">' + t(SHOP_BADGE_KEY[pkg.badge]) + '</div>' : ''}
         <span class="shop-pkg-icon">💎</span>
         <span class="shop-pkg-amount">${pkg.amount.toLocaleString()}</span>
         ${pkg.bonus > 0 ? '<span class="shop-pkg-bonus">+' + pkg.bonus + ' BONUS</span>' : ''}
@@ -2785,7 +3097,7 @@ function renderShop() {
                || (badgeRow && Badges.count() >= Badges.total());
     const desc = adRow ? AdBudget.label()
                : questRow ? DailyQuests.shopLabel()
-               : badgeRow ? Badges.shopLabel() : src.desc;
+               : badgeRow ? Badges.shopLabel() : (src.descKey ? t(src.descKey) : '');
     const reward = questRow ? '+' + DailyQuests.totalReward() + '💎'
                  : badgeRow ? '+' + Badges.totalReward() + '💎' : src.reward;
     const disabled = spent || src.soon;
@@ -2798,7 +3110,7 @@ function renderShop() {
     <div class="${cls}" ${action}>
       <span class="sfi-icon">${src.icon}</span>
       <div class="sfi-info">
-        <span class="sfi-title">${src.title}</span>
+        <span class="sfi-title">${t(src.titleKey)}</span>
         <span class="sfi-desc"${adRow ? ' data-ph-ad-budget' : ''}${questRow ? ' data-ph-quests' : ''}${badgeRow ? ' data-ph-badges' : ''}>${desc}</span>
       </div>
       <span class="sfi-reward">${reward}</span>
@@ -2816,14 +3128,14 @@ function renderShop() {
 function buyPackage(id) {
   const pkg = DIAMOND_PACKAGES.find(p => p.id === id);
   const productId = IAP.DIAMONDS[id];
-  if (!pkg || !productId) { showToast('🛒 Paket bulunamadı'); return; }
+  if (!pkg || !productId) { showToast(t('shop_pkg_not_found')); return; }
   Billing.purchase(productId).then((res) => {
     _handlePurchaseResult(res, () => {
       // add(), addReward() DEĞİL: satın alınan elmasa Plus'ın +%50
       // çarpanı UYGULANMAZ. Çarpan kazanılan ödülleri büyütmek için var,
       // satın alınan miktarı değil — aksi hâlde aynı paranın karşılığı
       // aboneye farklı olurdu ve mağazadaki sayı yalan söylerdi.
-      DiamondSystem.add(pkg.amount + pkg.bonus, 'Satın alma tamamlandı!');
+      DiamondSystem.add(pkg.amount + pkg.bonus, t('purchase_done'));
       renderShop();
     });
   });
@@ -2832,8 +3144,8 @@ function buyPackage(id) {
 function watchAdForDiamonds() {
   const amount = EconomyConfig.AD_DIAMOND_REWARD;
   const ok = runRewardedAction(
-    { icon: '💎', text: amount + ' Elmas Kazan!' },
-    () => DiamondSystem.addReward(amount, 'Reklam ödülü!')
+    { icon: '💎', text: t('shop_free_ad_note', { amount }) },
+    () => DiamondSystem.addReward(amount, t('ad_reward_toast'))
   );
   // Mağaza satırının açıklaması ("7/8 reklam hakkın kaldı") anında
   // güncellenmeli; reklam bittiğinde AdBudget.consume() zaten tetikliyor
@@ -2859,7 +3171,6 @@ function showAchievements() {
 let currentScreen = 'home';
 let currentTab = 'home';
 let currentCategory = null;
-let currentFilter = 'Tümü';
 
 // ==================== NAVIGASYON ====================
 
@@ -2960,7 +3271,7 @@ function __phHandleBack() {
     return;
   }
   _backExitPrimed = true;
-  showToast("↩︎ Çıkmak için tekrar geri'ye basın");
+  showToast(t('nav_back_exit'));
   clearTimeout(_backExitTimer);
   _backExitTimer = setTimeout(() => { _backExitPrimed = false; }, 2000);
 }
@@ -3026,21 +3337,21 @@ function renderHomeStats() {
   const lv = PlayerLevel.get();
 
   const cards = [
-    { tone:'violet', icon:'🛡️', label:'Rozet İlerlemesi',
+    { tone:'violet', icon:'🛡️', label:t('home_stat_badges'),
       value: badgeN + '<small> / ' + badgeT + '</small>',
       pct: badgeT ? (badgeN / badgeT) * 100 : 0,
       onclick: "switchTab('lider')" },
-    { tone:'gold', icon:'🎯', label:'Aktif Görev',
-      value: (quests.length - questDone) + ' aktif',
+    { tone:'gold', icon:'🎯', label:t('home_stat_quest'),
+      value: t('home_stat_quest_active', { n: quests.length - questDone }),
       pct: quests.length ? (questDone / quests.length) * 100 : 0 },
     // Seri kartı #hdr-streak'i TAŞIYOR: updateStreakUI() o id'yi arıyor
     // ve ödül alındığı an sayıyı tazeliyor. Element başka bir yere
     // taşınırsa o tazeleme sessizce ölür.
-    { tone:'green', icon:'🔥', label:'Seri',
-      value: '<span id="hdr-streak">' + streak + '</span><small> gün</small>',
+    { tone:'green', icon:'🔥', label:t('home_stat_streak'),
+      value: '<span id="hdr-streak">' + streak + '</span><small> ' + t('common_day_short') + '</small>',
       // Haftanın kaçı tamamlandı: 7 günlük satırla aynı ölçek.
       pct: Math.min(100, (streak % 7 || (streak ? 7 : 0)) / 7 * 100) },
-    { tone:'cyan', icon:'📈', label:'Seviye',
+    { tone:'cyan', icon:'📈', label:t('home_stat_level'),
       value: String(lv.level),
       pct: (lv.into / lv.need) * 100 },
   ];
@@ -3071,9 +3382,9 @@ function renderHomePromo() {
 
   const leftIcon = last ? last.icon : '🎖️';
   const leftTone = last ? slyTone(last.tone) : 'violet';
-  const leftKicker = last ? 'Son Rozetin' : 'Henüz rozet yok';
-  const leftTitle = last ? last.name : 'İlk rozetini kazan';
-  const leftNote = last ? _agoText(last.earnedAt) : 'Bir oyun başlat, hemen açılır';
+  const leftKicker = last ? t('badges_last_earned') : t('badges_none_yet');
+  const leftTitle = last ? t(last.nameKey) : t('badges_first_title');
+  const leftNote = last ? _agoText(last.earnedAt) : t('badges_first_desc');
 
   el.innerHTML = `
     <div class="sly-promo-cell sly-t-${leftTone}" onclick="switchTab('lider')">
@@ -3089,8 +3400,8 @@ function renderHomePromo() {
     <div class="sly-promo-cell is-plus" onclick="showPlusPage()">
       <span class="sly-promo-ico">👑</span>
       <span class="sly-promo-txt">
-        <span class="sly-promo-title">PLUS Avantajları</span>
-        <span class="sly-promo-note">Reklamsız deneyim ve her gün +20💎</span>
+        <span class="sly-promo-title">${t('home_promo_plus_title')}</span>
+        <span class="sly-promo-note">${t('home_promo_plus_desc')}</span>
       </span>
     </div>
   `;
@@ -3099,18 +3410,20 @@ function renderHomePromo() {
 // "1 gün önce kazandın" gibi bir ifade. Tam saat göstermek bu bağlamda
 // bilgi değil gürültü; gün çözünürlüğü yeterli.
 function _agoText(ts) {
-  if (!ts) return 'Kazanıldı';
+  if (!ts) return t('common_earned');
   const days = Math.floor((Date.now() - ts) / 86400000);
-  if (days <= 0) return 'Bugün kazandın';
-  if (days === 1) return '1 gün önce kazandın';
-  return days + ' gün önce kazandın';
+  if (days <= 0) return t('badges_earned_today');
+  // tp(): çoğul kategorisini Intl.PluralRules seçiyor. Türkçe'de tek biçim
+  // var, ama Rusça'da üç (1/2-4/5+) ve Arapça'da altı — elle "1 ise şu,
+  // değilse bu" yazmak o dillerde yanlış olurdu.
+  return tp('badges_earned_days_ago', days);
 }
 
 // Haftalık seri kartındaki "Nasıl Çalışır?" bağlantısı. Ayrı bir ekran
 // açmıyor: anlatılacak şey iki cümle ve bir ekran geçişi o iki cümleden
 // pahalı olurdu.
 function showStreakInfo() {
-  showToast('🔥 Her gün uygulamayı aç, seri büyüsün — bir gün kaçırırsan sıfırlanır.');
+  showToast(t('home_streak_info'));
 }
 
 function renderDailyRewards() {
@@ -3163,7 +3476,7 @@ function renderDailyRewards() {
 
     return `<div class="${cls}">
       <div class="sly-day-dot" ${claimable ? 'onclick="claimDailyReward()"' : ''}>${mark}</div>
-      <span class="sly-day-lbl">${reward.day}</span>
+      <span class="sly-day-lbl">${t(DAY_KEYS[i])}</span>
     </div>`;
   }).join('');
 }
@@ -3177,7 +3490,9 @@ function renderFavorites() {
   const favGames = favIds.map(id => {
     if (window.REEL_GAMES) {
       const rg = REEL_GAMES.find(r => r.id === id);
-      if (rg) return { id:rg.id, name:rg.name, emoji:rg.emoji, gradient:rg.gradient };
+      // rg.name YOK (2026-08-15: adlar locales/'e taşındı) — çeviri
+      // tablosundan okunuyor. Eskisi title="undefined" üretiyordu.
+      if (rg) return { id:rg.id, name:t('game_name_' + rg.id), emoji:rg.emoji, gradient:rg.gradient };
     }
     return null;
   }).filter(Boolean);
@@ -3185,9 +3500,9 @@ function renderFavorites() {
   const emptyHTML = `
     <div style="text-align:center;padding:14px 12px;color:#9a9ab0;font-size:13px;">
       <span style="font-size:20px;">💫</span>
-      <div style="margin-top:4px;">Henüz favori oyunun yok</div>
+      <div style="margin-top:4px;">${t('home_no_favorites')}</div>
       <div style="margin-top:4px;color:#c084fc;font-size:12px;cursor:pointer" onclick="switchTab('discover')">
-        Keşfet'e git ve ❤️ ile favorile →
+        ${t('home_favorites_cta')}
       </div>
     </div>`;
   
@@ -3210,7 +3525,7 @@ function renderFavorites() {
   const profileContainer = document.getElementById('fav-games-list');
   if (profileContainer) {
     profileContainer.innerHTML = favGames.length === 0
-      ? '<p class="pf-fav-empty" onclick="switchTab(\'discover\')">❤️ Keşfet\'ten favorilerine ekle →</p>'
+      ? '<p class="pf-fav-empty" onclick="switchTab(\'discover\')">' + t('home_favorites_empty_cta') + '</p>'
       : badgeHTML;
   }
 }
@@ -3224,7 +3539,7 @@ function renderShowcase() {
   if (!el) return;
   const top = Badges.showcase(3);
   let html = top.map(b =>
-    '<span class="pf-badge bdg-' + b.tone + '" title="' + b.name + '">' + b.icon + '</span>'
+    '<span class="pf-badge bdg-' + b.tone + '" title="' + t(b.nameKey) + '">' + b.icon + '</span>'
   ).join('');
   for (let i = top.length; i < 3; i++) {
     html += '<span class="pf-badge bdg-locked">🔒</span>';
@@ -3275,7 +3590,7 @@ function renderMissionList(containerId, missions) {
 // haftalık ödülün geri gelip gelmeyeceği bir ürün kararı ve geri dönüşün
 // ucuz kalması isteniyor. WEEKLY_MISSIONS dizisi de aynı sebeple yerinde.
 function claimWeeklyReward() {
-  showToast('🎁 Haftalık ödül yakında!');
+  showToast(t('home_weekly_reward_soon'));
 }
 
 // ==================== RENDER: ROZETLER ====================
@@ -3356,10 +3671,10 @@ function renderProgress() {
   // ── Özet kartlar: ana sayfayla AYNI bileşen (.sly-stat). Aynı bilginin
   // iki ekranda farklı görünmesi, tasarım sisteminin ilk kaybettiği yer.
   const tiles = [
-    { tone:'blue',   icon:'🎮', label:'Oynanan Tur', value:String(stats.totalGamesStarted || 0) },
-    { tone:'green',  icon:'🏆', label:'Kazanılan',   value:String(stats.totalGamesWon || 0) },
-    { tone:'gold',   icon:'🔥', label:'Seri',        value:streak + '<small> gün</small>' },
-    { tone:'cyan',   icon:'📈', label:'Seviye',      value:String(lv.level) },
+    { tone:'blue',   icon:'🎮', label:t('stat_games_played'), value:String(stats.totalGamesStarted || 0) },
+    { tone:'green',  icon:'🏆', label:t('stat_games_won'),   value:String(stats.totalGamesWon || 0) },
+    { tone:'gold',   icon:'🔥', label:t('home_stat_streak'),        value:streak + '<small> ' + t('common_day_short') + '</small>' },
+    { tone:'cyan',   icon:'📈', label:t('home_stat_level'),      value:String(lv.level) },
   ];
   const tilesHTML = tiles.map((t, i) => `
     <div class="sly-stat sly-t-${t.tone} sly-in" style="animation-delay:${i*50}ms">
@@ -3379,7 +3694,7 @@ function renderProgress() {
     const list = g.id === 'all' ? BADGES : BADGES.filter(b => b.group === g.id);
     const got = list.filter(b => earnedIds.has(b.id)).length;
     return `<button class="sly-chip ${_badgeFilter === g.id ? 'on' : ''}"
-              onclick="setBadgeFilter('${g.id}')">${g.label}
+              onclick="setBadgeFilter('${g.id}')">${t(g.labelKey)}
               <span class="sly-chip-n">${got}/${list.length}</span></button>`;
   }).join('');
 
@@ -3393,16 +3708,16 @@ function renderProgress() {
     <div class="sly-badge-card sly-t-${slyTone(b.tone)} ${got ? 'is-earned' : ''} sly-in"
          style="animation-delay:${i*55}ms">
       <span class="sly-badge-medal">${b.icon}</span>
-      <span class="sly-badge-name">${b.name}</span>
-      <span class="sly-badge-desc">${b.desc}</span>
-      <span class="sly-badge-foot">${got ? 'Kazanıldı' : '+' + b.reward + '💎'}</span>
+      <span class="sly-badge-name">${t(b.nameKey)}</span>
+      <span class="sly-badge-desc">${t(b.descKey)}</span>
+      <span class="sly-badge-foot">${got ? t('common_earned') : '+' + b.reward + '💎'}</span>
     </div>`;
   }).join('');
 
   container.innerHTML = `
     <div class="sly-screen-head">
-      <h2 class="sly-screen-title">Rozetler
-        <span class="sly-screen-sub">Koleksiyonun ve ilerlemen</span>
+      <h2 class="sly-screen-title">${t('badges_screen_title')}
+        <span class="sly-screen-sub">${t('badges_screen_sub')}</span>
       </h2>
     </div>
 
@@ -3414,14 +3729,12 @@ function renderProgress() {
         </span>
       </div>
       <div class="sly-ring-body">
-        <span class="sly-ring-title">Koleksiyon %${pct}</span>
+        <span class="sly-ring-title">${t('badges_collection_pct', { pct })}</span>
         <span class="sly-ring-desc">${
-          n >= total
-            ? 'Tüm rozetleri topladın. Yeni rozetler yolda.'
-            : 'Görevleri tamamla, serini sürdür ve elmas kazan — rozetler kendiliğinden açılır.'
+          n >= total ? t('badges_all_done_title') : t('badges_all_done_desc')
         }</span>
         <div class="sly-ring-meta">
-          <span class="sly-pill is-gold">💎 ${Badges.totalReward()} toplam ödül</span>
+          <span class="sly-pill is-gold">${t('badges_total_reward', { amount: Badges.totalReward() })}</span>
         </div>
       </div>
     </div>
@@ -3433,14 +3746,14 @@ function renderProgress() {
     <section class="sly-panel">
       <div class="sly-panel-head">
         <span class="sly-panel-title">
-          <span class="sly-panel-title-ico">📋</span>Günlük Görevler
+          <span class="sly-panel-title-ico">📋</span>${t('shop_free_quests')}
         </span>
         <span class="sly-panel-link sly-muted">${DailyQuests.doneCount()}/${DailyQuests.rows().length}</span>
       </div>
       <div class="sly-tasks" id="progress-missions"></div>
     </section>
 
-    <h3 class="sly-group-title">Koleksiyonlar</h3>
+    <h3 class="sly-group-title">${t('badges_collections')}</h3>
     <div class="sly-chips">${chipsHTML}</div>
     <div class="sly-badge-grid">${badgesHTML}</div>
   `;
@@ -3505,11 +3818,16 @@ function renderSettings() {
   // sonradan değiştirebilmesi zorunlu, kapsam dışı bölgede ise böyle bir
   // satır göstermek anlamsız (ve Google formu da açılmaz). Kararı biz
   // vermiyoruz — privacyOptionsRequirementStatus veriyor.
-  const groups = SETTING_GROUPS.map(g => ({ title: g.title, rows: g.rows.slice() }));
+  // `hidden` satırlar ÇİZİLMİYOR. Tanımları duruyor (bkz. SETTING_GROUPS)
+  // — hazır olmayan bir özelliği release'te "Yakında" diye göstermektense
+  // hiç göstermemek, tutulmayacak bir söz vermemek demek.
+  const groups = SETTING_GROUPS
+    .map(g => ({ titleKey: g.titleKey, rows: g.rows.filter(r => !r.hidden) }))
+    .filter(g => g.rows.length);
   if (typeof AdConsent !== 'undefined' && AdConsent.privacyOptionsRequired()) {
-    groups.push({ title:'Gizlilik', rows: [
-      { icon:'🔒', label:'Gizlilik Seçenekleri',
-        note:'Reklam kişiselleştirme tercihini değiştir',
+    groups.push({ titleKey:'settings_group_privacy', rows: [
+      { icon:'🔒', labelKey:'settings_privacy_options',
+        noteKey:'settings_privacy_options_note',
         fn:'AdConsent.showPrivacyOptions()' },
     ]});
   }
@@ -3522,6 +3840,14 @@ function renderSettings() {
 
       // Sağ uç: anahtar > değer > ok. Üçü birden gösterilmiyor —
       // bir satırda tek bir "burada ne olur" işareti olmalı.
+      // Metinler ÇAĞRI ANINDA çözülüyor. `value` düz bir dize de olabilir
+      // (sürüm numarası) bir fonksiyon da (seçili dilin adı) — ikincisi
+      // aynı gerekçeyle: değer dil değiştiğinde farklı olmalı.
+      const label = s.labelKey ? t(s.labelKey) : s.label;
+      const note  = s.noteKey  ? t(s.noteKey)  : s.note;
+      let value   = s.valueKey ? t(s.valueKey) : s.value;
+      if (typeof value === 'function') { try { value = value(); } catch (e) { value = ''; } }
+
       let right;
       if (s.toggle) {
         // Durum ÇALIŞMA ZAMANINDA okunuyor (tanımdaki `state` bir
@@ -3530,27 +3856,28 @@ function renderSettings() {
         let on = false;
         try { on = !!s.state(); } catch (e) { on = false; }
         right = `<span class="sly-switch ${on ? 'on' : ''}"></span>`;
-      } else if (s.value) {
-        right = `<span class="sly-row-value">${s.value}</span>`;
+      } else if (value) {
+        right = `<span class="sly-row-value">${value}</span>`;
       } else {
         right = '<span class="sly-row-chev">›</span>';
       }
 
       // fn varsa doğrudan çalıştırılır; yoksa action toast olarak gösterilir.
-      const act = s.fn ? s.fn : `showToast('${String(s.action).replace(/'/g, "\\'")}')`;
+      const actionText = s.actionKey ? t(s.actionKey) : s.action;
+      const act = s.fn ? s.fn : `showToast('${String(actionText).replace(/'/g, "\\'")}')`;
       return `
       <button class="sly-row${tone} sly-in" style="animation-delay:${delay}ms" onclick="${act}">
         <span class="sly-row-ico">${s.icon}</span>
         <span class="sly-row-body">
-          <span class="sly-row-label">${s.label}</span>
-          ${s.note ? `<span class="sly-row-note">${s.note}</span>` : ''}
+          <span class="sly-row-label">${label}</span>
+          ${note ? `<span class="sly-row-note">${note}</span>` : ''}
         </span>
         ${right}
       </button>`;
     }).join('');
 
     return `<div class="sly-group">
-      <h3 class="sly-group-title">${g.title}</h3>
+      <h3 class="sly-group-title">${t(g.titleKey)}</h3>
       <div class="sly-list">${rowsHTML}</div>
     </div>`;
   }).join('');
@@ -3565,9 +3892,9 @@ function renderProfileHero() {
   if (!el) return;
   const lv = PlayerLevel.get();
   const tags = [
-    { cls:'', txt:'📈 Seviye ' + lv.level },
-    { cls:'', txt:'🔥 ' + StreakSystem.getCount() + ' gün seri' },
-    { cls:'', txt:'🛡️ ' + Badges.count() + '/' + Badges.total() + ' rozet' },
+    { cls:'', txt: '📈 ' + t('common_level_n', { n: lv.level }) },
+    { cls:'', txt: '🔥 ' + t('profile_pill_streak', { n: StreakSystem.getCount() }) },
+    { cls:'', txt: '🛡️ ' + t('profile_pill_badges', { n: Badges.count(), total: Badges.total() }) },
   ];
   if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) {
     tags.push({ cls:' is-gold', txt:'👑 PLUS' });
@@ -3580,46 +3907,56 @@ function renderProfileHero() {
 
 // ==================== OYUN MOTORU ====================
 
-const GAME_MAP = {
-  '2048': 'game2048',
-  'Hafıza Oyunu': 'memoryGame',
-  'Kelime Avı': 'wordSearch',
-  'Sudoku': 'sudoku',
-  'Bulmaca Blokları': 'blockPuzzle',
-  'İksir Sıralama': 'waterSort',
-  'Ok Bulmaca': 'arrowPuzzle',
+// KAYITLI OYUN ID'LERİ — kabuğun "bu oyun oynanabilir" listesi.
+//
+// 2026-08-15'e kadar bu bir SÖZLÜKTÜ ve anahtarı oyunun TÜRKÇE GÖRÜNEN
+// ADIYDI ({'Kelime Avı': 'wordSearch'}), playGame() de o adla çağrılıyordu.
+// Yerelleştirmeyle birlikte bu artık çalışamaz: görünen ad dile göre
+// değişiyor, yani bir Alman oyuncuda "Word Hunt" hiçbir anahtarla
+// eşleşmez ve oyun "yakında!" diyerek açılmazdı.
+//
+// GENEL KURAL: görünen metin KİMLİK OLARAK KULLANILAMAZ. Ad artık
+// yalnızca bir sunum değeri (t('game_name_' + id)); kimlik id'dir.
+const GAME_IDS = [
+  'game2048',
+  'memoryGame',
+  'wordSearch',
+  'sudoku',
+  'blockPuzzle',
+  'waterSort',
+  'arrowPuzzle',
   // Faz 3 bitti: tema hazır, oyun Keşfet ve ana ekranda AÇIK.
-  'Resim Kaydır': 'jigsawCard',
-  'Yılan': 'snakeGame',
-  'Flappy UFO': 'flappyUfo',
+  'jigsawCard',
+  'snakeGame',
+  'flappyUfo',
   // 2026-08-09: oyun gerçekten yazıldı. Öncesinde yalnızca Keşfet'te bir
   // kart animasyonu vardı ve burada hiç kayıtlı değildi.
-  'Akış Bağlantı': 'flowConnect',
-};
+  'flowConnect',
+];
+
+/** Oyunun o anki dildeki görünen adı. Tek kaynak: locale tablosu. */
+function gameName(id) {
+  return (typeof t === 'function') ? t('game_name_' + id) : id;
+}
 
 let _currentGameId = null;
 let _currentGameOpts = null;
 let _beforeGameScreen = null;
 
-// id → görünen ad (GAME_MAP'in tersi). Günlük Meydan Okuma oyunları
-// id ile başlatıyor; başlık için ada ihtiyaç var.
-const GAME_NAME_BY_ID = Object.keys(GAME_MAP).reduce((acc, n) => {
-  acc[GAME_MAP[n]] = n; return acc;
-}, {});
-
+// GERİYE DÖNÜK AD: playGame artık zaten id alıyor, yani bu ince bir
+// takma ad. Silinmedi çünkü index.html ve app.js içindeki onclick
+// dizgelerinde adıyla geçiyor; ikisini aynı anda değiştirmenin bir
+// kazancı yok.
 function playGameById(gameId, opts) {
-  const name = GAME_NAME_BY_ID[gameId];
-  if (!name) { showToast('🎮 Oyun bulunamadı'); return; }
-  playGame(name, opts);
+  playGame(gameId, opts);
 }
 
 // opts oyuna AYNEN geçer (örn. { daily, seed, difficulty }).
 // Yeniden başlatmada da korunur — aksi hâlde günlük bulmacada "Tekrar
 // Oyna" oyuncuyu rastgele bir tahtaya düşürürdü.
-function playGame(name, opts) {
-  const gameId = GAME_MAP[name];
-  if (!gameId || typeof PuzzleGames === 'undefined' || !PuzzleGames[gameId]) {
-    showToast(`🎮 ${name} — yakında!`);
+function playGame(gameId, opts) {
+  if (GAME_IDS.indexOf(gameId) === -1 || typeof PuzzleGames === 'undefined' || !PuzzleGames[gameId]) {
+    showToast(t('game_soon', { name: gameName(gameId) }));
     return;
   }
 
@@ -3655,7 +3992,7 @@ function playGame(name, opts) {
   document.getElementById('bottom-tabs').style.display = 'none';
 
   // Başlık ve skor ayarla
-  document.getElementById('game-title').textContent = name;
+  document.getElementById('game-title').textContent = gameName(gameId);
   document.getElementById('game-score').textContent = '0';
 
   // Game over gizle
@@ -3774,7 +4111,7 @@ function showGameOver(win, title, message, opts) {
 
   // Level complete reward — Plus çarpanı BİLEREK yok (add, addReward değil):
   // abonelik oyun içi ilerlemeyi hızlandırmıyor (bkz. DiamondSystem.addReward).
-  if (win) DiamondSystem.add(EconomyConfig.LEVEL_COMPLETE_REWARD, 'Level tamamlandı!');
+  if (win) DiamondSystem.add(EconomyConfig.LEVEL_COMPLETE_REWARD, t('game_level_done'));
 
   refreshGameOverOffers();
   document.getElementById('game-over').style.display = 'flex';
@@ -3810,21 +4147,21 @@ function refreshGameOverOffers() {
   // düğmesine dönüşüyor (bkz. continueWithAd).
   const contAd = document.getElementById('go-continue-ad');
   if (plus) {
-    setBtn(contAd, '👑', 'Devam Et (Plus)', true);
+    setBtn(contAd, '👑', t('go_continue_plus'), true);
   } else if (RewardedAd._pending) {
     // Reklam yolda. Bunu SÖYLEMEK zorundayız: ölçülen yükleme süresi ilk
     // seferde ~6.5 saniye ve o boyunca düğme hiçbir şey yapmıyormuş gibi
     // görünüyordu — oyuncunun üst üste basmasının sebebi buydu. Kalkan
     // artık fazladan reklam açılmasını engelliyor, ama sessiz kalmak
     // "bozuk" hissini tek başına ortadan kaldırmıyor.
-    setBtn(contAd, '⏳', 'Reklam yükleniyor…', false);
+    setBtn(contAd, '⏳', t('ad_loading'), false);
   } else {
     // Günlük hak SAYISI ARTIK YAZMIYOR ve düğme bütçe yüzünden PASİFLEŞMİYOR:
     // devam etmek 2026-08-07'den beri günlük hakka işlemiyor (bkz.
     // runRewardedAction). Sayıyı burada göstermeye devam etmek, oyuncuya
     // artık geçerli olmayan bir sınırı vaat etmek olurdu — ve daha kötüsü,
     // sayı sıfırlandığında çalışan bir düğmeyi "bitti" diye kapatırdı.
-    setBtn(contAd, '📺', 'Reklam İzle → Devam Et', true);
+    setBtn(contAd, '📺', t('go_continue_ad'), true);
   }
 
   // Devam — elmas satırı. Premium'da GİZLİ: ücretsiz devam varken elmas
@@ -3835,17 +4172,17 @@ function refreshGameOverOffers() {
     diamondBtn.style.display = hide ? 'none' : '';
     if (!hide) {
       const cost = _gameOverContinueCost;
-      setBtn(diamondBtn, '💎', cost + ' Elmas → Devam Et', DiamondSystem.canAfford(cost));
+      setBtn(diamondBtn, '💎', t('go_continue_diamonds', { cost }), DiamondSystem.canAfford(cost));
     }
   }
 
   // Skor 2x — yalnızca reklam. Elmas alternatifi bilerek YOK.
   const dbl = document.getElementById('go-double');
   if (plus) {
-    setBtn(dbl, '👑', 'Skor 2x (Plus)', true);
+    setBtn(dbl, '👑', t('go_double_plus'), true);
   } else {
     // Devam düğmesiyle aynı gerekçe: skor 2x günlük hakka işlemiyor.
-    setBtn(dbl, '📺', 'Reklam İzle → Skor 2x!', true);
+    setBtn(dbl, '📺', t('go_double_ad'), true);
   }
 }
 
@@ -3871,8 +4208,8 @@ function _runGameOverContinuation(source) {
 // değil, kapının doğal sonucu.
 function continueWithAd() {
   // Günlük hakka İŞLEMEZ: devam etmek bir fayda, elmas musluğu değil.
-  runRewardedAction({ icon: '🔄', text: 'Devam Et!' }, () => {
-    if (!_runGameOverContinuation('ad')) showToast('🔄 Devam ediyorsun!');
+  runRewardedAction({ icon: '🔄', text: t('go_continue_title') }, () => {
+    if (!_runGameOverContinuation('ad')) showToast(t('go_continuing'));
   }, { skipDailyLimit: true });
 }
 
@@ -3880,12 +4217,12 @@ function continueWithDiamonds() {
   // Premium'da bu düğme hiç görünmüyor (refreshGameOverOffers), ama
   // ücretsiz devam hakkı varken elmas harcamak her hâlükârda yanlış.
   if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) {
-    if (!_runGameOverContinuation('plus')) showToast('👑 Plus: devam ücretsiz!');
+    if (!_runGameOverContinuation('plus')) showToast(t('go_continue_free_plus'));
     return;
   }
   const cost = _gameOverContinueCost;
   if (DiamondSystem.spend(cost)) {
-    if (!_runGameOverContinuation('diamond')) showToast('💎 ' + cost + ' elmas harcandı — devam!');
+    if (!_runGameOverContinuation('diamond')) showToast(t('go_continue_spent', { cost }));
   }
 }
 
@@ -3893,12 +4230,12 @@ function continueWithDiamonds() {
 // bozar — skor kazanılır. Ekonominin tek istisnası, gözden kaçırma değil.
 function doubleScoreWithAd() {
   runRewardedAction(
-    { icon: '2️⃣', text: 'Skor 2x!' },
+    { icon: '2️⃣', text: t('go_double_title') },
     () => {
       const scoreEl = document.getElementById('game-score');
       const current = parseInt(scoreEl.textContent.replace(/,/g, '')) || 0;
       scoreEl.textContent = (current * 2).toLocaleString();
-      showToast('🎉 Skor 2 katına çıktı!');
+      showToast(t('go_double_done'));
     },
     // Günlük hakka İŞLEMEZ: skor bir fayda, elmas değil.
     { skipDailyLimit: true }
@@ -3989,8 +4326,7 @@ function toggleGameMusic() {
 }
 
 function playRandomGame() {
-  const playable = Object.keys(GAME_MAP);
-  const pick = playable[Math.floor(Math.random() * playable.length)];
+  const pick = GAME_IDS[Math.floor(Math.random() * GAME_IDS.length)];
   playGame(pick);
 }
 
@@ -4060,6 +4396,56 @@ function showToast(msg) {
   // değiştirmiş veya aboneliği bitmiş kullanıcının hakları ilk açılışta
   // kendiliğinden doğruya oturuyor. Anahtar yoksa sessizce atlanır.
   Billing.init();
+
+  // ───── DİL DEĞİŞİMİ ─────
+  // YENİDEN BAŞLATMA GEREKMİYOR, çünkü uygulama zaten imperatif innerHTML
+  // yeniden çizimi kullanıyor: her ekranın bir render fonksiyonu var ve
+  // hepsi metni t()'den okuyor. Yapılacak tek şey onları yeniden çağırmak.
+  //
+  // I18n.applyDom() statik index.html metinlerini zaten yazdı; burada
+  // JS'in ÜRETTİĞİ ekranlar tazeleniyor. Hepsini birden çizmek maliyetli
+  // değil (dil yılda birkaç kez değişir) ve seçmeli çizmek "profil
+  // güncellendi ama ana sayfa Türkçe kaldı" hatasını davet ederdi.
+  //
+  // OYUN STATE'İNE DOKUNULMUYOR: aktif oyunun içi yeniden kurulmuyor,
+  // yalnızca başlığı güncelleniyor. Bir arcade turunun ortasında dili
+  // değiştirmek skoru sıfırlamamalı (Kelime Avı'nın tahta tazelemesi
+  // ayrı bir iş — içeriği gerçekten dile bağlı olan tek oyun o).
+  if (typeof I18n !== 'undefined') {
+    I18n.onChange(function () {
+      try {
+        renderSettings();
+        renderProfileHero();
+        renderFavorites();
+        renderShowcase();
+        renderHomeStats();
+        renderMissions();
+        renderDailyRewards();
+        renderHomePromo();
+        if (typeof renderProgress === 'function') renderProgress();
+        if (typeof renderDailyChallenge === 'function') renderDailyChallenge();
+        // Keşfet akışı kart metinlerini kuruluşta yazıyor; yeniden kurmak
+        // yerine yeniden çizmek gerekiyor. cleanup+init idempotent.
+        if (window.ReelsEngine && currentScreen === 'screen-discover') {
+          ReelsEngine.cleanup(); ReelsEngine.init();
+        }
+        // Açık bir oyun varsa yalnızca BAŞLIĞI tazele.
+        if (_currentGameId) {
+          const el = document.getElementById('game-title');
+          if (el) el.textContent = gameName(_currentGameId);
+          // TEK İSTİSNA: Kelime Avı'nın İÇERİĞİ dile bağlı. Tahtada
+          // eski dilin kelimeleri duruyor ve onları yeni dile
+          // eşleştirmenin anlamlı bir yolu yok (şartname de bunu
+          // yasaklıyor). Oyun kendi `onLocaleChange`'ini sunuyorsa
+          // çağrılıyor: SEVİYE ve SKOR korunur, yalnızca tahta yenilenir.
+          const g = PuzzleGames[_currentGameId];
+          if (g && typeof g.onLocaleChange === 'function') {
+            try { g.onLocaleChange(); } catch (e) { console.warn('[i18n] tahta tazelenemedi', e); }
+          }
+        }
+      } catch (e) { console.warn('[i18n] yeniden çizim hatası', e); }
+    });
+  }
 
   // Uygulama açılış sesi — soft bloom (müzik geçici olarak kapalı, bkz. playGame())
   document.addEventListener('click', function _firstTouch() {

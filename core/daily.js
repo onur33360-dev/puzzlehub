@@ -125,10 +125,16 @@ function renderDailyChallenge() {
     const st = DailyChallenge.state(id);
     const meta = (typeof REEL_GAMES !== 'undefined')
       ? REEL_GAMES.find(x => x.id === id) : null;
-    const name = (meta && meta.name) || id;
+    // AD VE ZORLUK ÇEVİRİ TABLOSUNDAN. 2026-08-15'e kadar `meta.name` ve
+    // `DIFFICULTIES[...].label` okunuyordu; ikisi de o gün kaldırıldı
+    // (adlar locales/'e, zorluk `difficulty_*` anahtarlarına taşındı).
+    // Sonuç sessiz bir gerilemeydi: `name` id'ye düşüp kartta ham
+    // "sudoku" yazıyor, zorluk ise boş kalıyordu. Arapça ekran
+    // görüntüsünde fark edildi — Türkçe'de "sudoku" doğru bir ada
+    // benzediği için gözden kaçmıştı.
+    const name = t('game_name_' + id);
     const emoji = (meta && meta.emoji) || '🧩';
-    const diff = g.dailyDifficulty && g.DIFFICULTIES && g.DIFFICULTIES[g.dailyDifficulty]
-      ? g.DIFFICULTIES[g.dailyDifficulty].label : '';
+    const diff = g.dailyDifficulty ? t('difficulty_' + g.dailyDifficulty) : '';
 
     // Mockup panel 1: solda tahta önizlemesi, sağda ad · zorluk, ödül ve
     // "Başla" butonu. Önizleme GERÇEK günün tahtasından geliyor (bkz.
@@ -145,7 +151,7 @@ function renderDailyChallenge() {
                // okumayı tamamla" görevi (EconomyConfig.QUEST_*) üzerinden
                // ödeniyor — kartta ikinci kez ilan edilmesi gerekmiyor.
                '<button class="dc-btn" onclick="DailyChallenge.start(\'' + id + '\')">' +
-                 (st.doneToday ? 'Tekrar Oyna' : 'Başla') +
+                 (st.doneToday ? t('daily_replay') : t('common_start')) +
                '</button>' +
              '</div>' +
              (st.doneToday ? '<span class="dc-check">✓</span>' : '') +

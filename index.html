@@ -12,7 +12,11 @@
        Eski Android'de değişen bir şey yok: orada WebView zaten çubukların
        altında değil, dolayısıyla inset 0 kalır ve dolgu devreye girmez. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="description" content="SlySwipe — Rahatlatıcı puzzle oyunları" />
+  <!-- data-i18n-attr meta etiketinde de çalışıyor (applyDom öznitelik
+       yazıyor, metin düğümü değil). <title> BİLEREK sabit: marka adı.
+       manifest.json'ın name/description'ı yerelleştirilemiyor — statik bir
+       dosya ve tarayıcı onu dile göre seçmiyor; bilinen sınır. -->
+  <meta name="description" content="SlySwipe — Rahatlatıcı puzzle oyunları" data-i18n-attr="content:app_description" />
   <meta name="theme-color" content="#8B5CF6" />
   <!-- Eski "hiçbir şeyi cache'leme" meta etiketleri (Cache-Control,
        Pragma, Expires) kaldırıldı: artık sürümlenmiş bir service
@@ -202,10 +206,12 @@
              yarışırdı. -->
         <section class="sly-hero">
           <div class="sly-hero-body">
-            <h1 class="sly-hero-title">Keşfet <em>Akışı</em></h1>
-            <p class="sly-hero-desc">Mini oyun kartlarını kaydırarak keşfet.</p>
+            <!-- data-i18n-html: vurgulanan sözcük dile göre değişiyor
+                 (TR "Akışı", EN "Feed"), bu yüzden <em> çevirinin parçası. -->
+            <h1 class="sly-hero-title" data-i18n-html="home_hero_title">Keşfet <em>Akışı</em></h1>
+            <p class="sly-hero-desc" data-i18n="home_hero_desc">Mini oyun kartlarını kaydırarak keşfet.</p>
             <button class="sly-btn sly-btn-outline" onclick="switchTab('discover')">
-              Keşfete Git <span class="sly-btn-chev">›</span>
+              <span data-i18n="home_hero_cta">Keşfete Git</span> <span class="sly-btn-chev">›</span>
             </button>
           </div>
           <div class="sly-hero-art" aria-hidden="true">
@@ -235,7 +241,7 @@
               <!-- İkon ⚡, 🎯 DEĞİL: 🎯 zaten üstteki "Aktif Görev"
                    özet kartında kullanılıyor ve iki bölüm aynı ikonu
                    taşıyınca ekranda aynı şeyin tekrarı gibi okunuyor. -->
-              <span class="sly-panel-title-ico">⚡</span>Günün Meydan Okuması
+              <span class="sly-panel-title-ico">⚡</span><span data-i18n="home_daily_challenge">Günün Meydan Okuması</span>
             </span>
           </div>
           <div id="daily-challenge-list"></div>
@@ -245,12 +251,12 @@
         <section class="sly-panel">
           <div class="sly-panel-head">
             <span class="sly-panel-title">
-              <span class="sly-panel-title-ico">📋</span>Görevler
+              <span class="sly-panel-title-ico">📋</span><span data-i18n="home_missions">Görevler</span>
             </span>
             <!-- Rozetler ekranında görevlerin tamamı + rozet kazanımı
                  var; bağlantı gerçekten bir yere gidiyor. -->
             <button class="sly-panel-link" onclick="switchTab('lider')">
-              Tümünü Gör <span>›</span>
+              <span data-i18n="common_see_all">Tümünü Gör</span> <span>›</span>
             </button>
           </div>
           <div class="sly-tasks" id="daily-missions"></div>
@@ -262,10 +268,10 @@
         <section class="sly-panel">
           <div class="sly-panel-head">
             <span class="sly-panel-title">
-              <span class="sly-panel-title-ico">🗓️</span>Haftalık Seri
+              <span class="sly-panel-title-ico">🗓️</span><span data-i18n="home_weekly_streak">Haftalık Seri</span>
             </span>
             <button class="sly-panel-link sly-muted" onclick="showStreakInfo()">
-              Nasıl Çalışır? <span>ⓘ</span>
+              <span data-i18n="home_how_it_works">Nasıl Çalışır?</span> <span>ⓘ</span>
             </button>
           </div>
           <div class="sly-streak" id="daily-rewards"></div>
@@ -308,8 +314,8 @@
            listeleri hâlinde, düz bir liste olarak DEĞİL. -->
       <div id="screen-profil" class="screen">
         <div class="sly-screen-head">
-          <h2 class="sly-screen-title">Profil
-            <span class="sly-screen-sub">Hesabın, tercihlerin ve koleksiyonun</span>
+          <h2 class="sly-screen-title"><span data-i18n="profile_title">Profil</span>
+            <span class="sly-screen-sub" data-i18n="profile_subtitle">Hesabın, tercihlerin ve koleksiyonun</span>
           </h2>
         </div>
 
@@ -318,20 +324,20 @@
         <div class="sly-profile-hero">
           <div class="sly-profile-avatar" data-ph-avatar onclick="openAvatarPicker()"></div>
           <div class="sly-profile-txt">
-            <span class="sly-profile-name">Oyuncu</span>
+            <span class="sly-profile-name" data-i18n="profile_default_name">Oyuncu</span>
             <div class="sly-profile-tags" id="pf-tags"></div>
           </div>
         </div>
 
         <div class="sly-group">
-          <h3 class="sly-group-title">Vitrindeki Rozetler</h3>
+          <h3 class="sly-group-title" data-i18n="profile_showcase">Vitrindeki Rozetler</h3>
           <!-- renderShowcase() dolduruyor: en değerli 3 rozet, otomatik.
                Seçim arayüzü bilerek yok (bkz. Badges.showcase). -->
           <div class="pf-showcase" id="pf-showcase"></div>
         </div>
 
         <div class="sly-group">
-          <h3 class="sly-group-title">Favori Oyunlar</h3>
+          <h3 class="sly-group-title" data-i18n="profile_favorites">Favori Oyunlar</h3>
           <div id="fav-games-list" class="pf-fav-grid"></div>
         </div>
 
@@ -342,7 +348,11 @@
       <!-- ====== PLUS SAYFA ====== -->
       <div id="screen-plus" class="screen">
         <div class="plus-page">
-          <button class="plus-close" onclick="closePlusPage()">← Geri</button>
+          <!-- Ok AYRI bir span'de ve `dir-ico` sınıfını taşıyor: yön
+               bildiren tek işaret o, ve RTL'de aynalanması gereken de o.
+               Oku çeviri metnine gömmek, her dilde doğru yöne çevrilmesini
+               çevirmenin hatırlamasına bırakırdı. -->
+          <button class="plus-close" onclick="closePlusPage()"><span class="dir-ico">←</span> <span data-i18n="common_back">Geri</span></button>
           
           <div class="plus-hero">
             <div class="plus-stars">✨ ⭐ ✨</div>
@@ -365,69 +375,74 @@
             <div class="plus-benefit">
               <span class="pb-icon">🚫</span>
               <div class="pb-info">
-                <span class="pb-title">Reklamsız Deneyim</span>
-                <span class="pb-desc">Ödüller reklamsız ve günlük limitsiz</span>
+                <span class="pb-title" data-i18n="plus_benefit_noads_title">Reklamsız Deneyim</span>
+                <span class="pb-desc" data-i18n="plus_benefit_noads_desc">Ödüller reklamsız ve günlük limitsiz</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">♾️</span>
               <div class="pb-info">
-                <span class="pb-title">Sınırsız Devam Hakkı</span>
-                <span class="pb-desc">Ne elmas harcarsın ne reklam izlersin</span>
+                <span class="pb-title" data-i18n="plus_benefit_continue_title">Sınırsız Devam Hakkı</span>
+                <span class="pb-desc" data-i18n="plus_benefit_continue_desc">Ne elmas harcarsın ne reklam izlersin</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">💎</span>
               <div class="pb-info">
-                <span class="pb-title">Her Gün +20 Elmas</span>
-                <span class="pb-desc">Günlük ödülün üstüne, her gün</span>
+                <!-- +20 rakamı çeviri metninin İÇİNDE ve bu bilinçli: bu
+                     satır zaten EconomyConfig ile ELLE senkron tutuluyor
+                     (bkz. yukarıdaki yorum), i18n bunu ne iyileştirir ne
+                     kötüleştirir. Bir gün dinamikleşirse t() zaten
+                     yer tutucu destekliyor. -->
+                <span class="pb-title" data-i18n="plus_benefit_daily_title">Her Gün +20 Elmas</span>
+                <span class="pb-desc" data-i18n="plus_benefit_daily_desc">Günlük ödülün üstüne, her gün</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">✨</span>
               <div class="pb-info">
-                <span class="pb-title">+%50 Elmas Bonusu</span>
-                <span class="pb-desc">Reklam ve günlük ödül kazançlarında</span>
+                <span class="pb-title" data-i18n="plus_benefit_bonus_title">+%50 Elmas Bonusu</span>
+                <span class="pb-desc" data-i18n="plus_benefit_bonus_desc">Reklam ve günlük ödül kazançlarında</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">🎨</span>
               <div class="pb-info">
-                <span class="pb-title">Özel Temalar</span>
-                <span class="pb-desc">Plus'a özel tema koleksiyonu — yakında</span>
+                <span class="pb-title" data-i18n="plus_benefit_themes_title">Özel Temalar</span>
+                <span class="pb-desc" data-i18n="plus_benefit_themes_desc">Plus'a özel tema koleksiyonu — yakında</span>
               </div>
             </div>
             <div class="plus-benefit">
               <span class="pb-icon">⭐</span>
               <div class="pb-info">
-                <span class="pb-title">Profil Rozeti</span>
-                <span class="pb-desc">⭐ Plus rozeti profilinde</span>
+                <span class="pb-title" data-i18n="plus_benefit_badge_title">Profil Rozeti</span>
+                <span class="pb-desc" data-i18n="plus_benefit_badge_desc">⭐ Plus rozeti profilinde</span>
               </div>
             </div>
           </div>
           
           <div class="plus-plans" id="plus-plans">
             <div class="plus-plan plan-yearly selected" onclick="selectPlan('yearly')" data-plan="yearly">
-              <div class="plan-best">🏆 EN İYİ!</div>
-              <span class="plan-name">Yıllık</span>
+              <div class="plan-best" data-i18n="plus_plan_best">🏆 EN İYİ!</div>
+              <span class="plan-name" data-i18n="plus_plan_yearly">Yıllık</span>
               <!-- Fiyatlar MAĞAZADAN geliyor (Billing.priceFor); burada sabit
                    yazılmaz. Dönem eki (/yıl) markup'ta kalıyor: o ürünün
                    tanımı, fiyatı değil. -->
-              <span class="plan-price"><span data-ph-price="plus_yearly">—</span><small>/yıl</small></span>
+              <span class="plan-price"><span data-ph-price="plus_yearly">—</span><small data-i18n="plus_period_year">/yıl</small></span>
               <span class="plan-monthly" data-ph-plan-note="yearly"></span>
             </div>
             <div class="plus-plan plan-monthly" onclick="selectPlan('monthly')" data-plan="monthly">
-              <span class="plan-name">Aylık</span>
-              <span class="plan-price"><span data-ph-price="plus_monthly">—</span><small>/ay</small></span>
+              <span class="plan-name" data-i18n="plus_plan_monthly">Aylık</span>
+              <span class="plan-price"><span data-ph-price="plus_monthly">—</span><small data-i18n="plus_period_month">/ay</small></span>
             </div>
             <div class="plus-plan plan-weekly" onclick="selectPlan('weekly')" data-plan="weekly">
-              <span class="plan-name">Haftalık</span>
-              <span class="plan-price"><span data-ph-price="plus_weekly">—</span><small>/hafta</small></span>
+              <span class="plan-name" data-i18n="plus_plan_weekly">Haftalık</span>
+              <span class="plan-price"><span data-ph-price="plus_weekly">—</span><small data-i18n="plus_period_week">/hafta</small></span>
             </div>
           </div>
           
-          <button class="plus-cta" onclick="purchasePlus()">⭐ PLUS'A GEÇ</button>
-          <p class="plus-disclaimer">İstediğin zaman iptal et • 7 gün ücretsiz dene</p>
+          <button class="plus-cta" onclick="purchasePlus()" data-i18n="plus_cta">⭐ PLUS'A GEÇ</button>
+          <p class="plus-disclaimer" data-i18n="plus_disclaimer">İstediğin zaman iptal et • 7 gün ücretsiz dene</p>
         </div>
       </div>
 
@@ -435,20 +450,20 @@
       <div id="screen-shop" class="screen">
         <div class="shop-page">
           <header class="shop-header">
-            <button class="btn-back" onclick="closeShop()">← Geri</button>
-            <h2 class="page-title">💎 Elmas Mağazası</h2>
+            <button class="btn-back" onclick="closeShop()"><span class="dir-ico">←</span> <span data-i18n="common_back">Geri</span></button>
+            <h2 class="page-title" data-i18n="shop_title">💎 Elmas Mağazası</h2>
           </header>
           
           <div class="shop-balance">
             <span class="shop-balance-icon">💎</span>
             <span class="shop-balance-amount diamond-count">0</span>
-            <span class="shop-balance-label">mevcut elmasın</span>
+            <span class="shop-balance-label" data-i18n="shop_balance_label">mevcut elmasın</span>
           </div>
-          
-          <h3 class="shop-section-title">💰 SATIN AL</h3>
+
+          <h3 class="shop-section-title" data-i18n="shop_section_buy">💰 SATIN AL</h3>
           <div class="shop-grid" id="shop-grid"></div>
-          
-          <h3 class="shop-section-title">🎁 ÜCRETSIZ KAZAN</h3>
+
+          <h3 class="shop-section-title" data-i18n="shop_section_free">🎁 ÜCRETSIZ KAZAN</h3>
           <div class="shop-free" id="shop-free"></div>
         </div>
       </div>
@@ -457,29 +472,44 @@
       <!-- ====== OYUN EKRANI ====== -->
       <div id="screen-game" class="screen">
         <header class="game-header">
-          <button class="btn-back" onclick="exitGame()">← Geri</button>
-          <h2 class="game-title-text" id="game-title">Oyun</h2>
+          <button class="btn-back" onclick="exitGame()"><span class="dir-ico">←</span> <span data-i18n="common_back">Geri</span></button>
+          <h2 class="game-title-text" id="game-title" data-i18n="game_default_title">Oyun</h2>
           <div style="display:flex;align-items:center;gap:8px">
             <!-- Arka plan müziği geçici olarak devre dışı (bkz. games.js MUSIC_DISABLED) —
                  hiçbir şey yapmayan bir kontrol göstermemek için gizli. -->
-            <button id="btn-music" onclick="toggleGameMusic()" style="display:none;background:none;border:none;font-size:18px;cursor:pointer;opacity:.7;padding:4px" title="Müzik">🎵</button>
-            <button id="btn-sound" onclick="toggleGameSound()" style="background:none;border:none;font-size:18px;cursor:pointer;opacity:.7;padding:4px" title="Ses">🔊</button>
+            <button id="btn-music" onclick="toggleGameMusic()" style="display:none;background:none;border:none;font-size:18px;cursor:pointer;opacity:.7;padding:4px" title="Müzik" data-i18n-attr="title:tooltip_music">🎵</button>
+            <button id="btn-sound" onclick="toggleGameSound()" style="background:none;border:none;font-size:18px;cursor:pointer;opacity:.7;padding:4px" title="Ses" data-i18n-attr="title:tooltip_sound">🔊</button>
             <div class="game-score-wrap">
-              <span class="game-score-lbl">SKOR</span>
+              <span class="game-score-lbl" data-i18n="game_score">SKOR</span>
               <span class="game-score-val" id="game-score">0</span>
             </div>
           </div>
         </header>
-        <div id="game-container"></div>
+        <!-- dir="ltr" BİLEREK ve yalnızca BURADA. Kabuk Arapça'da
+             aynalanıyor (üstteki başlık dahil: "Geri" düğmesi sağa
+             geçer, ok scaleX(-1) ile döner), ama OYUN DÜNYASI dönmez.
+             Sebep tasarım değil doğruluk: oyunların koordinat sistemi
+             kendi kuralı — Yılan'ın sağa gitmesi, 2048'in sağa
+             kaydırması, Ok Bulmaca'nın çıkış ışını hep piksel yönüne
+             bağlı. Tahtayı locale yüzünden aynalamak oyunu değiştirmek
+             olurdu. Kapsayıcıya yazmak yeterli: `direction` miras
+             alınır, yani her oyun otomatik olarak LTR başlar. -->
+        <div id="game-container" dir="ltr"></div>
         <!-- Game Over Overlay -->
         <div id="game-over" class="game-over-overlay" style="display:none">
           <div class="game-over-box">
             <!-- İşaret: emoji yerine sahne diline ait mühür (bkz.
                  components.css .go-mark). Eski #go-emoji id'si korundu ki
                  opts vermeyen oyunlar aynen çalışsın. -->
+            <!-- #go-title ve #go-msg'e data-i18n KONMADI ve bu bilinçli:
+                 ikisini de her açılışta showGameOver() yazıyor, yani sahibi
+                 JS. data-i18n konsaydı, oyun sonu kutusu açıkken dil
+                 değişimi applyDom ile canlı metnin üstüne varsayılanı
+                 yazardı. Buradaki metin ilk kare yedeği ve overlay
+                 display:none doğduğu için hiç görünmüyor. -->
             <span class="go-mark" id="go-emoji">🎉</span>
             <h2 class="game-over-title" id="go-title">Tebrikler!</h2>
-            <p class="game-over-msg" id="go-msg">Skor: 0</p>
+            <p class="game-over-msg" id="go-msg"></p>
             <!-- Oyun opts.stats verirse dolar, vermezse gizli kalır. -->
             <div class="go-stats" id="go-stats" style="display:none"></div>
             
@@ -489,21 +519,21 @@
                  değişiyor. Buradaki metinler yalnızca ilk kare için yedek. -->
             <div id="go-continue" class="go-continue-section" style="display:none">
               <button id="go-continue-ad" class="go-btn go-btn-ad" onclick="continueWithAd()">
-                <span class="go-btn-ico">📺</span> <span class="go-btn-lbl">Reklam İzle → Devam Et</span>
+                <span class="go-btn-ico">📺</span> <span class="go-btn-lbl"></span>
               </button>
               <button class="go-btn go-btn-diamond" onclick="continueWithDiamonds()">
-                <span class="go-btn-ico">💎</span> <span class="go-btn-lbl">Elmasla Devam Et</span>
+                <span class="go-btn-ico">💎</span> <span class="go-btn-lbl"></span><!-- .go-btn-lbl'ler BOŞ ve data-i18n TAŞIMIYOR. İkisi de bilinçli: refreshGameOverOffers() üçünü de her açılışta yeniden yazıyor (kalan reklam hakkı, elmas bedeli, Plus durumu), yani data-i18n koymak dil değişiminde canlı metnin üzerine varsayılanı yazardı. Yedek metin de yazılmıyor — panel display:none başlıyor ve JS yazmadan görünmüyor, dolayısıyla buradaki her sabit metin yalnızca ESKİYEBİLİRDİ. -->
               </button>
             </div>
 
             <!-- Skor 2x (sadece kazandığında) — elmas alternatifi BİLEREK yok:
                  skor kazanılır, satın alınmaz (bkz. doubleScoreWithAd). -->
             <button id="go-double" class="go-btn go-btn-ad" onclick="doubleScoreWithAd()" style="display:none">
-              <span class="go-btn-ico">📺</span> <span class="go-btn-lbl">Reklam İzle → Skor 2x!</span>
+              <span class="go-btn-ico">📺</span> <span class="go-btn-lbl"></span>
             </button>
             
-            <button class="go-btn go-btn-primary" onclick="restartCurrentGame()">🔄 Tekrar Oyna</button>
-            <button class="go-btn go-btn-secondary" onclick="exitGame()">← Menüye Dön</button>
+            <button class="go-btn go-btn-primary" onclick="restartCurrentGame()" data-i18n="common_play_again">🔄 Tekrar Oyna</button>
+            <button class="go-btn go-btn-secondary" onclick="exitGame()"><span class="dir-ico">←</span> <span data-i18n="common_back_to_menu">Menüye Dön</span></button>
           </div>
         </div>
       </div>
@@ -530,26 +560,26 @@
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.6V20h13V9.6"/>
           <path d="M9.7 20v-5.2h4.6V20"/></svg></span>
-        <span class="tab-label">Ana Sayfa</span>
+        <span class="tab-label" data-i18n="tab_home">Ana Sayfa</span>
       </button>
       <button class="tab" data-tab="discover" onclick="switchTab('discover')">
         <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9"/><path d="M15.6 8.4 13.8 13.8 8.4 15.6l1.8-5.4z"/></svg></span>
-        <span class="tab-label">Keşfet</span>
+        <span class="tab-label" data-i18n="tab_discover">Keşfet</span>
       </button>
       <button class="tab" data-tab="lider" onclick="switchTab('lider')">
         <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2.6 20 7v10l-8 4.4L4 17V7z"/>
           <path d="m12 8.4 1.5 3 3.3.5-2.4 2.3.6 3.3-3-1.6-3 1.6.6-3.3-2.4-2.3 3.3-.5z"/></svg></span>
-        <span class="tab-label">Rozetler</span>
+        <span class="tab-label" data-i18n="tab_badges">Rozetler</span>
       </button>
       <button class="tab" data-tab="profil" onclick="switchTab('profil')">
         <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg></span>
-        <span class="tab-label">Profil</span>
+        <span class="tab-label" data-i18n="tab_profile">Profil</span>
       </button>
     </nav>
 
@@ -566,7 +596,7 @@
     // açıp eskileri siler. Başka hiçbir yerde sürüm yazmaya,
     // <link>'lere ?v= eklemeye gerek YOKTUR.
     // ============================================================
-    const APP_VERSION = '1.70.0';
+    const APP_VERSION = '1.71.1';
 
     // ============================================================
     // AÇILIŞ EKRANI — @capacitor/splash-screen ile
@@ -715,10 +745,32 @@
     // rng.js EN ÖNCE: games.js'teki bulmaca üreticisi phRng/phShuffle/
     // phRandomSeed'e bağımlı.
     loadScript('core/rng.js', function(){
-      // words-tr.js games.js'ten ÖNCE: Kelime Avı'nın üreteci havuzu
-      // window.WORDS_TR üzerinden okuyor. Dosya YALNIZCA veri — hiçbir şeye
-      // bağımlı değil, o yüzden zincirin en başına yakın duruyor.
-      loadScript('games/words-tr.js', function(){
+      // words.js I18n.boot()'tan ÖNCE — ve bu sıra CİHAZDA BULUNAN BİR
+      // HATANIN düzeltmesi (2026-08-16, A51/Android 13).
+      //
+      // NE OLMUŞTU: words.js boot'tan SONRA yükleniyordu. i18n.js'in
+      // loadWords()'ü ilk satırında `typeof WordPools === 'undefined'`
+      // görüp sessizce dönüyordu, yani AÇILIŞ DİLİNİN kelime havuzu hiç
+      // yüklenmiyordu. Cihaz dili neyse oyuncu onu görüyor ve dili hiç
+      // değiştirmiyorsa havuz sonsuza kadar boş kalıyordu: Kelime Avı
+      // 10×10'luk bir "?" ızgarası ve "0/0 KELİME" olarak açılıyordu.
+      //
+      // NEDEN HİÇBİR OTOMATİK TEST GÖRMEDİ: hepsi dili AÇIKÇA
+      // değiştiriyordu (`I18n.set(kod)`), o da loadLocale→loadWords'ü
+      // WordPools tanımlıyken yeniden çağırıyor ve havuzu getiriyordu.
+      // Node harness'ları ise havuzları doğrudan LOAD_ORDER ile
+      // yüklüyor. Yani üç test katmanı da hatayı MASKELEDİ; yalnızca
+      // "kur, aç, hiçbir şeye dokunma" yolu kırıktı — gerçek kullanıcının
+      // izlediği tek yol.
+      //
+      // words.js'in hiçbir bağımlılığı yok (kayıt defteri + Intl.Segmenter
+      // yardımcısı), o yüzden en başa almak bedava.
+      loadScript('games/words.js', function(){
+      // i18n.js games.js'ten ÖNCE: oyunlar da t() çağırıyor. boot() kendi
+      // içinde önce locales/en.js'i (garantili yedek), sonra gerekiyorsa
+      // aktif dili yükler — VE artık o dilin kelime havuzunu da.
+      loadScript('core/i18n.js', function(){
+      I18n.boot(function(){
       loadScript('games/games.js', function(){
         loadScript('core/ui-kit.js', function(){
           loadScript('reels/reels.js', function(){
@@ -732,6 +784,8 @@
             });
           });
         });
+      });
+      });
       });
       });
     });
