@@ -6,6 +6,10 @@
     "backgroundColor": "#14142E",
     "allowMixedContent": false
   },
+  "ios": {
+    "backgroundColor": "#14142E",
+    "contentInset": "never"
+  },
   "server": {
     "androidScheme": "https"
   },

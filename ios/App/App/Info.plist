@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>SlySwipe</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+
+	<!-- ================= DIL LISTESI =================
+	     App Store'un "bu uygulama su dilleri destekliyor" satiri BU
+	     anahtardan okunuyor; uygulamanin kendi i18n calisma zamani
+	     (core/i18n.js) App Store'a gorunmez. Android tarafindaki
+	     res/xml/locales_config.xml'in iOS karsiligi.
+
+	     locales/ klasoruyle AYNI 15 kod, ayni sirada. Biri eklenirse
+	     ikisi birden guncellenmeli — tools/i18n-test.js kanonik seti
+	     locales/en.js'ten okuyor, buradan degil, yani bu liste sessizce
+	     geride kalabilir.                                              -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>tr</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>es</string>
+		<string>it</string>
+		<string>pt-BR</string>
+		<string>pl</string>
+		<string>ru</string>
+		<string>ar</string>
+		<string>hi</string>
+		<string>id</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>zh-Hans</string>
+	</array>
+
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+
+	<!-- Capacitor sablonu buraya armv7 yaziyor. iOS 14 tabanli bir
+	     uygulamada armv7 diye bir cihaz YOK (32-bit destek iOS 11'de
+	     bitti); dogru deger arm64.                                     -->
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+
+	<!-- ================= YONELIM =================
+	     Uygulama DIKEY'e kilitli. Sablon yataylari da aciyordu; birakmak
+	     iOS'ta Android'dekinden daha kotu olurdu, cunku Yilan'in 15x26
+	     izgarasi, Flappy'nin dunya birimi ve Akis Baglanti'nin boyuna
+	     dikdortgen tahtasi dikey oranlara gore olculdu.
+
+	     ~ipad da dikey: Android 16 tarafinda >=600dp ekranlarda yonelim
+	     kilidinin yok sayilmasi ACIK BIR RISK olarak kayitli ve tablet
+	     davranisi orada TEST EDILMEMIS durumda. iOS'ta ayni bosluga
+	     bilerek girmiyoruz.                                            -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+
+	<!-- ================= SIFRELEME BEYANI =================
+	     Bu anahtar olmadan App Store Connect her yuklemede "ihracat
+	     uyumlulugu" sorusunu soruyor ve build o cevap verilene kadar
+	     TestFlight'ta beklemede kaliyor — yani Codemagic'ten cikan
+	     otomatik yukleme elle mudahale olmadan tamamlanmiyor.
+	     Uygulama yalniz standart HTTPS kullaniyor, ozel sifreleme yok. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
+	<!-- ================= REKLAM (SU AN PASIF) =================
+	     TODO(iOS-monetizasyon): asagidaki iki anahtar YER TUTUCU.
+
+	     GADApplicationIdentifier bos birakilamaz: Google Mobile Ads iOS
+	     SDK'si baglandiginda bu anahtari acilista ariyor ve bulamazsa
+	     istisna firlatip uygulamayi DUSURUYOR. Pod, Android ile ortak
+	     package.json'dan geldigi icin iOS'ta da bagli — dolayisiyla
+	     reklam gostermesek bile deger gerekli.
+
+	     Buradaki deger GOOGLE'IN RESMI iOS TEST UYGULAMA KIMLIGI, bizim
+	     hesabimiz degil. Gercek kimlik, AdMob'da ayri bir iOS uygulamasi
+	     acildiginda gelecek. Android birimlerinden birini buraya yazmak
+	     yanlis olur: birim kimlikleri platforma bagli.
+
+	     AD_TEST_DEVICES'daki uc hash de Android'e ozgu ve IMZA
+	     ANAHTARINA bagli (ayni telefon uc farkli deger uretti). iOS'ta
+	     hicbiri gecerli degil — yani "kendi reklamina tiklama" korumasi
+	     iOS'ta HENUZ YOK. Gercek bir iOS birim kimligi, once o koruma
+	     kurulmadan kullanilmamali.                                     -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+
+	<!-- ATT izni. Su an istenmiyor (reklam kapali), ama anahtarin
+	     varligi zararsiz ve reklam acildiginda gereken ilk sey bu.
+	     TODO(iOS-monetizasyon): InfoPlist.strings ile 15 dile cevir —
+	     bu metin kullaniciya SISTEM diyalogunda gosteriliyor, yani
+	     uygulamanin cevrilmis olmasi onu kapsamiyor.                   -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>This identifier is used to show you more relevant ads.</string>
+</dict>
+</plist>

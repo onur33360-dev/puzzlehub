@@ -6,14 +6,18 @@
   "scripts": {
     "build": "node tools/build-www.js",
     "sync": "npm run build && cap sync android",
+    "sync:ios": "npm run build && cap sync ios",
     "android": "npm run sync && cap open android",
+    "ios": "npm run sync:ios && cap open ios",
     "apk": "npm run sync && cd android && gradlew.bat assembleDebug",
-    "assets:android": "capacitor-assets generate --android"
+    "assets:android": "capacitor-assets generate --android",
+    "assets:ios": "capacitor-assets generate --ios"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",
     "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.6.8",
     "@capacitor/share": "^7.0.4",
     "@capacitor/splash-screen": "^7.0.5",
     "@revenuecat/purchases-capacitor": "^11.3.2"

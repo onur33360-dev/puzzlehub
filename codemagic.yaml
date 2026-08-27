@@ -1,0 +1,173 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  SlySwipe — Codemagic iOS derleme hattı
+# ═══════════════════════════════════════════════════════════════════════
+#
+# NEDEN VAR: iOS derlemesi macOS + Xcode gerektiriyor, bu makinede ikisi
+# de yok. Codemagic buluttaki bir Mac'te derleyip İMZALI .ipa üretiyor.
+#
+# İKİ İŞ AKIŞI, ve ayrımın sebebi var:
+#   ios-ipa         — yalnız imzalı .ipa üretir, hiçbir yere yüklemez.
+#                     İLK KOŞUM BUNUNLA YAPILMALI: "imzalama ve derleme
+#                     doğru mu" sorusunu, "App Store Connect'te uygulama
+#                     kaydı var mı" sorusundan AYIRIYOR. İkisi tek adımda
+#                     denenirse başarısız bir koşumun hangisinden
+#                     kaynaklandığı belirsiz kalır.
+#   ios-testflight  — aynı derleme + TestFlight'a yükleme. App Store
+#                     Connect'te aynı bundle id ile uygulama kaydı
+#                     OLUŞTURULDUKTAN SONRA kullanılmalı.
+#
+# ── ÖNCE CODEMAGIC ARAYÜZÜNDE YAPILMASI GEREKENLER ────────────────────
+# 1. Teams > Integrations > App Store Connect: .p8 anahtarı yüklenir.
+#    Anahtarın ADI aşağıdaki `app_store_connect:` değeriyle HARF HARF
+#    aynı olmalı — uyuşmazsa hata "integration not found" der ve bu bir
+#    imzalama hatası gibi görünmez.
+# 2. Apple Developer Portal'da bundle id kayıtlı olmalı:
+#    com.skyroonlabs.slyswipe
+#
+# ── SÜRÜM NUMARASI ────────────────────────────────────────────────────
+# MARKETING_VERSION, index.html'deki APP_VERSION'dan TÜRETİLİYOR. Bu
+# projede sürüm tek kaynaktan gelir: android/app/build.gradle'daki
+# versionName de aynı değeri taşıyor, çünkü bir hata raporundaki sürümün
+# hangi koda denk geldiği sorusunun cevabı olmalı. iOS'un kendi 1.0'ını
+# bırakmak o zinciri kırardı.
+#
+# CURRENT_PROJECT_VERSION ise Codemagic'in kendi sayacından
+# ($PROJECT_BUILD_NUMBER) geliyor. App Store Connect aynı sürüm için aynı
+# build numarasını İKİNCİ KEZ kabul etmiyor; makine tarafından artırılan
+# bir sayaç bunu elle takip etmekten daha güvenilir.
+
+definitions:
+  # YAML çapası: iki iş akışı da aynı ortamı ve aynı adımları kullanıyor.
+  # Kopyalamak yerine çapa kullanmanın sebebi, birinde düzeltilip
+  # diğerinde unutulan bir adımın sessizce farklı iki derleme üretmesi.
+  env_ios: &env_ios
+    ios_signing:
+      distribution_type: app_store
+      bundle_identifier: com.skyroonlabs.slyswipe
+    # xcode: latest — sabitlemek yeniden üretilebilirlik açısından daha
+    # iyi olurdu, ama var olmayan bir sürüm yazmak koşumu daha ilk
+    # adımda düşürüyor. İlk yeşil koşumdan sonra buraya o koşumun
+    # kullandığı kesin sürüm yazılmalı.
+    xcode: latest
+    cocoapods: default
+    node: 20
+    vars:
+      XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+      XCODE_SCHEME: "App"
+      BUNDLE_ID: "com.skyroonlabs.slyswipe"
+
+  cache_ios: &cache_ios
+    cache_paths:
+      - $HOME/Library/Caches/CocoaPods
+      - $CM_BUILD_DIR/node_modules
+
+  scripts_ios: &scripts_ios
+    - name: Bağımlılıklar (npm ci)
+      script: |
+        npm ci
+
+    - name: Node koşumları — i18n doğrulaması
+      script: |
+        # Derlemeden ÖNCE koşuyor: eksik bir çeviri anahtarı ya da bütçe
+        # aşan sabit metin, imzalı bir .ipa üretildikten sonra öğrenilecek
+        # bir şey değil. Bu araçlar sıfır bağımlılıklı düz Node.
+        node tools/i18n-test.js
+
+    - name: Web varlıkları + cap sync ios
+      script: |
+        # npm run sync:ios = build-www.js + cap sync ios.
+        # `npx cap sync` DOĞRUDAN çağrılmıyor: o, www/'yi yeniden
+        # üretmeden kopyalar, yani orada duran bayat bir anlık görüntüyü
+        # seve seve paketler. Tek doğru giriş noktası npm scripti.
+        # cap sync ios ayrıca pod install'ı da çalıştırıyor.
+        npm run sync:ios
+
+    - name: Sürüm damgası (MARKETING_VERSION + build no)
+      script: |
+        set -e
+        APP_VERSION=$(grep -o "APP_VERSION = '[^']*'" index.html | head -1 | sed "s/.*'\(.*\)'/\1/")
+        if [ -z "$APP_VERSION" ]; then
+          echo "HATA: index.html içinde APP_VERSION bulunamadı."
+          exit 1
+        fi
+        echo "APP_VERSION = $APP_VERSION / build = $PROJECT_BUILD_NUMBER"
+
+        PBX="ios/App/App.xcodeproj/project.pbxproj"
+
+        # agvtool KULLANILMIYOR: bu proje apple-generic sürümleme ile
+        # kurulmadı (pbxproj'de VERSIONING_SYSTEM yok), agvtool orada
+        # sessizce hiçbir şey yapmıyor. Doğrudan yazıp DOĞRULUYORUZ.
+        sed -i '' "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = $APP_VERSION;/g" "$PBX"
+        sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = $PROJECT_BUILD_NUMBER;/g" "$PBX"
+
+        # Sessiz başarısızlık en pahalı sonuç olurdu: yanlış sürümle
+        # imzalanmış bir .ipa geçerli görünür ve TestFlight'ta "bu build
+        # zaten var" diye reddedilir. O yüzden yazdığımızı geri okuyoruz.
+        grep -q "MARKETING_VERSION = $APP_VERSION;" "$PBX" || { echo "HATA: MARKETING_VERSION yazılamadı"; exit 1; }
+        grep -q "CURRENT_PROJECT_VERSION = $PROJECT_BUILD_NUMBER;" "$PBX" || { echo "HATA: CURRENT_PROJECT_VERSION yazılamadı"; exit 1; }
+        echo "Sürüm damgası doğrulandı."
+
+    - name: İmzalama profillerini projeye uygula
+      script: |
+        # Codemagic, environment.ios_signing'e göre sertifika ve profili
+        # makineye indiriyor; bu komut onları Xcode projesine yazıyor.
+        # Atlanırsa derleme "no signing certificate" ile düşer.
+        xcode-project use-profiles
+
+    - name: IPA derle
+      script: |
+        xcode-project build-ipa \
+          --workspace "$XCODE_WORKSPACE" \
+          --scheme "$XCODE_SCHEME"
+
+  artifacts_ios: &artifacts_ios
+    - build/ios/ipa/*.ipa
+    - /tmp/xcodebuild_logs/*.log
+    - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+workflows:
+
+  # ── 1. ADIM: yalnız imzalı .ipa ──────────────────────────────────────
+  ios-ipa:
+    name: SlySwipe iOS — imzalı IPA (yükleme yok)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: SlySwipe ASC
+    environment: *env_ios
+    cache: *cache_ios
+    scripts: *scripts_ios
+    artifacts: *artifacts_ios
+    publishing:
+      email:
+        recipients:
+          - onur33360@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  # ── 2. ADIM: aynı derleme + TestFlight ───────────────────────────────
+  ios-testflight:
+    name: SlySwipe iOS — TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: SlySwipe ASC
+    environment: *env_ios
+    cache: *cache_ios
+    scripts: *scripts_ios
+    artifacts: *artifacts_ios
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # App Store'a (incelemeye) gönderme BİLEREK kapalı. TestFlight iç
+        # test App Review'dan geçmiyor; mağaza yayını ayrı ve geri
+        # alınması zor bir adım, otomatik hattın sonunda olmamalı.
+        submit_to_app_store: false
+      email:
+        recipients:
+          - onur33360@gmail.com
+        notify:
+          success: true
+          failure: true
