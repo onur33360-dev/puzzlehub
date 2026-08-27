@@ -316,7 +316,12 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     // tek an oyunun başı.
     check('preload çağrısı playGame içinde',
           /RewardedAd\.preload\(\)/.test(
-            (APP_SRC.match(/function playGame\(name, opts\)[\s\S]*?\n\}/) || [''])[0]),
+            // İmza 2026-08-15'te playGame(name) → playGame(gameId) oldu
+            // (görünen ad artık dile göre değişiyor, kimlik olamaz).
+            // Parametre adını sabit yazmak yerine yalnızca fonksiyonu
+            // yakalıyoruz — iddia ön yüklemenin YERİ hakkında, imza
+            // hakkında değil.
+            (APP_SRC.match(/function playGame\([\s\S]*?\n\}/) || [''])[0]),
           'panel açılışı tek başına yetmiyor — ölçüm: ilk yükleme 6580 ms');
     // Açılışta SDK ısıtılıyor ama reklam İSTENMİYOR: initialize() bir ağ
     // reklam isteği değil, o yüzden hedefli stratejiyi bozmuyor.
@@ -331,8 +336,11 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     R.show(10, function () {});
     await flush();
     const src = (APP_SRC.match(/function refreshGameOverOffers\(\)[\s\S]*?\n\}/) || [''])[0];
+    // Çapa Türkçe metin DEĞİL anahtar (i18n, 2026-08-15): "Reklam
+    // yükleniyor…" locales/'e taşındı. Doğrulanan davranış aynı —
+    // yükleme sürerken düğme bir DURUM göstermeli, ölü görünmemeli.
     check('düğme "yükleniyor" durumunu gösteriyor',
-          /_pending/.test(src) && /yükleniyor/i.test(src), src.slice(0, 400));
+          /_pending/.test(src) && /ad_loading/.test(src), src.slice(0, 400));
     check('show() düğmeleri hemen tazeliyor',
           /_pending = true;[\s\S]{0,220}refreshGameOverOffers\(\)/.test(APP_SRC));
   }
@@ -443,7 +451,9 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
           'elmas eylemi bütçeden muaf tutulmuş — ücretsiz elmas açığı:\n' + fn);
     // Oyun içi fayda eylemleri bayrağı almış olmalı.
     check('devam etme muaf', /_runGameOverContinuation\('ad'\)[\s\S]{0,160}skipDailyLimit: true/.test(APP_SRC));
-    check('skor 2x muaf', /Skor 2 katına çıktı[\s\S]{0,200}skipDailyLimit: true/.test(APP_SRC));
+    // Çapa Türkçe metin DEĞİL anahtar (i18n, 2026-08-15): metin
+    // locales/'e taşındı ve kaynakta "Skor 2 katına çıktı" artık yok.
+    check('skor 2x muaf', /go_double_done[\s\S]{0,200}skipDailyLimit: true/.test(APP_SRC));
   }
 
   // ═════════ 4. MANİFEST İLE TUTARLILIK ═════════

@@ -482,8 +482,20 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     const fn = (APP_SRC.match(/\n  isActive\(\) \{[\s\S]*?\n  \},/) || [''])[0];
     check('isActive() senkron (async/await yok)',
           fn.length > 0 && !/async|await|Promise/.test(fn), fn.slice(0, 160));
+    // 2026-08-15: satırın ETİKETİ artık app.js'te sabit yazılı değil,
+    // locales/*.js'te bir anahtar. İddianın amacı metin değil VARLIK —
+    // "cihaz değiştiren aboneye geri yükleme yolu duruyor mu". O yüzden
+    // iki parça birden denetleniyor: satır ayarlarda kayıtlı VE metni
+    // gerçekten tanımlı (anahtarın kendisi ekranda görünseydi de test
+    // geçerdi, o boşluğu kapatmak için).
+    const restoreLabelDefined = ['en', 'tr'].every((c) => {
+      const src = readSrc('locales/' + c + '.js');
+      return /settings_restore\s*:/.test(src) && /settings_restore_note\s*:/.test(src);
+    });
     check('geri yükleme satırı ayarlarda',
-          /Satın Almaları Geri Yükle/.test(APP_SRC) && /restorePurchases\(\)/.test(APP_SRC));
+          /labelKey\s*:\s*'settings_restore'/.test(APP_SRC) &&
+          /restorePurchases\(\)/.test(APP_SRC) &&
+          restoreLabelDefined);
   }
   {
     const b = boot({});

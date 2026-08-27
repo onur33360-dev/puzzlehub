@@ -234,7 +234,8 @@ function testSource() {
         /DailyChallenge\.state\(/.test(code) && /DailyChallenge\.games\(\)/.test(code));
 
   // Mağaza satırı: artık "Yakında" değil.
-  const shopRow = APP_SRC.match(/\{[^}]*'Günlük Görevler'[^}]*\}/);
+  // Anahtarla aranıyor, Türkçe metinle değil (i18n, 2026-08-15).
+  const shopRow = APP_SRC.match(/\{[^}]*'shop_free_quests'[^}]*\}/);
   check('mağaza satırı bulundu', !!shopRow);
   if (shopRow) {
     check('mağaza "Günlük Görevler" satırı artık Yakında değil',
@@ -246,9 +247,16 @@ function testSource() {
 
   // Görev tanımları ile rows()'un ele aldığı kimlikler aynı olmalı;
   // ayrışırlarsa görev ekranda görünür ama hiç ilerlemez.
-  const ids = (APP_SRC.match(/\{\s*id:'(\w+)'/g) || []).map(s => s.match(/'(\w+)'/)[1]);
+  // ARAMA DAILY_MISSIONS BLOĞUNA SINIRLI. Eskiden dosyanın tamamında
+  // `{ id:'…'` aranıp ilk üçü alınıyordu; 2026-08-15'te PUZZLE_GAMES da
+  // `id` alanı kazanınca (Türkçe `name` yerine) ilk üç eşleşme oyun
+  // kimlikleri oldu ve doğrulama, hiçbir görev bozulmamışken düştü.
+  // "Dosyadaki ilk N eşleşme" hiçbir zaman sağlam bir çapa değildi.
+  const missionBlock = APP_SRC.match(/const DAILY_MISSIONS = \[([\s\S]*?)\n\];/);
+  check('DAILY_MISSIONS bloğu bulundu', !!missionBlock);
+  const ids = ((missionBlock ? missionBlock[1] : '').match(/\{\s*id:'(\w+)'/g) || []).map(s => s.match(/'(\w+)'/)[1]);
   const handled = ['play3', 'daily', 'win1'];
-  eq('DAILY_MISSIONS kimlikleri rows() ile aynı', ids.slice(0, 3), handled);
+  eq('DAILY_MISSIONS kimlikleri rows() ile aynı', ids, handled);
   handled.forEach(id => check("rows() '" + id + "' kimliğini ele alıyor",
                               code.indexOf("'" + id + "'") >= 0));
 

@@ -39,7 +39,14 @@ function readSrc(rel) {
 
 // index.html'deki yükleme sırasının AYNISI. Sıra bozulursa gerçek
 // uygulamadaki hata burada da çıkmalı (bkz. CLAUDE.md §2).
-const LOAD_ORDER = ['core/rng.js', 'games/words-tr.js', 'games/games.js', 'core/ui-kit.js',
+// i18n.js + locale tabloları games.js'ten ÖNCE: oyunlar da t() çağırıyor,
+// yani bu artık rng.js gibi GERÇEK bir bağımlılık — "kabuk yok, guard'la
+// geç" durumu değil. en.js kanonik yedek; tr.js de yükleniyor çünkü
+// mevcut harness'lar Türkçe metin doğruluyor (aşağıda aktif dil tr'ye
+// alınıyor) — Faz 4'ün şartı zaten "davranış değişmesin".
+const LOAD_ORDER = ['core/rng.js', 'core/i18n.js', 'locales/en.js', 'locales/tr.js',
+                    'games/words.js', 'games/words/en.js', 'games/words/tr.js',
+                    'games/games.js', 'core/ui-kit.js',
                     'reels/reels.js', 'core/daily.js', 'core/app.js'];
 
 function ctx2d() {
@@ -133,6 +140,17 @@ function makeSandbox(store) {
   vm.createContext(sb);
   for (const rel of LOAD_ORDER) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, rel), 'utf8'), sb, { filename: rel });
+    // Locale tabloları yüklenir yüklenmez açılış — app.js'ten ÖNCE olmalı,
+    // çünkü app.js değerlendirilirken initApp IIFE'si ana ekranı çiziyor;
+    // dil o an ayarlanmamış olsaydı ekran İngilizce çizilir ve mevcut
+    // harness'ların Türkçe metin doğrulamaları düşerdi.
+    //
+    // boot() burada TAMAMEN SENKRON çalışıyor: tablolar zaten bellekte
+    // olduğu için loadLocale <script> hiç eklemiyor, geri çağrıyı doğrudan
+    // çağırıyor. Yani bu, üretimdeki yolun ta kendisi — test için açılmış
+    // bir arka kapı değil. Dil navigator.language'den ('tr') geliyor,
+    // ph_lang'e hiçbir şey yazılmıyor, fixture'lar kirlenmiyor.
+    if (rel === 'locales/tr.js') vm.runInContext('I18n.boot()', sb, { filename: 'i18n-boot' });
   }
   // Üst düzey `const` sandbox NESNESİNE değil global sözlük kapsamına
   // gider; oradan ancak ifade değerlendirerek alınır.

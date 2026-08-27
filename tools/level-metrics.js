@@ -77,7 +77,10 @@ function loadEngine() {
   };
   sb.window = sb; sb.globalThis = sb;
   vm.createContext(sb);
-  for (const rel of ['core/rng.js', 'games/games.js']) {
+  // i18n.js games.js'ten ÖNCE: oyunlar t() çağırıyor. Bu araç yalnızca
+  // Ok Bulmaca'nın üretecini ölçüyor ve hiç metin okumuyor, ama t()
+  // tanımsız olsaydı games.js değerlendirilirken ReferenceError verirdi.
+  for (const rel of ['core/rng.js', 'core/i18n.js', 'locales/en.js', 'games/games.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, rel), 'utf8'), sb, { filename: rel });
   }
   // top-level `const` global sözlük kapsamına gider, sandbox nesnesine değil

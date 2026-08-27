@@ -251,7 +251,10 @@ function testSource() {
     .forEach(k => check(k + ' EconomyConfig\'te', new RegExp(k + ':\\s*\\d+').test(APP_SRC)));
 
   // Mağaza satırı gerçek
-  const shopRow = APP_SRC.match(/\{[^}]*'Başarımlar'[^}]*\}/);
+  // Satır artık TÜRKÇE METİNLE değil ANAHTARLA aranıyor (i18n, 2026-08-15):
+  // başlık locales/'e taşındı, kaynakta 'Başarımlar' diye bir dize yok.
+  // Metne göre arama zaten kırılgandı — çeviri onu sadece görünür yaptı.
+  const shopRow = APP_SRC.match(/\{[^}]*'shop_free_badges'[^}]*\}/);
   check('mağaza "Başarımlar" satırı bulundu', !!shopRow);
   if (shopRow) {
     check('artık "Yakında" değil',

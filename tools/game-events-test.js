@@ -149,9 +149,12 @@ function makeSandbox() {
   vm.createContext(sb);
   // index.html'deki yükleme sırasının AYNISI. Sıra bozulursa gerçek
   // uygulamadaki hata burada da çıkmalı (bkz. CLAUDE.md §2).
-  for (const rel of ['core/rng.js', 'games/games.js', 'core/ui-kit.js',
+  for (const rel of ['core/rng.js', 'core/i18n.js', 'locales/en.js', 'locales/tr.js',
+                     'games/games.js', 'core/ui-kit.js',
                      'reels/reels.js', 'core/daily.js', 'core/app.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, rel), 'utf8'), sb, { filename: rel });
+    // Dil açılışı app.js'ten ÖNCE — gerekçe dom-sandbox.js'te yazılı.
+    if (rel === 'locales/tr.js') vm.runInContext('I18n.boot()', sb, { filename: 'i18n-boot' });
   }
   // Üst düzey `const` sandbox NESNESİNE değil global sözlük kapsamına gider;
   // oradan ancak ifade değerlendirerek alınır.

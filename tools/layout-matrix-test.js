@@ -54,6 +54,11 @@ const SHOT = (() => {
   return m ? { w: +m[1], k: +m[2] } : { w: 360, k: 1 };
 })();
 const SHOT_DIR = process.env.SHOT_DIR || ROOT;
+// --lang ar  → --shot ile birlikte, görüntüyü o dilde al.
+const SHOT_LANG = (() => {
+  const i = process.argv.indexOf('--lang');
+  return i < 0 ? null : (process.argv[i + 1] || null);
+})();
 
 // ── MATRİS ─────────────────────────────────────────────────────
 // Genişlikler gerçek cihazlardan: 320 (iPhone SE / eski Android),
@@ -292,12 +297,14 @@ function PAGE_SCALE(k) {
   console.log('  tarayıcı : ' + path.basename(browser));
   console.log('  matris   : ' + WIDTHS.length + ' genişlik × ' + SCALES.length +
               ' yazı ölçeği × ' + SCREENS.length + ' ekran = ' +
-              (WIDTHS.length * SCALES.length * SCREENS.length) + ' hücre\n');
+              (WIDTHS.length * SCALES.length * SCREENS.length) + ' hücre');
+  console.log('  + dil ekseni: 15 dil × ' + SCREENS.length + ' ekran (320px ×1.3)\n');
 
   const hatalar = [];
   let hucre = 0;
 
-  const genislikler = SHOT ? [SHOT.w] : WIDTHS;
+  const YALNIZ_DIL = process.argv.includes('--locales');
+  const genislikler = YALNIZ_DIL ? [] : (SHOT ? [SHOT.w] : WIDTHS);
   const olcekler    = SHOT ? [SHOT.k] : SCALES;
 
   for (const w of genislikler) {
@@ -318,6 +325,16 @@ function PAGE_SCALE(k) {
       // Acilis sahnesi 6 sn; __phAppReady sonrasi ekranlar cizili olur.
       await sleep(7800);
       await evalJs('(' + PAGE_SCALE.toString() + ')(' + k + ')');
+      // --lang ile birlikte: ekran görüntüsünü O DİLDE al. Ölçüm
+      // "taşma yok" der ama AYNALAMANIN doğru olduğunu söylemez —
+      // Arapça'yı gözle görmenin tek yolu bu.
+      if (SHOT_LANG) {
+        await evalJs('I18n.set("' + SHOT_LANG + '")');
+        for (let i = 0; i < 40; i++) {
+          await sleep(100);
+          if ((await evalJs('I18n.locale')) === SHOT_LANG) break;
+        }
+      }
 
       for (const s of SCREENS) {
         await evalJs("switchTab('" + s.tab + "')").catch(() => {});
@@ -344,7 +361,8 @@ function PAGE_SCALE(k) {
             { width: w, height: 1400, deviceScaleFactor: 2, mobile: true });
           await sleep(220);
           const png = await cmd('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
-          const dosya = path.join(SHOT_DIR, 'shot-' + w + 'x' + k + '-' + s.tab + '.png');
+          const dosya = path.join(SHOT_DIR,
+            'shot-' + (SHOT_LANG || 'tr') + '-' + w + 'x' + k + '-' + s.tab + '.png');
           fs.writeFileSync(dosya, Buffer.from(png.result.data, 'base64'));
           console.log('  🖼  ' + dosya);
           await cmd('Emulation.setDeviceMetricsOverride',
@@ -353,6 +371,104 @@ function PAGE_SCALE(k) {
       }
     }
     process.stdout.write('  … ' + w + 'px bitti\n');
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  DİL EKSENİ
+  // ══════════════════════════════════════════════════════════════
+  // NEDEN AYRI BİR GEÇİŞ VE NEDEN TEK HÜCREDE:
+  // Yukarıdaki matris 6×3×3 = 54 hücre ve ~3 dakika sürüyor; maliyetin
+  // neredeyse tamamı her (genişlik, ölçek) çifti için sayfayı yeniden
+  // yüklemek. 15 dille çarpınca 810 hücre / ~45 dakika ederdi — kimsenin
+  // çalıştırmayacağı bir araç, çalışmayan bir araçtır.
+  //
+  // İki gözlem bunu gereksiz kılıyor:
+  //  1. Matris zaten YAPISAL güvenliği kanıtlıyor (kutular esniyor,
+  //     ikonlar em tabanlı, üst bar sarıyor). Dil ekseninin kanıtlaması
+  //     gereken şey farklı: DAHA UZUN metin bu yapıyı kırıyor mu?
+  //  2. O soru en dar genişlik ve en büyük yazı ölçeğinde en serttir.
+  //     320px × 1.3 sığıyorsa daha genişi de sığar — taşma bu iki
+  //     eksende monotondur.
+  // Dolayısıyla dil eksenі 320×1.3'te, TEK sayfa yüklemesiyle koşuyor:
+  // dil değişimi zaten yeniden başlatma gerektirmiyor (özelliğin kendisi),
+  // o yüzden 15 dil × 3 ekran ≈ 30 saniye. Üstelik bu, çalışma zamanı
+  // dil değişiminin GERÇEK yolunu da test etmiş oluyor.
+  const LOC_W = 320, LOC_K = 1.3;
+  if (!SHOT) {
+    console.log('\n  DİL EKSENİ — ' + LOC_W + 'px ×' + LOC_K + ' (en zorlu hücre)');
+    await cmd('Emulation.setDeviceMetricsOverride',
+      { width: LOC_W, height: 780, deviceScaleFactor: 1, mobile: true });
+    await cmd('Page.navigate', { url: 'http://localhost:' + PORT + '/index.html' });
+    await sleep(1200);
+    await evalJs(`(async () => {
+      const rs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(rs.map(r => r.unregister()));
+      const ks = await caches.keys();
+      await Promise.all(ks.map(x => caches.delete(x)));
+    })()`).catch(() => {});
+    await cmd('Page.reload', { ignoreCache: true });
+    await sleep(7800);
+
+    const diller = JSON.parse(
+      (await evalJs('JSON.stringify(I18n.SUPPORTED.map(x => x.code))')) || '[]');
+    if (!diller.length) {
+      console.log('  ✗ I18n.SUPPORTED okunamadı — dil ekseni ATLANDI');
+      hatalar.push({ w: LOC_W, k: LOC_K, ekran: 'dil ekseni', tasan: [], yatay: false });
+    }
+
+    for (const kod of diller) {
+      // set() locale dosyasını <script> ile getiriyor; yüklenene kadar bekle.
+      await evalJs('I18n.set("' + kod + '")');
+      let hazir = false;
+      for (let i = 0; i < 40 && !hazir; i++) {
+        await sleep(100);
+        hazir = (await evalJs('I18n.locale')) === kod;
+      }
+      if (!hazir) {
+        console.log('  ✗ ' + kod + '  — locale YÜKLENEMEDİ');
+        hatalar.push({ w: LOC_W, k: LOC_K, ekran: kod + ' (yükleme)', tasan: [], yatay: false });
+        continue;
+      }
+      // YÖN GERÇEKTEN UYGULANDI MI: <html dir> ile I18n'in bildirdiği
+      // yön ayrışırsa Arapça metin doğru ama düzen ters kalır — ve bu,
+      // ekran görüntüsüne bakmadan fark edilmeyen türden bir hatadır.
+      const yon = await evalJs('document.documentElement.getAttribute("dir")');
+      const bekYon = await evalJs('I18n.dir');
+      if (yon !== bekYon) {
+        console.log('  ✗ ' + kod + '  — <html dir>=' + yon + ', beklenen ' + bekYon);
+        hatalar.push({ w: LOC_W, k: LOC_K, ekran: kod + ' (dir)', tasan: [], yatay: false });
+      }
+      // OYUN DÜNYASI LTR KALMALI. Kabuk Arapça'da aynalanıyor ama
+      // #game-container dönmüyor (bkz. index.html'deki gerekçe).
+      const oyunYon = await evalJs(
+        'getComputedStyle(document.getElementById("game-container")).direction');
+      if (oyunYon !== 'ltr') {
+        console.log('  ✗ ' + kod + '  — #game-container yönü ' + oyunYon + ', ltr olmalı');
+        hatalar.push({ w: LOC_W, k: LOC_K, ekran: kod + ' (oyun yönü)', tasan: [], yatay: false });
+      }
+
+      let kotuEkran = 0;
+      for (const s of SCREENS) {
+        await evalJs("switchTab('" + s.tab + "')").catch(() => {});
+        await sleep(220);
+        await evalJs('(' + PAGE_SCALE.toString() + ')(' + LOC_K + ')');
+        await sleep(90);
+        const r = await evalJs('(' + PAGE_SCAN.toString() + ')("' + s.sel + '")');
+        hucre++;
+        const kotu = r && !r.yok && (r.tasan.length || r.yatay || r.govdeTasma);
+        if (kotu) {
+          kotuEkran++;
+          hatalar.push({ w: LOC_W, k: LOC_K, ekran: kod + ' / ' + s.ad, ...r });
+          console.log('  ✗ ' + kod + '  ' + s.ad);
+          r.tasan.slice(0, 3).forEach((t) =>
+            console.log('       "' + t.metin + '"  +' + t.px + 'px  .' + t.sinif));
+          if (r.yatay) console.log('       yatay kaydırma var');
+        }
+      }
+      if (!kotuEkran && VERBOSE) console.log('  ✓ ' + kod + ' (' + yon + ')');
+    }
+    // Kalıcı bir tercih bırakma: sonraki koşum sistemi izlesin.
+    await evalJs('I18n.set(null)').catch(() => {});
   }
 
   kapat();

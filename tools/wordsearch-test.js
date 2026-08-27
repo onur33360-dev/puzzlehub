@@ -24,7 +24,6 @@ const path = require('path');
 const { ROOT, makeSandbox, readSrc } = require('./dom-sandbox');
 
 const SRC = readSrc('games/games.js');
-const POOL_SRC = readSrc('games/words-tr.js');
 
 let failures = 0;
 function ok(n)       { console.log('  ✓ ' + n); }
@@ -38,15 +37,17 @@ function eq(n, a, e) {
 // ───────────────────────────────────────────────────────────────
 //  1. HAVUZ
 // ───────────────────────────────────────────────────────────────
-function testPool() {
-  console.log('\n1. KELİME HAVUZU');
-  const g = {};
-  new Function('window', POOL_SRC).call(g, g);
-  const W = g.WORDS_TR;
-  check('words-tr.js window.WORDS_TR yayınlıyor', !!W && Array.isArray(W.POOL));
+function testPool(sandbox) {
+  console.log('\n1. KELİME HAVUZU (Türkçe)');
+  // 2026-08-16: havuz artık `WordPools` kayıt defterinden geliyor ve 15
+  // dil var. BU ARAÇ TÜRKÇEYE ODAKLI KALIYOR — doğruladığı şey mekanik
+  // (sürükleme, seviye, üretici) ve onun için tek dil yeterli. Diller
+  // arası doğrulama ayrı bir araçta: tools/wordsearch-locale-test.js
+  const W = sandbox.get('WordPools').forLocale('tr');
+  check('tr havuzu kayıtlı', !!W && Array.isArray(W.words));
   if (!W) return null;
 
-  const words = W.POOL.map(x => x.w);
+  const words = W.words.map(x => x.w);
   check('havuz anlamlı büyüklükte (>=200)', words.length >= 200, words.length + ' kelime');
   eq('tekrar eden kelime yok', words.length - new Set(words).size, 0);
 
@@ -56,19 +57,28 @@ function testPool() {
   const notUpper = words.filter(w => w !== w.toLocaleUpperCase('tr'));
   eq('hepsi Türkçe büyük harf', notUpper, []);
 
-  // Türk alfabesi 29 harf — Q/W/X yok. Tahtada Türkçe olmayan bir harf
-  // görünmesi oyuncuya bedava ipucu verir (o harfi eleyerek arar).
-  const outside = [...new Set(words.join('').split(''))].filter(c => !W.ALPHABET.includes(c));
-  eq('alfabe dışı harf yok', outside, []);
-  check('dolgu torbası da alfabe içinde',
-        [...new Set(W.FILLER_BAG.split(''))].every(c => W.ALPHABET.includes(c)));
+  // Alfabe artık HAVUZDAN TÜRETİLİYOR, o yüzden "alfabe dışı harf" diye
+  // bir durum yapısal olarak imkânsız hâle geldi. Doğrulanacak şey
+  // tersine döndü: dolgu, kelimelerde geçen HER harfi üretebiliyor mu?
+  // Üretemezse o harf "bu hücre kesin bir kelimeye ait" ipucunu bedava
+  // verir — eski testin korumaya çalıştığı şeyin aynısı, doğru yönden.
+  const dolgu = new Set(W.fillerBag);
+  const uretilemez = [];
+  for (const w of W.words) for (const gph of w.g) if (!dolgu.has(gph)) uretilemez.push(w.w);
+  eq('dolgu, kelimelerdeki her harfi üretebiliyor', uretilemez.slice(0, 5), []);
+  // Türk alfabesinde Q/W/X yok; tahtada görünmeleri bedava eleme sağlar.
+  check('Türk alfabesinde Q/W/X yok', !/[QWX]/.test(W.alphabet.join('')));
+  check('havuz büyütme dilini tr olarak bildiriyor', W.upperLocale === 'tr', String(W.upperLocale));
 
-  const lens = words.map(w => w.length);
+  const lens = W.words.map(w => w.n);
   check('en kısa kelime >= 3 harf', Math.min(...lens) >= 3, 'en kısa ' + Math.min(...lens));
   // 12x12 en büyük ızgara; daha uzunu hiçbir seviyede yerleşemez ve
   // havuzda ölü kayıt olarak durur.
   check('en uzun kelime <= 12 harf', Math.max(...lens) <= 12, 'en uzun ' + Math.max(...lens));
-  check('en az 8 kategori var', new Set(W.POOL.map(x => x.c)).size >= 8);
+  // "en az 8 kategori" doğrulaması KALDIRILDI: kategori alanı (`c`) eski
+  // words-tr.js'in içerik düzeni içindi ve oyuncuya hiç gösterilmiyordu.
+  // 15 dilin havuzunda böyle bir alan yok — tutmak, on beş dilde
+  // doldurulması gereken ama hiçbir şey yapmayan bir alan demekti.
   return W;
 }
 
@@ -110,7 +120,7 @@ function testGenerator(eng, W) {
     for (let r = 0; r < b.size; r++) {
       for (let c = 0; c < b.size; c++) {
         if (!b.grid[r][c]) { bad('seviye ' + lv + ' boş hücre', r + ',' + c); return; }
-        if (!W.ALPHABET.includes(b.grid[r][c])) {
+        if (W.alphabet.indexOf(b.grid[r][c]) === -1) {
           bad('seviye ' + lv + ' alfabe dışı dolgu', b.grid[r][c]); return;
         }
       }
@@ -128,7 +138,10 @@ function testGenerator(eng, W) {
       }
       // (b) tahtada BAĞIMSIZ olarak da bulunabiliyor mu? (veri ile
       //     ızgara ayrı ayrı doğru olabilir ama çift bozuk olabilir)
-      const hits = findWord(b.grid, p.word, b.size, eng.DIRS_ALL);
+      // findWord grapheme DİZİSİ alıyor: dize geçmek Latin dışı bir
+      // havuzda code unit'e bölerdi. Bu araç Türkçe koşuyor ama doğru
+      // olanı yapmanın maliyeti sıfır.
+      const hits = findWord(b.grid, p.g, b.size, eng.DIRS_ALL);
       if (!hits.length) { bad('seviye ' + lv + ' kelime tahtada yok', p.word); return; }
       if (hits.length > 1) dupWordBoards++;
     }
@@ -206,10 +219,26 @@ function testSource() {
         !/\.setPointerCapture\s*\(/.test(mod),
         'yakalama sonraki click’i yeniden hedefler; Ok Bulmaca’yı bir kez oynanamaz yapmıştı');
 
-  // Türkçe
-  check('Türkçe büyütme kullanılıyor',
-        /toLocaleUpperCase\('tr'\)/.test(mod),
-        "toUpperCase() Türkçede 'i' → 'I' üretir, doğrusu 'İ'");
+  // BÜYÜTME ARTIK HAVUZDAN. Eskiden burada `toLocaleUpperCase('tr')`
+  // aranıyordu; o çağrı games.js'ten kalktı çünkü 15 dilde SABİT bir
+  // büyütme dili yanlış olur (CJK/Arapça/Devanagari'de büyük harf
+  // kavramı yok ve zorlamak kelimeyi bozabilir). Kural aynı yerde
+  // duruyor, sadece taşındı: `WordPools.upper()` havuzun `upperLocale`
+  // alanına bakıyor ve tr havuzu 'tr' diyor (bkz. 1. katman).
+  check('büyütme havuzun diline devredilmiş',
+        /WordPools\.upper\s*\(/.test(SRC) && !/toLocaleUpperCase\('tr'\)/.test(mod),
+        "sabit 'tr' büyütmesi 15 dilde yanlış; havuz kendi dilini bildirmeli");
+  // Grapheme güvenliği: code-unit indeksleme geri gelmiş olmamalı.
+  //
+  // YORUMLAR AYIKLANIYOR ve bu satır ilk yazıldığında tam olarak bundan
+  // düştü: games.js'te bu desenin NEDEN kaldırıldığını anlatan bir yorum
+  // var ve tarama onu kod sandı. CLAUDE.md'nin build-www için kaydettiği
+  // tuzağın aynısı. `[^\n]*` kullanılıyor, `.` DEĞİL — depo CRLF ve
+  // JS'te `.` `\r`'yi eşlemez, yani `//.*$` hiç tutmazdı.
+  const modKod = mod.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  check('ters okuma grapheme güvenli',
+        !/\[\.\.\.str\]\.reverse\(\)/.test(modKod),
+        'yayma işleci CODE POINT verir; Devanagari\'de ters kelime bozulur');
 
   // Olaylar — TUR = SEVİYE
   check('game_started seviye başlangıcında',
@@ -338,10 +367,11 @@ function testLive() {
 (function main() {
   console.log('SlySwipe — Kelime Avı Doğrulaması');
 
-  const W = testPool();
+  const s0 = makeSandbox({});
+  const W = testPool(s0);
   if (!W) { console.log('\nHavuz yüklenemedi, durduruldu.'); process.exit(1); }
 
-  const s = makeSandbox({});
+  const s = s0;
   const eng = s.get('PuzzleGames.wordSearch.engine');
   if (!eng) { console.log('\nengine dışarı açılmamış, durduruldu.'); process.exit(1); }
 
