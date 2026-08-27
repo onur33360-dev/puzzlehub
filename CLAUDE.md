@@ -186,6 +186,15 @@ Seven things are load-bearing:
 7. **`ITSAppUsesNonExemptEncryption=false` is what keeps the pipeline unattended.** Without
    it App Store Connect asks the export-compliance question on every upload and the build
    waits in TestFlight until a human answers.
+8. **The `App` scheme is COMMITTED as shared data, and `cap add ios` does not create it.**
+   `xcode-project build-ipa --scheme App` reads schemes from `xcshareddata`; a fresh CI
+   checkout has no `xcuserdata`, so without the committed file the run dies with *"the
+   project does not contain a scheme named App"*. Xcode's autocreate-schemes behaviour
+   masks this completely on a developer Mac — the failure only ever appears on CI. Its
+   `BlueprintIdentifier` is the target UUID from `project.pbxproj`
+   (`504EC3031FED79650016851F`); if the project is ever regenerated, the scheme must be
+   regenerated with it or it will point at nothing. `ArchiveAction` must stay on
+   **Release** — that is the configuration `build-ipa` archives.
 
 **`limitsNavigationsToAppBoundDomains` was tried and reverted.** Enabling it restricts
 WKWebView to app-bound domains, which would break Jigsaw's Unsplash pool and Google Fonts —
