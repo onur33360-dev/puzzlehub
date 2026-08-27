@@ -26,6 +26,11 @@ did and did *not* change:
 
 - **Added:** `package.json`, `node_modules/`, a `www/` staging folder, and `android/`.
   There is now one build command — `npm run sync` — but it only *copies files*.
+- **Amended 2026-08-27 — `ios/` and `codemagic.yaml` joined them.** The same reasoning one
+  platform over: iOS is packaged with Capacitor too, but it cannot be *built* here — there is
+  no Mac, so compilation, signing and upload happen on a cloud Mac at Codemagic. See the iOS
+  subsection in §2. Still no bundler, still no framework; the second platform changed the
+  packaging surface, not the stack.
 - **Unchanged:** no bundling, no transpiling, no minification, no framework. The browser
   still receives the exact bytes in the repo. The web/PWA path works exactly as before and
   remains the primary development surface.
@@ -118,6 +123,77 @@ platform flag the tool also runs PWA mode, which hunts for a web manifest in `pu
 generated output: the next `npm run build` deletes it, so the edit vanishes and never
 reaches the repo root. Web icons and the root `manifest.json` stay manual. Source-art
 contract, expected filenames and sizes: `assets/README.md`.
+
+### iOS (Capacitor + Codemagic) — added 2026-08-27
+
+**There is no Mac here, and that is the whole reason this section exists.** iOS needs
+macOS + Xcode, so the build runs on a cloud Mac at **Codemagic**; `codemagic.yaml` at the
+repo root is that pipeline's definition. Nothing about iOS can be built or verified on this
+machine — `npx cap add ios` and `npm run assets:ios` work on Windows, but `pod install`,
+`xcodebuild` and every signing step are skipped locally with a warning.
+
+| Command | Does |
+|---|---|
+| `npm run sync:ios` | `build` + push `www/` into `ios/` (runs `pod install` only where CocoaPods exists) |
+| `npm run ios` | `sync:ios` + open Xcode (macOS only) |
+| `npm run assets:ios` | regenerate the iOS icon + splash from `assets/logo.png` |
+
+**Two Codemagic workflows, and the split is diagnostic, not cosmetic.** `ios-ipa` only
+produces a signed `.ipa`; `ios-testflight` uploads the same build. **Run `ios-ipa` first.**
+It separates "is signing and compilation correct?" from "does an App Store Connect app
+record exist?" — combined in one step, a red run does not say which of the two failed.
+
+**`@capacitor/ios` is pinned to the v7 line, and the version floor is a PAIR.** npm resolves
+the package to 8.x, which demands `@capacitor/core >= 8` against this project's Capacitor 7 —
+the trap already documented for `splash-screen`, `admob`, `revenuecat` and `share`, now seen
+in a **sixth** package. `@capacitor/core` / `android` / `ios` and every plugin move together
+or not at all.
+
+Seven things are load-bearing:
+
+1. **`MARKETING_VERSION` is derived from `APP_VERSION` in `index.html`, and `agvtool` is
+   deliberately NOT used.** The project already insists that one version number answers
+   "which code does this bug report correspond to" (`android/app/build.gradle` carries the
+   same string); leaving iOS on the template's `1.0` would break that chain. `agvtool` looks
+   like the right tool and **silently does nothing here** — the Xcode project was not created
+   with apple-generic versioning, so there is no `VERSIONING_SYSTEM` key for it to act on.
+   The pipeline writes both settings into `project.pbxproj` directly and then **greps them
+   back**, because a wrong version produces a perfectly valid-looking `.ipa` that is only
+   rejected later, at upload, as "this build already exists".
+2. **`CURRENT_PROJECT_VERSION` comes from Codemagic's `$PROJECT_BUILD_NUMBER`, not from App
+   Store Connect.** The ASC-query approach needs the app record to already exist; the
+   machine-side counter works from build #1 and App Store Connect refuses a repeated build
+   number for the same version either way.
+3. **`GADApplicationIdentifier` in `Info.plist` cannot be left out, even with ads off.** The
+   Google Mobile Ads iOS SDK looks for it at launch and **crashes the app** when it is
+   missing, and the pod is linked on iOS because plugins come from the shared `package.json`.
+   The value currently there is **Google's official iOS test app id, not our account's** —
+   an Android unit id would be wrong, because unit ids are per-platform.
+4. **The iOS ad-fraud protection that Android has DOES NOT EXIST YET.** `AD_TEST_DEVICES`
+   holds three hashes that are Android-specific and bound to the *signing key*. None is valid
+   on iOS. A real iOS ad unit id must not be used before that protection is rebuilt — the
+   account-suspension risk §5 documents for Android applies identically.
+5. **`CFBundleLocalizations` is what the App Store reads for "supported languages".** The
+   `core/i18n.js` runtime is invisible to it. This list is the iOS twin of Android's
+   `res/xml/locales_config.xml` and must be updated with it — `tools/i18n-test.js` derives
+   the canonical set from `locales/en.js`, **not** from either file, so both can silently
+   fall behind.
+6. **Orientation is locked to portrait, `~ipad` included.** The template opened landscape as
+   well. Yılan's fixed 15×26 grid, Flappy's world unit and Akış Bağlantı's portrait board
+   were all measured against portrait proportions. The iPad entry is deliberate: Android 16
+   ignoring the orientation lock on ≥600dp screens is already recorded as an **open,
+   untested** risk, and iOS should not repeat it.
+7. **`ITSAppUsesNonExemptEncryption=false` is what keeps the pipeline unattended.** Without
+   it App Store Connect asks the export-compliance question on every upload and the build
+   waits in TestFlight until a human answers.
+
+**`limitsNavigationsToAppBoundDomains` was tried and reverted.** Enabling it restricts
+WKWebView to app-bound domains, which would break Jigsaw's Unsplash pool and Google Fonts —
+the same network dependencies §5 already tracks.
+
+**The App Store icon must have no alpha channel** (verified: 1024×1024, 3 channels). An icon
+with transparency is rejected at upload, not at build, so a green Codemagic run proves
+nothing about it.
 
 ---
 
