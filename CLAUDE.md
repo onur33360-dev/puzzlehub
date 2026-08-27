@@ -141,6 +141,7 @@ numbered documents win** — fix this file.
 | `NEW_GAME_INTEGRATION_GUIDE.md` | to be written | adding the next game to the hub |
 | `docs/DESIGN_SYSTEM.md` | written | any visual/material decision — materials, tokens, motion, scene layering |
 | `docs/GAMES/*.md` | per-game | changing a specific game; `WATER_SORT.md` and `SUDOKU.md` exist |
+| `locales/en.js` | written | adding/renaming any user-visible string — it is the canonical key set |
 | `AUDIO_DESIGN.md` | to be written | adding new SFX/music, to avoid duplicating existing sounds |
 | `DATA_AND_STORAGE.md` | to be written | touching localStorage keys or shapes |
 | `ECONOMY_DESIGN.md` | to be written | changing diamond sources/sinks or streak rewards |
@@ -274,11 +275,22 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   failing on the stale list is exactly what that list is for. Its fixtures now emit
   `memoryGame` where they used to emit `mazeGame` (same reason: it is a 'won'-only game).
 
-- **A new game must be registered in THREE live places:** `GAME_MAP` (`app.js`), `REEL_GAMES`
-  and `GAME_NAME_MAP` (`reels.js`). Missing one makes a game playable-but-invisible, or
-  visible-but-broken. **A fourth place is a test, not the app:** `GAMES` in
-  `tools/game-events-test.js` is a hardcoded list, so adding a game makes that tool fail until
-  it is updated — which is the point, not a defect.
+- **A new game must be registered in THREE live places — and they changed shape on
+  2026-08-15:** `GAME_IDS` (`app.js`), `REEL_GAMES` (`reels.js`), and the
+  `game_name_<id>` / `game_desc_<id>` keys in **every** `locales/*.js`. Missing one makes a
+  game playable-but-invisible, visible-but-broken, or visible-with-a-raw-key-as-its-name.
+  **A fourth place is a test, not the app:** `GAMES` in `tools/game-events-test.js` is a
+  hardcoded list, so adding a game makes that tool fail until it is updated — which is the
+  point, not a defect. `tools/i18n-test.js` covers the third place the same way.
+  What the old rule said and why it moved: it named `GAME_MAP` (`app.js`) and
+  `GAME_NAME_MAP` (`reels.js`). **`GAME_NAME_MAP` was deleted** — it mapped id → Turkish
+  name, which is exactly what moved into the locale tables; keeping it would have made game
+  names live in two places, one translated and one not. **`GAME_MAP` became `GAME_IDS`, a
+  plain array**, for a sharper reason: it was keyed by the game's Turkish *display name* and
+  `playGame()` took that name as its argument. Localize the name and a German player's
+  "Word Hunt" matches no key — the game would silently answer "coming soon". **The general
+  rule this is an instance of: user-visible text can never be an identifier.** `playGame`
+  now takes an id.
 - **`PUZZLE_GAMES` (`app.js`) IS DEAD DATA — it has no reader anywhere in the repo, and this
   file used to claim otherwise.** The rule above said "four places" and named it first;
   verified 2026-08-09 by grepping the whole tree: the array is defined at `app.js:81` and
@@ -309,6 +321,225 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   `querySelector` never returns `null`, it always hands back a stub. That is exactly why the
   line survived for two days of green test runs, and it is worth remembering before trusting
   a harness pass on anything DOM-shaped.
+- **The app is being LOCALIZED to 15 languages; `core/i18n.js` is the runtime and
+  `locales/en.js` is the canonical key set (2026-08-15).** Phases 2-4 are done — runtime,
+  English base, **and the full Turkish migration: shell, all 11 games, Discover and the
+  daily challenge.** The other 13 languages, RTL and Word Search's per-locale word pools
+  are later phases. Turkish is still what a Turkish device shows — nothing about the
+  existing experience changed.
+  **359 canonical keys. The migration meter in `tools/i18n-test.js` reads 10 remaining
+  hardcoded strings, and each is deliberate**: 7 are `ACHIEVEMENT_CARDS` (not rendered —
+  mockup placeholders for an unbuilt per-game achievement system, so translating them
+  would repeat an unkeepable promise in 15 languages) and 3 are Word Search's demo words
+  in `reels.js`, which are game *content* and belong to phase 8. They are deliberately
+  **not** hidden in the tool's `NOT_UI` set, so the debt stays visible.
+  Eleven things are load-bearing:
+  1. **Locale data is `.js`, not JSON.** `words-tr.js` already establishes the pattern, and
+     JSON would mean `fetch()` — two different worlds (web origin vs Capacitor's scheme) for
+     no gain. Files self-register via `I18n.register(code, table)`, so their order does not
+     matter. `i18n.js` itself must load first, and **before `games.js`** (games call `t()`).
+  2. **`t()` / `tp()` are globals defined in `i18n.js`, and games call them directly.**
+     Unlike `econ()`/`gameEvent()` there is no in-`games.js` guarded fallback — i18n is a
+     genuine dependency like `rng.js`, so the three harness load lists (`dom-sandbox.js`,
+     `game-events-test.js`, `level-metrics.js`) list it explicitly instead.
+  3. **`ph_lang` stores a MODE (`system`|`manual`), not a bare locale.** Storing the resolved
+     locale under "System Default" would freeze it: the player changes their phone's language
+     and the app would not follow — a manual choice wearing the system's name.
+  4. **Only `locales/en.js` is in `SHELL_ASSETS`.** It is the guaranteed fallback and the app
+     cannot start without it. The other 14 are in `SHIP` (so they reach the APK) but not
+     precached — 15 files would re-download on every `APP_VERSION` bump, the trap already
+     documented for the icons and the Jigsaw pool. The active locale lands in `SHELL_CACHE`
+     on first use via the catch-all rule, which is the **right** bucket: translation text
+     changes with the code, so a version-independent bucket would serve stale strings.
+  5. **`<html lang>` is a correctness requirement, not metadata.** CSS `text-transform:
+     uppercase` (11 sites) reads it; without `lang="tr"` the letter `i` uppercases to `I`
+     instead of `İ`. `I18n.applyDom()` sets `lang` and `dir` together.
+  6. **`data-i18n` is never put on a node that JS owns.** `#go-title`/`#go-msg` are written
+     by `showGameOver()` every time; tagging them would let a language change repaint the
+     live game-over text with a default. Same contract family as `data-ph-avatar`.
+     `data-i18n-html` exists for one real case — a headline whose emphasised word differs per
+     language (`Keşfet <em>Akışı</em>`); splitting that into two nodes would assume word order.
+  7. **`difficultyLabel` became `difficultyKey`.** A game now reports `'easy'|'medium'|…` and
+     `reels.js` translates it. The old contract handed back a Turkish string that the card
+     printed directly — and `_diffClass` compared against that string, so after localization
+     every card would have rendered red.
+  8. **Language change does NOT restart the app and does not touch game state.** The shell is
+     already imperative `innerHTML` re-render, so `I18n.onChange` just calls the render
+     functions again. An open game keeps its score; only its title is refreshed.
+  9. **`tools/i18n-test.js` is the official validation tool.** Four layers; the strongest are
+     the missing/extra-key diff against `en` (including **placeholder** mismatches — a
+     translation missing `{level}` silently drops the number) and a **budget** on how many
+     hardcoded Turkish strings remain per file. The budget may be lowered, never raised.
+  10. **`t` IS NOW A RESERVED NAME — never use it as a local variable.** It is the global
+     translation function, so a local `t` silently shadows it and the line dies with
+     `t is not a function`. This is not hypothetical: it shipped twice in one change, in
+     `Badges.shopLabel()` (`const n = this.count(), t = this.total()`) and in
+     `ThemeSystem.apply()` (`const t = this.find(id)`). The danger is that it is **late**,
+     not silent — the syntax is valid and the file loads, so the crash waits until that
+     code path runs (the shop row rendering, a theme being applied). The tool now has a
+     static shadowing check. **Its first version did not catch the real bug**: it looked
+     for `const t =` and missed the multi-declarator `const n = …, t = …` form. A guard is
+     only trustworthy after you have watched it fail — re-introduce the bug and confirm.
+     Arrow-function parameters (`tubes.filter(t => …)`) are deliberately *not* flagged;
+     they shadow only their own body, and including them produced a real false positive.
+  11. **Display text may never be an identifier, and Phase 4 found three more instances of
+     the rule already recorded for `GAME_MAP`.** `DIAMOND_PACKAGES.badge` held `'Popüler'`
+     / `'En İyi! ⭐'` and `renderShop()` compared against those strings to pick a CSS class
+     — translating the text would have silently dropped both highlights. `PUZZLE_GAMES`
+     was keyed by the game's Turkish `name`; it is now keyed by `id` (still dead data, but
+     it will come back translated). `ThemeSystem.THEMES` carried a Turkish `name`. All
+     three now carry ids plus a `nameKey`/`labelKey`. **Definition arrays store KEYS, not
+     resolved text** — resolving at module load would freeze the strings in whatever
+     language was active at boot, so a language change would leave them stale. Same
+     reasoning as `SETTING_GROUPS.state` being a function.
+  **The harnesses had pinned Turkish display text as structure, and three of them broke** —
+  `badges-test` and `daily-quests-test` searched `app.js` for `'Başarımlar'` / `'Günlük
+  Görevler'`, `ad-release-test` anchored on `'Skor 2 katına çıktı'`. All now anchor on key
+  names. A fourth failure was more instructive: `daily-quests-test` read *"the first three
+  `{ id:'…'` matches in the whole file"* to get the quest ids, and giving `PUZZLE_GAMES` an
+  `id` field moved game ids in front of them — the assertion failed while nothing about
+  quests had changed. "The first N matches in a file" was never a sound anchor; it is now
+  scoped to the `DAILY_MISSIONS` block.
+  **Scores now format through `I18n.n()`, not bare `toLocaleString()`.** The argument-less
+  call uses the **device's** locale, so a player who manually set the app to German still
+  saw Turkish digit grouping. Verified: `1.234.567` in tr, `1,234,567` in en.
+  12. **RTL is SHELL-ONLY, and `#game-container` carries `dir="ltr"` to enforce it
+     (phase 7, 2026-08-16).** Arabic mirrors Home / Discover chrome / Rozetler / Profile
+     including the game *header* — but not the game **world**. That is correctness, not
+     taste: Yılan going right, 2048 swiping right and Arrow's exit ray are all defined in
+     pixel direction, so mirroring the board would change the game. One attribute on the
+     container is enough (`direction` inherits), and `.reel-demo-area` gets the same
+     treatment for the same reason.
+     **The 39 physical CSS rules became logical ones** (`margin-inline-start`,
+     `inset-inline-end`, `text-align: start`, `border-inline-end`) — identical in LTR, so
+     nothing regressed. Four categories were deliberately **left** physical: the scattered
+     `.pf-deco-*` emoji, `left:50%` centering, symmetric `left:x; right:x` pairs, and the
+     `.sly-fan-card` hero fan (a self-contained composition inside a container that already
+     mirrors; mirroring it internally would need every rotation negated for no gain).
+     **`transform: translateX()` is NOT logical** — the toggle knob would slide the wrong
+     way — so `--sly-dir` (`1`, flipped to `-1` under `[dir="rtl"]`) carries the sign.
+     `.dir-ico` (`scaleX(-1)`) handles the `←` glyphs; `›` needs nothing, the bidi algorithm
+     mirrors it.
+  13. **Fonts: no font file was added, the STACK was widened.** Measured coverage — Inter:
+     Latin + Cyrillic + Greek; Outfit: Latin only; Fraunces: Latin only. So Russian
+     *headings* already fell back to Inter before any of this. `--font-fallback` now names
+     the Noto/system families explicitly and both tokens end in it. Font fallback is
+     **per-character**, so a mixed "Level 7 / レベル 7" line keeps Latin in Inter and takes
+     kana from Noto. Shipping real coverage for four scripts would be ~10 MB of web font
+     and Android already has it.
+  14. **`tools/layout-matrix-test.js` grew a LOCALE AXIS, and it runs at one cell on
+     purpose.** The width×scale matrix is 54 cells / ~3 min because each (width, scale)
+     pair reloads the page; ×15 languages would be 810 cells / ~45 min, and a tool nobody
+     runs is a tool that does not work. Two facts make the full cross unnecessary: the
+     matrix already proves the layout is *structurally* safe, and the question a locale
+     adds — "does longer text break it?" — is hardest at the narrowest width and largest
+     scale. So the axis runs **15 locales × 3 screens at 320px ×1.3, on a single page
+     load**, because a language change needs no restart — which also exercises the real
+     runtime-switch path. Cost: +27 s. It additionally asserts `<html dir>` matches
+     `I18n.dir` and that `#game-container` stays `ltr`; both were verified by breaking them
+     first. `--locales` runs only that phase, `--shot 384x1.0 --lang ar` writes PNGs.
+  **The Arabic screenshots found five bugs the measurement could not**, and three of them
+  were regressions *I* introduced in phase 4 — all invisible in Turkish. `daily.js` read
+  `meta.name` and `DIFFICULTIES[…].label`, both deleted when names moved to locale tables,
+  so the daily card rendered the raw id `sudoku` with no difficulty — which *looks like a
+  real name* in Turkish. `renderFavorites` read `rg.name` the same way. Plus two strings
+  the scanner never saw. **A green measurement is not a rendered screen; look at one.**
+  **Those misses exposed four blind spots in the scanner itself, each now fixed with the
+  reasoning in place:** a trimmed `' aktif'` was classified as an identifier by
+  `/^[a-zçğıöşü-]+$/` (two separate identifier filters existed and fixing only `CODEISH`
+  was not enough — both now test the **raw** string, since a leading space is exactly what
+  says "text, not a code name"); the template `>…<` pattern excluded newlines, so ordinary
+  formatted HTML hid a whole sentence; and **`index.html` was not in `BUDGET` at all** —
+  its 56 nodes were tagged in phase 4 but never measured. HTML now has its own scan path,
+  because there a Turkish string means two different things: inside a `data-i18n` node it
+  is a **fallback**, everywhere else it is debt. Nodes that JS owns (`.go-btn-lbl`,
+  `#go-msg`) were emptied instead — they can only ever go stale.
+  15. **Word Hunt is localized to all 15 languages, and the generator is now
+     GRAPHEME-BASED (phase 8, 2026-08-16).** `words-tr.js` is gone; `games/words.js`
+     is the registry + `graphemes()` helper, and `games/words/<code>.js` holds one pool
+     each. Pools load **with the locale table** (`i18n.js` `loadWords`) — both are "this
+     language's content", and separate paths would allow a Japanese UI with a Turkish board.
+     **`word[i]` and `word.length` were the bug.** Correct for Latin/Cyrillic, wrong for
+     Devanagari: `'क्ष'` is one visual cell but three code points, and `[...str].reverse()`
+     (used for backwards matching, a core mechanic) shredded it — every reversed Hindi word
+     would have been rejected. Words now enter the generator as **grapheme arrays**;
+     `fits`/`placeOne` needed no change because they only used `.length` and `[i]`, which
+     arrays satisfy. Score counts graphemes too, or a 4-cell word would pay 6.
+     **The alphabet is DERIVED from the pool, never hand-written** — and that was a design
+     correction the measurement forced. Hand-written lists rejected 128 Korean, 92 Chinese
+     and 131 Hindi words as "outside the alphabet"; the lists were incomplete, not the
+     words. Korean has 11,172 possible syllable blocks, Chinese thousands of characters,
+     Devanagari a cluster set that depends on the vocabulary. The invariant that actually
+     matters is the opposite direction: **filler must be able to produce every grapheme
+     the words use** — otherwise a letter that only ever appears inside a word hands the
+     player a free "this cell is part of an answer". Deriving guarantees it structurally.
+     Consequence worth knowing: Hindi filler cells are full clusters (`र्च`), which look
+     like mid-word fragments — that is the *price* of the invariant, not a defect.
+     **Difficulty is per-locale** (`len`, five tiers): zh 2-3, ko 2-4, ja 2-5, ar 3-7,
+     de 3-13. One min/max across all languages either empties a pool (German at 3-6) or
+     makes it trivial (Chinese at 3-10). `sizeCap` shrinks the grid to 10 for Chinese
+     because Han cells are wider.
+     **Changing language mid-game rebuilds the board, keeps level and score.**
+     `wordSearch.onLocaleChange()` is called from `I18n.onChange`; found words are **not**
+     mapped across languages — there is no honest relation between "DENİZ" and "OCEAN".
+     **`tools/wordsearch-locale-test.js` is the validation tool** — 300 boards × 15 locales
+     checking generation failure, missing target, duplicate target, invalid grapheme and
+     oversized word, plus script-leak assertions (no Turkish letters outside `tr`, no Latin
+     in non-Latin pools, filler included). Two real bugs came out of it: the sandbox loaded
+     only `en`+`tr` **locale tables**, so `I18n.set` silently stayed on English and the run
+     measured English fifteen times — caught only because the tool asserts "each language
+     generated with its own pool". And the recent-word window rejected *every* word while
+     the history was shorter than the window (`lastIndexOf` returns `-1`, and `-1 >= -18`
+     is true), which pushed every level into the deterministic fallback and produced the
+     consecutive repeats it existed to prevent.
+  16. **A TARGET WORD MUST HAVE EXACTLY ONE PLACEMENT ON THE BOARD, and "placement"
+     means a CELL SET, not a direction (2026-08-16).** The old check counted hits across
+     all 8 directions, which conflates two different things: a genuine second occurrence
+     at *different* cells (bad — the player draws a valid path and watches *other* cells
+     turn green, because `validate()` paints the canonical cells) versus the same cells
+     read backwards (harmless — the game accepts both directions by design). Counting
+     directions made reduplicated words like `星星` and `姐姐` report 2 *by construction*,
+     so `fillBlanks`'s "is it clean?" condition could never be satisfied, its 12 re-rolls
+     were wasted, and the board was accepted anyway.
+     `occurrenceKeys()` now canonicalises each hit by its **sorted cell set** — a line's
+     cell set is direction-independent, so forward and reverse collapse to one key. With
+     the false positives gone, `fillBlanks` returns whether it succeeded and `buildBoard`
+     **rejects an unclean board** and retries with a new word set (the 24-attempt loop
+     already existed). The last-resort board deliberately does not enforce this: reaching
+     it means the pool is exhausted and having *a* board beats having a perfect one.
+     **The bug was much wider than the Chinese words that led to it.** Removing the
+     rejection and re-measuring: `tr=1, pt-BR=2, de=1, fr=3, ru=1, ar=1, ja=2, ko=4,
+     zh-Hans=1, id=1` duplicate placements across 3000 boards — nine languages, not one.
+     The direction-counting noise had been hiding real duplicates behind fake ones.
+     Measured after the fix: **0 across 4500 boards in all 15 locales.**
+  17. **`.ws-w.done` carries NO `text-decoration: line-through`.** Harmless in Latin, it
+     crosses the glyph *body* in Devanagari/CJK/Arabic — the शिरोरेखा and matras of
+     `गिटार`, the dense strokes of `星星`. The "found" state is already carried by two
+     channels (green background, green text), so the line was redundant reinforcement;
+     removing it loses no information and gives the legibility back.
+  18. **THREE POOLS ARE TECHNICALLY VERIFIED BUT LINGUISTICALLY UNVERIFIED, and the
+     distinction is the point.** The harness proves *mechanics* — 4500 boards, zero
+     generation failures, zero missing targets, every cell one valid grapheme. It cannot
+     judge whether a word is one a native speaker would actually expect. Do not upgrade
+     these to "verified" on a green test run:
+     - **`ja`** — kana only, no kanji. A deliberate first-version simplification; may read
+       as a children's book to a Japanese player.
+     - **`hi`** — filler cells are full clusters (`र्च`, `स्कि`) and look like mid-word
+       fragments. This is the *price* of the filler invariant, not a defect: excluding them
+       would make those cells free hints.
+     - **`ar`** — letters render in **isolated** form per cell, unlike flowing Arabic. What
+       the genre does in every language, but it needs an Arabic reader's eye.
+     All five non-Latin pools (`ar ja ko zh-Hans hi`) still want a native speaker to check
+     word *choice*; spelling is right, the commonness judgement is not independently
+     confirmed. Device checklist: `docs/I18N_DEVICE_QA.md`.
+  **Two real bugs were found by writing that tool, both worth remembering.** `zh-TW`
+  resolved to `zh-Hans` because the resolver fell through to the bare-language alias — a
+  Traditional reader would have been shown Simplified. And `tools/build-www.js`'s
+  `SHELL_ASSETS` cross-check parsed **comment text**: it scanned every line for `'…'`, so a
+  Turkish apostrophe pair inside a comment invented a filename and failed the build. The
+  comment-stripping fix then did nothing, because the repo is CRLF on Windows and **JS `.`
+  does not match `\r`** — `/\/\/.*$/` never matched. That is the same CRLF class already
+  documented for harness source scans; normalize line endings *first*.
 - **Shared event-listener cleanup:** `addEv`/`clearEvs` in `games.js` use one module-level `_listeners` array across all games. Safe under normal one-game-at-a-time navigation; don't assume it's safe if game lifecycles ever overlap.
 - **Inconsistent localStorage prefixes** (`gh_`, `ph_`, and the bare `bp_hi`) are historical, not designed. Don't rename existing keys without a migration plan — that's `DATA_AND_STORAGE.md`'s job once it exists.
 - **"GameHup" still appears in internal file headers and the `gh_` prefix family.** It's the old product name; SlySwipe is current. Cosmetic debt, not a functional bug — don't mass-rename without being asked. **"PuzzleHub" is now a third historical layer** (see the rebrand bullet below) — unlike GameHup it was swept out of the source, but it survives in git history and in the `ph_` storage prefix.
@@ -1344,8 +1575,31 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   through `DailyQuests`' "günlük meydan okumayı tamamla" quest, and announcing it twice would
   either double-count or invent a second number. `.dc-reward` in `style.css` went with it (it
   had exactly one consumer).
-  Still placeholder, still carrying `TODO:`: "Profil Çerçevesi" (labelled "Yakında", so it
-  promises nothing) and the profile name "Oyuncu".
+  Still placeholder, still carrying `TODO:`: the profile name "Oyuncu". **"Profil Çerçevesi"
+  left this list on 2026-08-19 — it is no longer rendered at all; see the hidden-rows bullet
+  below.**
+- **THREE SETTINGS ROWS ARE HIDDEN FROM THE RELEASE UI, and hiding is NOT deleting
+  (2026-08-19, owner decision).** Bildirimler, Profil Çerçevesi and Özel Temalar are not
+  ready to ship, and each was showing a "Yakında" value on a tappable row. A row that says
+  "coming soon" is a promise the build cannot keep, so **no clickable "Yakında" settings row
+  survives in the release UI** — device-verified in tr/de/ar, zero matches on any
+  Yakında/Bald/قريبًا string across the whole Ayarlar screen (11 rows → 10 after the last one
+  went).
+  Three things are load-bearing:
+  1. **The mechanism is one flag, not three deletions.** Each row carries `hidden:true` in
+     `SETTING_GROUPS` (`core/app.js`) and `renderSettings` filters with
+     `.rows.filter(r => !r.hidden)`, then drops any group left empty. **The definitions,
+     icons and their locale keys all stay** (`settings_notifications_toast`,
+     `settings_frame_toast`, the theme row's `fn`), so re-enabling a feature is deleting one
+     flag — not rebuilding a row from memory.
+  2. **The underlying systems were NOT removed.** `ThemeSystem` in particular is still live
+     and still referenced by Plus (`plus_benefit_themes_*`); only its Ayarlar door is shut.
+     Same rule already applied to `renderLeaderboard()` and `WEEKLY_MISSIONS`: unreached
+     code that is kept on purpose is not dead code to clean up.
+  3. **Their keys are still in the canonical set and must stay translated.** `i18n-test.js`
+     has an orphan-key check, and these pass it because the definitions still reference
+     them. Deleting a row's definition without also removing its keys would fail that check
+     — which is the intended order of operations, not a nuisance.
 - **Home / İlerleme / Profil carry STATIC PLACEHOLDER numbers on purpose (2026-07-29).**
   These three screens were rebuilt to match the owner's design mockup one-for-one, and the
   mockup shows values for systems that do not exist yet: a collection percentage, per-game
@@ -2110,6 +2364,45 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   `addReward` 10→15 while `add` stays 10). `tools/iap-test.js` pins the rest, including the
   source scan that fails if any currency-and-digit string reappears in `core/app.js` or
   `index.html`. License test account: `onur33360@gmail.com`.
+- **`@capacitor/share@^7` (7.0.4) is the FIFTH approved Capacitor plugin (2026-08-19), and
+  it exists because `navigator.share` does not.** Settings → Paylaş needs the real Android
+  chooser; the Web Share API is a Chrome feature that Android WebView does not implement —
+  measured on the A51, `typeof navigator.share === "undefined"` inside the APK. A
+  dependency-free `intent://` ACTION_SEND navigation was tried first and does **not** work:
+  Capacitor's `launchIntent` treats the URL as `ACTION_VIEW`, while `intent://` requires
+  `Intent.parseUri()`. So the plugin is the only path to a system share sheet here.
+  **Pin the v7 line.** `latest` resolves to **8.0.1**, which demands `@capacitor/core >= 8`
+  against this project's Capacitor 7 — the same trap already documented for
+  `@capacitor/splash-screen`, `@capacitor-community/admob` and
+  `@revenuecat/purchases-capacitor`. That RevenueCat bullet says to "assume it for the
+  *next* plugin too"; this is that next plugin, and the assumption held. Install with the
+  `latest-7` dist-tag (`npm install @capacitor/share@latest-7`); never `--force` or
+  `--legacy-peer-deps`.
+  **The version floor is a PAIR, not one number.** `@capacitor/core` / `android` / `cli`
+  stay on **7.x** (currently 7.6.8) and `@capacitor/share` stays on **7.x** with them. A
+  future major Capacitor upgrade is therefore not a one-package decision: Share
+  compatibility must be checked separately and moved in the same change, or the app builds
+  against a plugin mismatched with the runtime.
+  Three implementation facts are load-bearing, all read out of `SharePlugin.java` rather
+  than assumed:
+  1. **`url` is deliberately NOT passed.** The plugin concatenates when both are given
+     (`text = text + " " + url`) and `share_text` already carries `{url}`, so passing both
+     would print the link **twice**. Android has no separate intent extra for a URL — the
+     only target is `EXTRA_TEXT` — so embedding it in the text is equivalent. Device-
+     verified: the store URL appears exactly once.
+  2. **Cancelling is a REJECTION, not a success.** Back out of the chooser and the plugin
+     calls `reject("Share canceled")` (`RESULT_CANCELED`); tapping while a sheet is open
+     gives `reject("Can't share while sharing is in progress")`. Both are user behaviour,
+     so `shareApp()` matches `/cancel|in progress/i` and returns **silently**. Falling
+     through to the clipboard there would copy a link nobody asked for, and a
+     "paylaşılamadı" toast would be a plain lie.
+  3. **The fallback chain stays: plugin → `navigator.share` (web) → clipboard → toast.**
+     The web surface is still the primary development surface (§1) and has no plugin, so
+     deleting either later link would make Paylaş untestable there.
+  `title` is the hardcoded string `'SlySwipe'` — a brand, never translated (it lands in
+  `EXTRA_SUBJECT`). `dialogTitle` **is** translated (`share_dialog_title`, 15 locales);
+  note Samsung's One UI chooser does not render a title at all, so its absence on the test
+  device is an OS presentation detail, not a wiring bug.
 - **A single `Uncaught TypeError: … reading 'triggerEvent'` in logcat at boot is PRE-EXISTING
   and not yours.** It fires before `rng.js`/`games.js`/`app.js` are even fetched, right after
   Capacitor logs `App paused → App stopped → Saving instance state!` — the native bridge
