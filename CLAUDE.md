@@ -2174,6 +2174,56 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   noticeably *after* the ad UI closes. A CDP read taken right after tapping ✕ shows
   `_pending:true` and an unchanged budget, which looks exactly like a stuck guard. Read
   again before concluding anything — this cost a wrong diagnosis.
+- **MONETIZATION IS OFF ON iOS, and the gate is `adsSupported()` — NOT `adMobPlugin()`
+  returning null (2026-08-27, owner decision).** The shortest-looking implementation is the
+  one that opens a free-reward hole: `RewardedAd.show()` falls through to `_showSimulated`
+  when the plugin is absent, so making `adMobPlugin()` return null on iOS would hand every
+  player the reward **without ever showing an ad**. The simulation exists for the web
+  surface (§1) and is harmless there; inside a shipped native build it is a payout with no
+  ad behind it. So "is there an ad plugin?" and "does this platform have ads at all?" are
+  kept as two separate questions.
+  The reason ads are off is **safety, not revenue**: `AD_TEST_DEVICES` holds three hashes
+  that are Android-specific and bound to the *signing key*, so none is valid on iOS and the
+  "don't click your own ad" protection documented above simply does not exist there yet.
+  Six things are load-bearing:
+  1. **The gate sits BEFORE `this._pending = true`.** Returning after the shield is raised
+     leaves it raised forever — `release()` only runs at the end of the native and simulated
+     paths — and the player could never open another rewarded ad, Plus or not. Verified by
+     re-introducing exactly this bug; the harness catches it twice, at runtime and in the
+     source scan.
+  2. **Ad surfaces are HIDDEN, not disabled.** Game-over continue, the 2× score button, the
+     shop's free-diamond row and `offerRewardChoice`'s ad button are not rendered at all.
+     This is the same rule already applied when the clickable "Yakında" settings rows were
+     removed: a greyed button promises something the build cannot deliver, and here it
+     cannot even say "come back tomorrow" — tomorrow is the same.
+  3. **The Plus path is untouched.** The gate sits *after* the Plus check in
+     `runRewardedAction`, because a Plus player's reward is not an ad path — it is the path
+     where the ad is skipped. Their game-over button is "instant continue" and stays visible.
+  4. **2× score disappears entirely on iOS**, unlike continue/hint/extra-moves which all have
+     a diamond price. That is the direct cost of the standing "score is earned, not bought"
+     decision, and it was accepted rather than quietly reversed: giving 2× a diamond path
+     would use iOS as an excuse to undo that rule.
+  5. **`InterstitialAds.canShow()` needs its own check.** Rewarded and interstitial are
+     deliberately separate axes with no shared gate, so one guard cannot cover both.
+  6. **`purchasesPlugin()` returns null on iOS, and here null is the RIGHT answer** — the
+     exact inverse of the ad case. "No store" is an already-designed state (it is how the web
+     surface always runs): prices render `—`, never a stale hardcoded number, and `purchase()`
+     refuses. The Profile rows are **not** hidden — they are the only door to the Plus page and
+     the diamond shop.
+  **`tools/ios-gating-test.js` is the validation tool, and it exists because the other seven
+  harnesses cannot see this.** They all run with no `Capacitor` in the sandbox, i.e. they
+  measure the *web* path, where `adsSupported()` is always true — all seven were green while
+  the iOS gate was completely unexercised. It injects a fake `Capacitor` **after** `app.js`
+  has been evaluated, which works because the gates read the platform at call time, and that
+  is the production path rather than a test back door. Its most important assertion is that
+  `onComplete` is never called on iOS. Every check has a negative control on android/web, so
+  a function that simply returned false everywhere could not pass.
+  **Two traps found while verifying the harness.** The first bug-reintroduction attempt
+  silently did nothing: the replacement string used `\n` and the working copy is **CRLF**, so
+  the test ran against unmodified code and reported green — the same CRLF class this file
+  already records for source scans, hit here in the *injection* rather than the scan. And
+  `makeSandbox` already loads `core/app.js` at the end of `LOAD_ORDER`, so evaluating it a
+  second time dies with `EconomyConfig has already been declared`.
 - **Ad consent (UMP/GDPR) runs at boot and gates every ad — `AdConsent` in `core/app.js`
   (2026-08-02).** Serving ads to an EEA/UK user without a consent flow is a legal risk that
   is entirely separate from AdMob account suspension, which is why this landed immediately

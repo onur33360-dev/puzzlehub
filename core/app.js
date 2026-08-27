@@ -1733,6 +1733,32 @@ function adMobPlugin() {
   return (C.Plugins && C.Plugins.AdMob) || null;
 }
 
+// ───── REKLAM BU PLATFORMDA VAR MI? ─────
+//
+// "Bütçe bitti" ile "reklam diye bir şey yok" AYRI iki durum ve ayrı
+// kalmak zorundalar. AdBudget.canWatch() birincisini yanıtlıyor; oraya
+// platform bilgisini karıştırmak, iOS'ta oyuncuya "günlük hakkın bitti"
+// dedirtirdi — hiç var olmamış bir hakkın bittiğini söylemek.
+//
+// iOS'ta reklam KAPALI (2026-08-27, sahip kararı). Sebep gelir değil
+// GÜVENLİK: AD_TEST_DEVICES'taki üç hash Android'e özgü ve İMZA
+// ANAHTARINA bağlı — aynı telefon şimdiye kadar üç farklı değer üretti.
+// iOS'ta hiçbiri geçerli olmadığı için "kendi reklamına tıklama"
+// koruması orada YOK, ve o koruma kurulmadan gerçek bir birim kimliği
+// kullanmak AdMob hesabının askıya alınması riski demek.
+//
+// ───── NEDEN adMobPlugin() null DÖNDÜRMÜYORUZ ─────
+// En kısa yol o gibi görünüyor ve TAM TERSİ sonucu veriyor: show() eklenti
+// yoksa _showSimulated'a düşüyor, yani oyuncu iOS'ta hiç reklam izlemeden
+// ödülü alırdı. Simülasyon web için var (CLAUDE.md §1: birincil geliştirme
+// yüzeyi) ve orada zararsız; native bir sürümde ise doğrudan bedava-ödül
+// kapısı. Bu yüzden kontrol AYRI bir soru olarak duruyor.
+function adsSupported() {
+  const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;
+  if (!C || !C.getPlatform) return true;            // web → simülasyon çalışsın
+  return C.getPlatform() !== 'ios';
+}
+
 // ==================== REKLAM RIZASI (UMP / GDPR) ====================
 //
 // AB/İngiltere kullanıcısına rıza akışı göstermeden reklam istemek gerçek
@@ -1879,6 +1905,10 @@ const RewardedAd = {
   // Hedefli çağrı bilinçli — her oturumda peşinen reklam istemek, hiç
   // reklam izlemeyen oyuncular için boşa istek demek (AdMob eşleşme oranı).
   preload() {
+    // Gösterilmeyecek bir reklamı önceden yüklemek boşuna ağ isteği —
+    // ve daha önemlisi, AdMob'a giden bir İSTEK. iOS'ta test cihaz
+    // koruması olmadığı için hiç istek yapılmaması gereken taraf burası.
+    if (!adsSupported()) return Promise.resolve(false);
     const ad = adMobPlugin();
     if (!ad) return Promise.resolve(false);          // web: simülasyon, yükleme yok
     if (this._ready) return Promise.resolve(true);
@@ -2045,6 +2075,11 @@ const RewardedAd = {
   // içinde, o da yalnızca ödül hak edilince çalışıyor. Yani ikinci dokunuş
   // ne reklam açıyor ne de oyuncuya bir şey kaybettiriyor.
   show(reward, onComplete) {
+    // Platform kapısı EN BAŞTA ve _pending'DEN ÖNCE: burada kalkanı
+    // kurup dönmek, kilidi hiç açılmayacak şekilde kapatırdı (release()
+    // yalnız native/simüle yollarının sonunda çağrılıyor) ve oyuncu bir
+    // daha hiçbir ödüllü reklam açamazdı.
+    if (!adsSupported()) return false;
     if (this._pending) return false;
     this._pending = true;
     // release() ile simetrik: durumu kurar kurmaz düğmeler tazeleniyor,
@@ -2145,6 +2180,15 @@ function runRewardedAction(reward, onReward, opts) {
     onReward();
     return true;
   }
+  // Reklamın olmadığı platformda (iOS) hiçbir ödül yolu açılmaz. Plus
+  // kontrolünden SONRA duruyor, çünkü Plus'lı oyuncu ödülü zaten reklamsız
+  // alıyor — orası bir reklam yolu değil, reklamın atlandığı yol.
+  //
+  // SESSİZCE false dönüyor, toast YOK: UI bu seçeneği hiç göstermiyor
+  // (refreshGameOverOffers, FREE_DIAMOND_SOURCES, offerRewardChoice), yani
+  // buraya ancak oyun içinden doğrudan çağıran bir yol ulaşır. Orada
+  // "reklam hakkın bitti" demek yanlış bilgi olurdu.
+  if (!adsSupported()) return false;
   // UI zaten devre dışı bırakılmış olmalı; bu savunma katmanı (oyun
   // içinden doğrudan çağrılan yollar için).
   if (sayilir && !AdBudget.canWatch()) {
@@ -2247,6 +2291,11 @@ const InterstitialAds = {
   // İki eksen. Saf fonksiyon: yan etkisi yok, her an yeniden hesaplanabilir.
   canShow(now) {
     now = now || Date.now();
+    // Reklamın olmadığı platformda (iOS) geçiş reklamı da yok. Ödüllü
+    // taraftan AYRI yazılmak zorunda: ikisi bilerek farklı eksenler
+    // (AdBudget "oyuncu kaç ödül isteyebilir", burası "biz kaç kez araya
+    // girebiliriz") ve aralarında paylaşılan bir kapı yok.
+    if (!adsSupported()) return false;
     if (typeof PlusSystem !== 'undefined' && PlusSystem.isActive()) return false;
     if (this._showing) return false;
     const d = this._data();
@@ -2416,9 +2465,16 @@ function offerRewardChoice(opts) {
       // (ipucu, geri al, ekstra hamle) ve onlar 2026-08-07'den beri günlük
       // hakka işlemiyor. Günlük hak satırı da kaldırıldı — burada artık
       // yanlış bir sınırı anlatıyordu.
-      '<button class="ph-offer-btn primary" data-a="ad">' +
-        (plus ? '👑 ' : '📺 ') + (opts.adText || t('ad_watch')) +
-      '</button>' +
+      // Reklamsız platformda (iOS) reklam düğmesi hiç çizilmiyor. Sonuç:
+      // pencere yalnız elmas + iptal gösterir. gemCost verilmeyen tek
+      // çağrı skor 2x ve o zaten reklamsız platformda hiç açılmıyor
+      // (refreshGameOverOffers düğmeyi gizliyor), yani "hiçbir seçeneği
+      // olmayan pencere" durumu oluşamıyor.
+      (adsSupported() || plus
+        ? '<button class="ph-offer-btn primary" data-a="ad">' +
+            (plus ? '👑 ' : '📺 ') + (opts.adText || t('ad_watch')) +
+          '</button>'
+        : '') +
       (gemCost != null
         ? '<button class="ph-offer-btn" data-a="gem"' + (gemOk ? '' : ' disabled') + '>💎 ' +
             gemCost + ' → ' + (opts.gemText || 'Al') + '</button>' +
@@ -2501,6 +2557,22 @@ const RC_API_KEY_ANDROID = 'goog_OTMeoEeifXmuMWwbdKXhVYqawEb';
 function purchasesPlugin() {
   const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;
   if (!C || !C.isNativePlatform || !C.isNativePlatform()) return null;
+  // iOS'ta satın alma KAPALI (2026-08-27, sahip kararı). Burada null
+  // döndürmek reklam tarafındaki tuzağın TERSİ: orada null "simülasyona
+  // düş" demekti, burada "mağaza yok" demek — ve mağaza yokluğu zaten
+  // tasarlanmış bir durum, çünkü web yüzeyi hep öyle çalışıyor. Fiyatlar
+  // '—' gösteriyor (asla eski bir sabit sayıya düşmüyor: yanlış fiyat
+  // göstermek hiç göstermemekten kötü, oyuncu gördüğünü ödeyeceğini
+  // varsayar) ve purchase() sessizce reddediyor.
+  //
+  // Neden kapalı: RC_API_KEY_ANDROID bir goog_ anahtarı, iOS appl_ ister;
+  // ve 7 ürünün (3 abonelik + 4 elmas paketi) App Store Connect tarafında
+  // sıfırdan tanımlanması gerekiyor — Play Console'daki tanımlar taşınmaz.
+  //
+  // Mağaza satırları GİZLENMİYOR: CLAUDE.md'ye göre Profil'deki o iki
+  // satır Plus sayfasının ve elmas mağazasının TEK kapısı; gizlemek iki
+  // ekranı erişilmez yapardı.
+  if (C.getPlatform && C.getPlatform() === 'ios') return null;
   return (C.Plugins && C.Plugins.Purchases) || null;
 }
 
@@ -3084,7 +3156,10 @@ function renderShop() {
   
   // Free sources
   const free = document.getElementById('shop-free');
-  free.innerHTML = FREE_DIAMOND_SOURCES.map(src => {
+  // Reklam satırı, reklamın olmadığı platformda (iOS) hiç çizilmiyor.
+  // Pasif çizmek "hakkın bitti" anlamına gelirdi ve AdBudget.label() da
+  // olmayan bir havuzdan sayı okurdu; satırın kendisi yanlış olurdu.
+  free.innerHTML = FREE_DIAMOND_SOURCES.filter(src => src.dynamic !== 'ad' || adsSupported()).map(src => {
     // Reklam satırı bütçeyi GÖSTERİR ve bütçe bittiğinde pasifleşir —
     // tıklanıp "hakkın bitti" toast'ı yemek yerine durum baştan görünür.
     const adRow = src.dynamic === 'ad';
@@ -4143,10 +4218,24 @@ function refreshGameOverOffers() {
     btn.disabled = !enabled;
   };
 
+  // Reklamın olmadığı platformda (iOS) reklam satırları GİZLENİYOR,
+  // pasifleştirilmiyor. Bu, bu dosyada zaten kayıtlı olan kuralın aynısı:
+  // tıklanabilir "Yakında" ayar satırları sürüm arayüzünden tam da build'in
+  // tutamayacağı bir söz verdikleri için kaldırılmıştı. Soluk bir "reklam
+  // izle" düğmesi de aynı şeyi yapardı — üstelik burada "yarın gel" bile
+  // demiyor, çünkü yarın da olmayacak.
+  //
+  // Plus'lı oyuncuda GİZLENMİYOR: onun düğmesi zaten reklam düğmesi değil,
+  // "anında devam" düğmesi ve reklam yokluğundan etkilenmiyor.
+  const adsOff = !plus && !adsSupported();
+
   // Devam — reklam satırı. Premium'da reklam yok: düğme "anında devam"
   // düğmesine dönüşüyor (bkz. continueWithAd).
   const contAd = document.getElementById('go-continue-ad');
-  if (plus) {
+  if (contAd) contAd.style.display = adsOff ? 'none' : '';
+  if (adsOff) {
+    // Düğme gizli; etiketini yazmanın anlamı yok.
+  } else if (plus) {
     setBtn(contAd, '👑', t('go_continue_plus'), true);
   } else if (RewardedAd._pending) {
     // Reklam yolda. Bunu SÖYLEMEK zorundayız: ölçülen yükleme süresi ilk
@@ -4177,8 +4266,16 @@ function refreshGameOverOffers() {
   }
 
   // Skor 2x — yalnızca reklam. Elmas alternatifi bilerek YOK.
+  //
+  // Bunun sonucu: reklamsız platformda skor 2x TAMAMEN kaybolur, devam ve
+  // ipucu gibi elmas yolu olan yüzeylerin aksine. Bu, "skor satın alınmaz"
+  // kararının doğrudan bedeli ve bilerek kabul edildi — 2x'e elmas yolu
+  // açmak, iOS'u bahane ederek o kararı sessizce geri almak olurdu.
   const dbl = document.getElementById('go-double');
-  if (plus) {
+  if (dbl) dbl.style.display = adsOff ? 'none' : '';
+  if (adsOff) {
+    // Gizli.
+  } else if (plus) {
     setBtn(dbl, '👑', t('go_double_plus'), true);
   } else {
     // Devam düğmesiyle aynı gerekçe: skor 2x günlük hakka işlemiyor.
