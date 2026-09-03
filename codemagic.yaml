@@ -171,3 +171,259 @@ workflows:
         notify:
           success: true
           failure: true
+
+  # ── App Store ekran görüntüsü çekimi ────────────────────────────────
+  #
+  # Diğer iki iş akışından TAMAMEN AYRI yazıldı ve onlarla hiçbir çapa
+  # paylaşmıyor. Sebep: env_ios `ios_signing` taşıyor, burada ise imzalama
+  # ne gerekli ne de istenir — simulator derlemesi imzasız yapılır ve bu
+  # iş akışı hiçbir yere yükleme yapmaz. Paylaşılan çapayı kullanmak,
+  # ekran görüntüsü almak için App Store Connect entegrasyonunu zorunlu
+  # kılardı.
+  #
+  # ── ÖNEMLİ: VNC (uzaktan erişim) ELLE AÇILMALI ─────────────────────
+  # Bu iş akışı, insanın simulator'ı elle kullanmasına dayanıyor. Codemagic
+  # arayüzünde "Start new build" penceresinde **Enable remote access**
+  # işaretlenmeden başlatılırsa bağlanılacak bir ekran olmaz: derleme
+  # yapılır, 45 dakika DONE bekler ve hiçbir görüntü alınmadan biter.
+  # yaml'dan açılabilen bir ayar değil, bu yüzden burada yazılı.
+  ios-screenshots:
+    name: SlySwipe iOS — App Store Screenshots
+    instance_type: mac_mini_m2
+    # 45 dakikalık elle çalışma + derleme + pod install. Süre buna göre;
+    # diğer iş akışlarının 60'ı burada yetmez.
+    max_build_duration: 90
+    environment:
+      # ios_signing YOK ve integrations YOK — bilerek.
+      #
+      # xcode/cocoapods/node değerleri env_ios ile AYNI olmak zorunda:
+      # aynı Xcode hattı, aynı pod çözümü. Çapa paylaşılmadığı için bu
+      # eşitlik elle korunuyor — env_ios'taki `xcode:` değeri
+      # değiştirilirse buradaki de aynı turda değiştirilmeli, yoksa ekran
+      # görüntüleri yayınlanan derlemeden farklı bir derlemeden gelir.
+      xcode: latest
+      cocoapods: default
+      node: 20
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.skyroonlabs.slyswipe"
+        SIM_DEVICE: "iPhone 12 Pro Max"
+        # App Store Connect'in 6.5" alanı bu dikey boyutu kabul ediyor ve
+        # iPhone 12 Pro Max'in native çözünürlüğü buna birebir uyuyor.
+        EXPECT_W: "1284"
+        EXPECT_H: "2778"
+        SHOTS_DIR: "screenshots"
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/CocoaPods
+        - $CM_BUILD_DIR/node_modules
+    scripts:
+      - name: Bağımlılıklar (npm ci)
+        script: |
+          npm ci
+
+      - name: Web varlıkları + cap sync ios
+        script: |
+          # Diğer iş akışlarıyla aynı güvenli yol: npm run sync:ios =
+          # build-www.js + cap sync ios (pod install dahil). `npx cap sync`
+          # doğrudan çağrılmıyor — o, www/ klasörünü yeniden üretmeden
+          # kopyalar, yani orada duran bayat bir anlık görüntüyü paketler.
+          npm run sync:ios
+
+      - name: Simulator cihazını hazırla (iPhone 12 Pro Max)
+        script: |
+          set -e
+
+          # Zaten var mı? `available` filtresi, çalışma zamanı silinmiş
+          # hayalet cihazları eliyor — onlara boot denemek anlamsız bir
+          # hata veriyor.
+          UDID=$(xcrun simctl list devices available \
+                 | grep -E "^[[:space:]]+${SIM_DEVICE} \(" \
+                 | head -1 \
+                 | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+
+          if [ -z "$UDID" ]; then
+            echo "${SIM_DEVICE} mevcut degil; bu Xcode altinda olusturulabilir mi bakiliyor."
+
+            DEVICE_TYPE=$(xcrun simctl list devicetypes \
+                          | grep -F "${SIM_DEVICE} (" \
+                          | sed -E 's/.*\((com\.apple\.CoreSimulator\.SimDeviceType\.[^)]+)\).*/\1/' \
+                          | head -1)
+            RUNTIME=$(xcrun simctl list runtimes \
+                      | grep -o 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*' \
+                      | tail -1)
+
+            if [ -z "$DEVICE_TYPE" ] || [ -z "$RUNTIME" ]; then
+              # ACIK HATA: rastgele baska bir cihaza dusmek YOK. Farkli
+              # cozunurlukte bir cihaz, App Store'un reddedecegi ekran
+              # goruntusu uretir ve bunu ancak yukleme aninda ogrenirdik.
+              echo ""
+              echo "HATA: ${SIM_DEVICE} bu Xcode surumunde olusturulamiyor."
+              echo "  device type : ${DEVICE_TYPE:-BULUNAMADI}"
+              echo "  runtime     : ${RUNTIME:-BULUNAMADI}"
+              echo ""
+              echo "Yeni Xcode surumleri eski cihaz tiplerini kaldiriyor."
+              echo "Bilerek baska bir cihaza DUSMUYORUZ. Sonraki adim bir"
+              echo "insan karari: ayni 1284x2778 cozunurlugu iPhone 14/15/16"
+              echo "Plus da veriyor, ya da environment icindeki xcode degeri"
+              echo "bu cihazi hala tasiyan bir hatta sabitlenebilir."
+              echo ""
+              echo "Mevcut iPhone cihaz tipleri:"
+              xcrun simctl list devicetypes | grep -i iphone || true
+              exit 1
+            fi
+
+            echo "Olusturuluyor: ${SIM_DEVICE} / ${DEVICE_TYPE} / ${RUNTIME}"
+            UDID=$(xcrun simctl create "${SIM_DEVICE}" "$DEVICE_TYPE" "$RUNTIME")
+          fi
+
+          echo "Simulator UDID: $UDID"
+          # Sonraki adimlar ayri kabuklar — degisken dosyaya yaziliyor.
+          echo "$UDID" > "$CM_BUILD_DIR/.sim_udid"
+
+      - name: Simulator icin Debug derle (imzasiz)
+        script: |
+          set -e
+          UDID=$(cat "$CM_BUILD_DIR/.sim_udid")
+
+          # CODE_SIGNING_ALLOWED=NO: simulator derlemesi imza istemez ve
+          # istememeli — bu is akisinin sertifika/profil gerektirmemesinin
+          # tek sebebi bu satir.
+          xcodebuild build \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$CM_BUILD_DIR/ios/simbuild" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+          APP_PATH="$CM_BUILD_DIR/ios/simbuild/Build/Products/Debug-iphonesimulator/App.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "HATA: derlenen .app bulunamadi: $APP_PATH"
+            exit 1
+          fi
+          echo "$APP_PATH" > "$CM_BUILD_DIR/.sim_app"
+          echo "Derlendi: $APP_PATH"
+
+      - name: Simulator baslat, uygulamayi kur ve ac
+        script: |
+          set -e
+          UDID=$(cat "$CM_BUILD_DIR/.sim_udid")
+          APP_PATH=$(cat "$CM_BUILD_DIR/.sim_app")
+
+          # bootstatus -b: kapaliysa acar ve acilis BITENE KADAR bekler.
+          # Beklemeden install etmek "device not booted" ile dusuyor.
+          xcrun simctl bootstatus "$UDID" -b
+
+          # GUI: VNC ile baglanan insanin gorecegi pencere bu.
+          open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+
+          xcrun simctl install "$UDID" "$APP_PATH"
+          xcrun simctl launch "$UDID" "$BUNDLE_ID"
+          echo "Uygulama acildi: $BUNDLE_ID"
+
+      - name: Ekran goruntusu klasoru + talimat
+        script: |
+          set -e
+          mkdir -p "$CM_BUILD_DIR/$SHOTS_DIR"
+
+          # Onceki bir kosumdan/cache'ten kalan DONE, bekleme adimini
+          # aninda gecirip hic goruntu almadan bitmesine yol acardi.
+          rm -f "$CM_BUILD_DIR/$SHOTS_DIR/DONE"
+
+          echo ""
+          echo "==========================================================="
+          echo "  VNC ile Simulator'da istedigin ekrana git."
+          echo "==========================================================="
+          echo ""
+          echo "Ekran goruntusu almak icin (Mac uzerinde bir terminalde):"
+          echo ""
+          echo "  xcrun simctl io booted screenshot \"$CM_BUILD_DIR/$SHOTS_DIR/01-discover.png\""
+          echo ""
+          echo "Sonraki goruntuler icin ayni komut, yalniz dosya adi degisir:"
+          echo "  02-arcade.png"
+          echo "  03-ufo.png"
+          echo "  04-block.png"
+          echo "  05-flow.png"
+          echo "  06-wordsearch.png"
+          echo ""
+          echo "Is bitince:"
+          echo ""
+          echo "  touch \"$CM_BUILD_DIR/$SHOTS_DIR/DONE\""
+          echo ""
+          echo "==========================================================="
+          echo "Klasor          : $CM_BUILD_DIR/$SHOTS_DIR"
+          echo "Beklenen boyut  : ${EXPECT_W}x${EXPECT_H} (dikey)"
+          echo "DONE bekleme    : en fazla 45 dakika"
+          echo "==========================================================="
+          echo ""
+
+      - name: DONE bekle (en fazla 45 dakika)
+        script: |
+          # SINIRLI dongu: sonsuz bekleme makineyi max_build_duration
+          # dolana kadar tutar ve arkasinda hicbir aciklama birakmaz.
+          DEADLINE=$(( $(date +%s) + 45 * 60 ))
+          while [ ! -f "$CM_BUILD_DIR/$SHOTS_DIR/DONE" ]; do
+            if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+              echo "45 dakika doldu, DONE olusmadi — o ana kadar alinan"
+              echo "goruntulerle devam ediliyor. Hic goruntu yoksa sonraki"
+              echo "adim kosumu basarisiz sayacak."
+              break
+            fi
+            sleep 15
+          done
+          if [ -f "$CM_BUILD_DIR/$SHOTS_DIR/DONE" ]; then
+            echo "DONE goruldu, devam ediliyor."
+          fi
+
+      - name: Cozunurluk dogrulamasi
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+
+          # maxdepth 1 ZORUNLU: screenshots/ altinda i18n-qa, raw ve
+          # store-ready klasorleri var ve onlar Android QA goruntuleri —
+          # baska cozunurluklerde. Ozyinelemeli bir arama, bu kosumun
+          # urettigi goruntuler kusursuzken bile denetimi dusururdu.
+          SHOTS=$(find "$SHOTS_DIR" -maxdepth 1 -type f -name '*.png' | sort)
+
+          if [ -z "$SHOTS" ]; then
+            echo "HATA: $SHOTS_DIR/ icinde hic PNG yok. Ekran goruntusu alinmamis."
+            echo "Kosum 'Enable remote access' isaretli olarak mi baslatildi?"
+            exit 1
+          fi
+
+          BAD=0
+          COUNT=0
+          echo ""
+          echo "Alinan ekran goruntuleri:"
+          for f in $SHOTS; do
+            W=$(sips -g pixelWidth  "$f" | awk '/pixelWidth/{print $2}')
+            H=$(sips -g pixelHeight "$f" | awk '/pixelHeight/{print $2}')
+            COUNT=$((COUNT + 1))
+            if [ "$W" = "$EXPECT_W" ] && [ "$H" = "$EXPECT_H" ]; then
+              printf "  OK      %-28s %sx%s\n" "$(basename "$f")" "$W" "$H"
+            else
+              printf "  YANLIS  %-28s %sx%s (beklenen ${EXPECT_W}x${EXPECT_H})\n" "$(basename "$f")" "$W" "$H"
+              BAD=$((BAD + 1))
+            fi
+          done
+          echo ""
+          echo "Toplam: $COUNT dosya, $BAD tanesi yanlis boyutta."
+
+          if [ "$BAD" -ne 0 ]; then
+            # Yanlis cozunurluk App Store'da YUKLEME aninda reddediliyor.
+            # Burada basarili saymak, hatayi en pahali yere ertelemek olur.
+            echo "HATA: yanlis cozunurlukte goruntu var — kosum basarisiz."
+            exit 1
+          fi
+          echo "Butun goruntuler ${EXPECT_W}x${EXPECT_H}."
+
+    artifacts:
+      # Yalniz kok seviye: alt klasorlerdeki mevcut QA goruntuleri
+      # bilerek disarida.
+      - screenshots/*.png
+
+    # publishing YOK — bu is akisi hicbir yere yukleme yapmaz.
