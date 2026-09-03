@@ -178,11 +178,32 @@ Seven things are load-bearing:
    `res/xml/locales_config.xml` and must be updated with it — `tools/i18n-test.js` derives
    the canonical set from `locales/en.js`, **not** from either file, so both can silently
    fall behind.
-6. **Orientation is locked to portrait, `~ipad` included.** The template opened landscape as
-   well. Yılan's fixed 15×26 grid, Flappy's world unit and Akış Bağlantı's portrait board
-   were all measured against portrait proportions. The iPad entry is deliberate: Android 16
-   ignoring the orientation lock on ≥600dp screens is already recorded as an **open,
-   untested** risk, and iOS should not repeat it.
+6. **The app ships iPhone-only (`TARGETED_DEVICE_FAMILY = "1"`, both Debug and Release) and
+   orientation is locked to portrait.** The template opened landscape as well; Yılan's fixed
+   15×26 grid, Flappy's world unit and Akış Bağlantı's portrait board were all measured
+   against portrait proportions, so portrait is a measured constraint rather than a
+   preference.
+   **The device family was `"1,2"` until 2026-08-28 and TestFlight rejected the upload for
+   it** — *"Invalid bundle: iPad multitasking için gerekli interface orientations eksik"*.
+   The instructive part is that **the orientation setting was not what was wrong**: Apple
+   requires all four orientations from an app that *declares iPad support*, and this one
+   declared iPad while locking portrait including `~ipad`. The rejection was the
+   contradiction between the two declarations, not a bad value in either.
+   Of the two ways out, the second was taken by owner decision: opening the four
+   orientations for iPad multitasking would put a layout on the store that **has never been
+   tested** on a tablet (see the Android note below), while not declaring iPad removes the
+   contradiction at its source and leaves the portrait design untouched. **iPad is therefore
+   outside the first release's scope** — not declared, not tested, not shipped.
+   **`UIRequiresFullScreen` was NOT used.** It is the old way to silence the iPad
+   multitasking requirement, it is deprecated, and it is moot here anyway: with iPad out of
+   the device family the requirement never applies.
+   **`UISupportedInterfaceOrientations~ipad` deliberately stays in `Info.plist`.** Under
+   `TARGETED_DEVICE_FAMILY = "1"` Apple ignores it entirely, so it is inert in the shipping
+   build; it is kept so the portrait intent is already recorded if iPad is ever supported.
+   The Android reason for that intent still stands and is why iPad support cannot simply be
+   switched on: Android 16 ignoring the orientation lock on ≥600dp screens is recorded as an
+   **open, untested** risk, and a large-screen layout has to be verified on a real device
+   before either platform claims to support one.
 7. **`ITSAppUsesNonExemptEncryption=false` is what keeps the pipeline unattended.** Without
    it App Store Connect asks the export-compliance question on every upload and the build
    waits in TestFlight until a human answers.
