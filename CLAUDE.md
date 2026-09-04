@@ -173,6 +173,18 @@ Seven things are load-bearing:
    holds three hashes that are Android-specific and bound to the *signing key*. None is valid
    on iOS. A real iOS ad unit id must not be used before that protection is rebuilt — the
    account-suspension risk §5 documents for Android applies identically.
+   **`NSUserTrackingUsageDescription` was REMOVED on 2026-08-28** (owner decision), because
+   ads are off on iOS and the app therefore never asks for tracking permission. Note the
+   asymmetry with `GADApplicationIdentifier` in point 3, which had to stay: that one crashes
+   the app by its *absence*, this one only matters when ATT is actually requested.
+   **Turning iOS ads back on means restoring the key and the ATT call TOGETHER, and the
+   order is not free:** `requestTrackingAuthorization` without the key in `Info.plist`
+   terminates the app immediately. Shipping the code half first is a crash on launch of the
+   ad path; shipping the key half first is merely an unused string. `tools/ios-gating-test.js`
+   §7 asserts both halves are absent, with `GADApplicationIdentifier` as the negative control
+   so the scan cannot pass by reporting every key as missing. The plugin exposes
+   `requestTrackingAuthorization`, so the harness's fake AdMob deliberately does **not** stub
+   it — a call would throw rather than pass silently.
 5. **`CFBundleLocalizations` is what the App Store reads for "supported languages".** The
    `core/i18n.js` runtime is invisible to it. This list is the iOS twin of Android's
    `res/xml/locales_config.xml` and must be updated with it — `tools/i18n-test.js` derives

@@ -117,13 +117,5 @@
 	     kurulmadan kullanilmamali.                                     -->
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
-
-	<!-- ATT izni. Su an istenmiyor (reklam kapali), ama anahtarin
-	     varligi zararsiz ve reklam acildiginda gereken ilk sey bu.
-	     TODO(iOS-monetizasyon): InfoPlist.strings ile 15 dile cevir —
-	     bu metin kullaniciya SISTEM diyalogunda gosteriliyor, yani
-	     uygulamanin cevrilmis olmasi onu kapsamiyor.                   -->
-	<key>NSUserTrackingUsageDescription</key>
-	<string>This identifier is used to show you more relevant ads.</string>
 </dict>
 </plist>

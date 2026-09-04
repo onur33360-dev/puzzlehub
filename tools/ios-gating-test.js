@@ -51,7 +51,11 @@ function fakeAdMob() {
     showInterstitial:      () => Promise.resolve(),
     addListener:           () => Promise.resolve({ remove() {} }),
     requestConsentInfo:    () => Promise.resolve({ isConsentFormAvailable: false, status: 'NOT_REQUIRED' }),
-    requestTrackingAuthorization: () => Promise.resolve(),
+    // requestTrackingAuthorization BILEREK YOK. Eklenti bu API'yi sunuyor
+    // ama uygulama onu hicbir yerde cagirmiyor; sahte eklentide tutmak,
+    // cagrilmasi durumunda testin sessizce gecmesi demek olurdu. Boyle
+    // bir cagri artik burada TypeError ile patlar — 7. bolumdeki kaynak
+    // taramasina ek bir calisma zamani agi.
   };
 }
 
@@ -204,6 +208,42 @@ function boot(platform, store) {
     const uses = (APP_SRC.match(/adsSupported\(\)/g) || []).length;
     check('adsSupported() en az 6 yerde tüketiliyor', uses >= 6,
           'yalnızca ' + uses + ' kullanım — bir yüzey atlanmış olabilir');
+  }
+
+  console.log('\n7. ATT (İZLEME İZNİ) YOK');
+  {
+    // Reklam iOS'ta kapali oldugu icin izleme izni de HIC istenmiyor ve
+    // NSUserTrackingUsageDescription Info.plist'ten kaldirildi.
+    //
+    // IKISI BIRLIKTE DOGRULANMAK ZORUNDA, ve sebebi tek yonlu degil:
+    // anahtarsiz bir requestTrackingAuthorization cagrisi uygulamayi
+    // ANINDA DUSURUYOR. Yani ikisinden yalnizca birini geri getirmek —
+    // ozellikle once kodu — calisma zamaninda cokme demek. Bu denetim,
+    // ikisinin ayni anda geri gelmesini sart kosuyor.
+    const fs = require('fs');
+    const path = require('path');
+    const { ROOT } = require('./dom-sandbox');
+
+    const plist = fs.readFileSync(path.join(ROOT, 'ios/App/App/Info.plist'), 'utf8');
+    check('Info.plist NSUserTrackingUsageDescription TASIMIYOR',
+          plist.indexOf('NSUserTrackingUsageDescription') < 0,
+          'anahtar geri gelmis — ATT kod yolu da geri geldiyse birlikte olmali');
+
+    // GADApplicationIdentifier'in AKSINE, o kalmak ZORUNDA: Mobile Ads
+    // iOS SDK'si acilista onu ariyor ve bulamazsa uygulamayi dusuruyor.
+    // Negatif kontrol gorevi de goruyor — taramanin her anahtari
+    // "yok" diye raporlamadigini kanitliyor.
+    check('Info.plist GADApplicationIdentifier TASIYOR (kalmali)',
+          plist.indexOf('GADApplicationIdentifier') >= 0,
+          'SDK bagli oldugu icin bu anahtar silinirse uygulama acilista cokuyor');
+
+    for (const rel of ['core/app.js', 'index.html']) {
+      const src = readSrc(rel);
+      check(rel + ' ATT cagrisi icermiyor',
+            src.indexOf('requestTrackingAuthorization') < 0 &&
+            src.indexOf('ATTrackingManager') < 0,
+            'ATT cagrisi eklenmis ama Info.plist anahtari yok — cokme');
+    }
   }
 
   console.log('\n' + (failures === 0 ? 'TÜM TESTLER GEÇTİ' : failures + ' TEST BAŞARISIZ'));
