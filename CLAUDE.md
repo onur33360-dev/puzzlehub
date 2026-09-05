@@ -138,10 +138,41 @@ machine — `npx cap add ios` and `npm run assets:ios` work on Windows, but `pod
 | `npm run ios` | `sync:ios` + open Xcode (macOS only) |
 | `npm run assets:ios` | regenerate the iOS icon + splash from `assets/logo.png` |
 
-**Two Codemagic workflows, and the split is diagnostic, not cosmetic.** `ios-ipa` only
-produces a signed `.ipa`; `ios-testflight` uploads the same build. **Run `ios-ipa` first.**
-It separates "is signing and compilation correct?" from "does an App Store Connect app
-record exist?" — combined in one step, a red run does not say which of the two failed.
+**Four Codemagic workflows, and every split is diagnostic, not cosmetic.**
+
+| Workflow | Does | Signing |
+|---|---|---|
+| `ios-ipa` | signed `.ipa`, no upload | yes |
+| `ios-testflight` | same build + TestFlight | yes |
+| `ios-screenshots` | simulator + VNC, App Store screenshots | no |
+| `ios-admob-smoke` | simulator launch, crash-free check for AdMob/UMP | no |
+
+**Run `ios-ipa` before `ios-testflight`.** It separates "is signing and compilation
+correct?" from "does an App Store Connect app record exist?" — combined in one step, a red
+run does not say which of the two failed.
+
+**The two simulator workflows share no anchor with the two signed ones**, and that is the
+point: `env_ios` carries `ios_signing`, so reusing it would make an App Store Connect
+integration a prerequisite for taking a screenshot or running a crash check. The cost is
+that `xcode` / `cocoapods` / `node` are duplicated and must be moved together.
+
+**`ios-admob-smoke` is the only way iOS ad code gets exercised at all — there is no iPhone
+here.** It boots any available iPhone simulator (no model is demanded: this is a crash test,
+not a screenshot run, and pinning a model would turn an Xcode upgrade into a red build for
+a reason unrelated to the code), builds unsigned Debug, launches, waits 20 s, and asserts
+the process is still alive, that no `.ips` crash report appeared, that the native log holds
+no fatal signature, and that the screenshot is **not a flat colour** — a blank WebView over
+the native background looks perfectly healthy from the process's point of view, so "alive"
+and "rendered" are two separate questions. `IOS_ADS_TEST_MODE` stays `true`; only Google's
+demo units are ever requested.
+**What it cannot prove:** that ads serve. More precisely, a missing
+`GADApplicationIdentifier` only crashes when the Mobile Ads SDK is *started*, and that
+happens solely when UMP returns `canRequestAds=true` — which depends on network and console
+configuration. So the run reports whether an AdMob init trace was seen instead of failing on
+its absence; a red build caused by CI network conditions would say nothing about the code.
+The build step closes half of that gap deterministically by reading
+`GADApplicationIdentifier` and `NSUserTrackingUsageDescription` out of the **built**
+`App.app/Info.plist` — the repo file is not the artifact that ships.
 
 **`@capacitor/ios` is pinned to the v7 line, and the version floor is a PAIR.** npm resolves
 the package to 8.x, which demands `@capacitor/core >= 8` against this project's Capacitor 7 —

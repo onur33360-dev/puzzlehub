@@ -427,3 +427,390 @@ workflows:
       - screenshots/*.png
 
     # publishing YOK — bu is akisi hicbir yere yukleme yapmaz.
+
+  # ── iOS AdMob + UMP crash duman testi ───────────────────────────────
+  #
+  # SORU: iOS AdMob/UMP entegrasyonu uygulamayi acilista dusuruyor mu?
+  #
+  # Fiziksel iPhone yok, o yuzden cevap Simulator'dan alinacak. Diger uc
+  # is akisiyla hicbir capa paylasmiyor ve imzalama/publishing/App Store
+  # Connect entegrasyonu TASIMIYOR — simulator derlemesi imzasiz yapilir
+  # ve bu is akisi hicbir yere yukleme yapmaz.
+  #
+  # ── BU TESTIN KANITLADIGI VE KANITLAMADIGI ────────────────────────
+  # Kanitlar: uygulama aciliyor, 20 saniye AYAKTA kaliyor, cokme raporu
+  # uretmiyor, WebView gercekten bir seyler ciziyor, ve native gunlukte
+  # olumcul istisna yok.
+  #
+  # KANITLAMAZ: reklamin gosterildigini. Simulator'da reklam dolmayabilir
+  # ve bu bir hata degil. Daha onemlisi, GADApplicationIdentifier'in
+  # eksikligi ancak Mobile Ads SDK'si BASLATILDIGINDA cokme uretiyor;
+  # SDK ise yalniz UMP canRequestAds=true derse baslatiliyor. Yani agin
+  # ya da UMP yapilandirmasinin durumuna gore o yol hic yurumeyebilir.
+  # Bu yuzden "AdMob initialize gozlendi mi" ayri bir satir olarak
+  # RAPORLANIYOR ama kosumu DUSURMUYOR — ag kosullari yuzunden kirmizi
+  # bir derleme, kodla ilgili hicbir sey soylemez.
+  #
+  # IOS_ADS_TEST_MODE=true kaliyor: yalniz Google'in demo birimleri.
+  ios-admob-smoke:
+    name: SlySwipe iOS — AdMob Simulator Smoke Test
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      # ios_signing YOK, integrations YOK, publishing YOK — bilerek.
+      # xcode/cocoapods/node degerleri env_ios ile ayni tutulmali; capa
+      # paylasilmadigi icin bu eslesme elle korunuyor.
+      xcode: latest
+      cocoapods: default
+      node: 20
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.skyroonlabs.slyswipe"
+        SMOKE_DIR: "smoke"
+        ALIVE_WAIT_SEC: "20"
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/CocoaPods
+        - $CM_BUILD_DIR/node_modules
+    scripts:
+      - name: Bagimliliklar (npm ci)
+        script: |
+          npm ci
+
+      - name: Reklam ve iOS kapisi kosumlari
+        script: |
+          set -e
+          # Derlemeden ONCE. Bir kimlik/kapi hatasini simulator'da cokme
+          # olarak aramak, onu zaten sifir bagimlilikli Node ile saniyeler
+          # icinde cevaplayabilecekken pahali ve belirsiz bir yol olurdu.
+          node tools/ios-gating-test.js
+          node tools/ad-release-test.js
+          node tools/ad-consent-test.js
+          node tools/interstitial-test.js
+
+      - name: Web varliklari + cap sync ios
+        script: |
+          # npm run sync:ios = build-www.js + cap sync ios (pod install
+          # dahil). `npx cap sync` dogrudan cagrilmiyor — o, www/'yi
+          # yeniden uretmeden kopyalar.
+          npm run sync:ios
+
+      - name: Simulator sec ve baslat
+        script: |
+          set -e
+          mkdir -p "$CM_BUILD_DIR/$SMOKE_DIR"
+
+          # Belirli bir model SART DEGIL: bu bir cokme testi, ekran
+          # goruntusu uretimi degil (ios-screenshots orada iPhone 12 Pro
+          # Max'i sart kosuyor cunku cozunurluk App Store'a giriyor).
+          # Burada tek gereken calisan bir iPhone; model dayatmak, Xcode
+          # surumu o cihazi kaldirdiginda testi kodla ilgisiz bir sebeple
+          # kirmizi yapardi.
+          UDID=$(xcrun simctl list devices available \
+                 | grep -E "^[[:space:]]+iPhone .*\([0-9A-Fa-f-]{36}\)" \
+                 | head -1 \
+                 | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+
+          if [ -z "$UDID" ]; then
+            echo "Hazir iPhone yok; olusturuluyor."
+            DEVICE_TYPE=$(xcrun simctl list devicetypes \
+                          | grep -o 'com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[0-9A-Za-z-]*' \
+                          | tail -1)
+            RUNTIME=$(xcrun simctl list runtimes \
+                      | grep -o 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*' \
+                      | tail -1)
+            if [ -z "$DEVICE_TYPE" ] || [ -z "$RUNTIME" ]; then
+              echo "HATA: bu Xcode altinda hicbir iPhone simulatoru olusturulamiyor."
+              echo "  device type : ${DEVICE_TYPE:-BULUNAMADI}"
+              echo "  runtime     : ${RUNTIME:-BULUNAMADI}"
+              xcrun simctl list devicetypes | grep -i iphone || true
+              xcrun simctl list runtimes || true
+              exit 1
+            fi
+            UDID=$(xcrun simctl create "SlySwipe-Smoke" "$DEVICE_TYPE" "$RUNTIME")
+          fi
+
+          NAME=$(xcrun simctl list devices \
+                 | grep -F "$UDID" \
+                 | sed -E 's/^[[:space:]]*(.*) \([0-9A-Fa-f-]{36}\).*/\1/')
+
+          echo "$UDID" > "$CM_BUILD_DIR/.smoke_udid"
+          echo "$NAME" > "$CM_BUILD_DIR/.smoke_name"
+          echo "Simulator : $NAME"
+          echo "UDID      : $UDID"
+
+          # bootstatus -b: kapaliysa acar ve acilis BITENE KADAR bekler.
+          # Beklemeden install etmek "device not booted" ile duser.
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Imzasiz Debug simulator derlemesi
+        script: |
+          set -e
+          UDID=$(cat "$CM_BUILD_DIR/.smoke_udid")
+
+          # CODE_SIGNING_ALLOWED=NO: bu is akisinin sertifika/profil
+          # gerektirmemesinin tek sebebi bu satir.
+          xcodebuild build \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$CM_BUILD_DIR/ios/smokebuild" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tee "$CM_BUILD_DIR/$SMOKE_DIR/build.log" | tail -40
+
+          APP_PATH="$CM_BUILD_DIR/ios/smokebuild/Build/Products/Debug-iphonesimulator/App.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "HATA: derlenen .app bulunamadi: $APP_PATH"
+            exit 1
+          fi
+          echo "$APP_PATH" > "$CM_BUILD_DIR/.smoke_app"
+
+          # Paketlenen Info.plist'i DOGRULA. Depodaki dosyayi okumak
+          # yeterli degil: asil soru derlemenin ciktisinda ne oldugu, ve
+          # bu iki anahtarin yoklugu tam da aranan cokmelerin sebebi.
+          BUILT_PLIST="$APP_PATH/Info.plist"
+          GAD=$(/usr/libexec/PlistBuddy -c "Print :GADApplicationIdentifier" "$BUILT_PLIST" 2>/dev/null || echo "")
+          ATT=$(/usr/libexec/PlistBuddy -c "Print :NSUserTrackingUsageDescription" "$BUILT_PLIST" 2>/dev/null || echo "")
+          echo "Paketlenen GADApplicationIdentifier       : ${GAD:-YOK}"
+          echo "Paketlenen NSUserTrackingUsageDescription : ${ATT:+VAR}${ATT:-YOK}"
+          if [ -z "$GAD" ]; then
+            echo "HATA: GADApplicationIdentifier pakette YOK — Mobile Ads SDK acilista cokertir."
+            exit 1
+          fi
+          if [ -z "$ATT" ]; then
+            echo "HATA: NSUserTrackingUsageDescription pakette YOK — UMP izin istedigi anda uygulama sonlanir."
+            exit 1
+          fi
+          echo "Derleme tamam: $APP_PATH"
+
+      - name: Kur, gunlugu ac, baslat ve 20 saniye bekle
+        script: |
+          set -e
+          UDID=$(cat "$CM_BUILD_DIR/.smoke_udid")
+          APP_PATH=$(cat "$CM_BUILD_DIR/.smoke_app")
+          SMOKE="$CM_BUILD_DIR/$SMOKE_DIR"
+
+          xcrun simctl install "$UDID" "$APP_PATH"
+
+          # Gunluk akisi BASLATMADAN ONCE aciliyor: aranan cokmelerin
+          # hepsi acilis anindaki olaylar, sonradan toplanan bir gunluk
+          # tam o pencereyi kacirirdi.
+          #
+          # Predicate ile daralttik: filtresiz bir akis 30 saniyede on
+          # megabaytlarca satir uretiyor ve okunamayan bir artifact,
+          # olmayan bir artifacttir.
+          xcrun simctl spawn "$UDID" log stream --style compact --level info \
+            --predicate 'processImagePath CONTAINS "App" OR processImagePath CONTAINS "WebContent" OR senderImagePath CONTAINS "GoogleMobileAds" OR senderImagePath CONTAINS "UserMessagingPlatform" OR eventMessage CONTAINS[c] "slyswipe" OR eventMessage CONTAINS "GAD" OR eventMessage CONTAINS "UMP" OR eventMessage CONTAINS[c] "consent" OR eventMessage CONTAINS[c] "tracking" OR eventMessage CONTAINS[c] "exception" OR eventMessage CONTAINS[c] "webcontent"' \
+            > "$SMOKE/native.log" 2>&1 &
+          LOGPID=$!
+          echo "$LOGPID" > "$CM_BUILD_DIR/.smoke_logpid"
+          sleep 2
+
+          # simctl launch, uygulamanin HOST uzerindeki PID'ini yaziyor
+          # (simulator uygulamalari gercek macOS surecleridir), yani
+          # ayakta olup olmadigi duz `ps` ile sorulabilir.
+          LAUNCH_OUT=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1) || {
+            echo "HATA: uygulama BASLATILAMADI"
+            echo "$LAUNCH_OUT"
+            kill "$LOGPID" 2>/dev/null || true
+            exit 1
+          }
+          echo "launch: $LAUNCH_OUT"
+          PID=$(echo "$LAUNCH_OUT" | sed -E 's/.*:[[:space:]]*([0-9]+).*/\1/')
+          echo "$PID" > "$CM_BUILD_DIR/.smoke_pid"
+          echo "Uygulama PID: $PID"
+
+          echo "Ayakta kalma penceresi: ${ALIVE_WAIT_SEC} saniye…"
+          sleep "$ALIVE_WAIT_SEC"
+
+          # Ekran goruntusu, sureci oldurmeden ONCE ve bekleme bittikten
+          # SONRA: acilis sahnesi ~6 saniye surdugu icin daha erken bir
+          # kare yalnizca splash'i gosterirdi.
+          xcrun simctl io "$UDID" screenshot "$SMOKE/home.png" || true
+
+          kill "$LOGPID" 2>/dev/null || true
+          sleep 1
+          echo "Gunluk satir sayisi: $(wc -l < "$SMOKE/native.log" | tr -d ' ')"
+
+      - name: Surec ayakta mi + cokme raporu var mi
+        script: |
+          set -e
+          UDID=$(cat "$CM_BUILD_DIR/.smoke_udid")
+          PID=$(cat "$CM_BUILD_DIR/.smoke_pid")
+          SMOKE="$CM_BUILD_DIR/$SMOKE_DIR"
+          FAIL=0
+
+          # ── 1. Surec hala yasiyor mu (ASIL SORU) ──
+          if ps -p "$PID" > /dev/null 2>&1; then
+            echo "OK    surec ${ALIVE_WAIT_SEC} saniye sonra AYAKTA (pid $PID)"
+          else
+            # Ikinci kanal: PID yakalama sed'i tutmadiysa yanlis alarm
+            # vermeyelim. simctl'in kendi listesi bagimsiz bir cevap.
+            if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -qF "$BUNDLE_ID"; then
+              echo "OK    surec ayakta (launchctl; pid okunamamisti)"
+            else
+              echo "HATA  surec ${ALIVE_WAIT_SEC} saniye dolmadan OLDU — cokme"
+              FAIL=1
+            fi
+          fi
+
+          # ── 2. Cokme raporu ──
+          # Bir .ips dosyasi, gunlukteki herhangi bir desenden daha kesin
+          # kanittir: yorum gerektirmez.
+          mkdir -p "$SMOKE/crashes"
+          FOUND=0
+          # Liste ARA DOSYAYA yaziliyor, borudan okunmuyor: `find | while`
+          # dongusu alt kabukta calisir ve iceride kurulan FOUND disariya
+          # hic ulasmaz — cokme bulunup kosum yine yesil derdi. (Heredoc da
+          # kullanilamaz: govdesi 0. sutuna dayandigi icin YAML blok
+          # skalerini erken kapatiyor.)
+          : > "$CM_BUILD_DIR/.smoke_ips"
+          for d in "$HOME/Library/Logs/DiagnosticReports" "$HOME/Library/Logs/CoreSimulator/$UDID"; do
+            [ -d "$d" ] || continue
+            find "$d" -maxdepth 2 -name '*.ips' -mmin -20 2>/dev/null >> "$CM_BUILD_DIR/.smoke_ips" || true
+          done
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$(basename "$f")" in
+              App-*|SlySwipe*|*WebContent*|*com.skyroonlabs*)
+                echo "HATA  cokme raporu: $f"
+                cp "$f" "$SMOKE/crashes/" 2>/dev/null || true
+                FOUND=1
+                ;;
+            esac
+          done < "$CM_BUILD_DIR/.smoke_ips"
+          if [ "$FOUND" -eq 0 ]; then
+            echo "OK    ilgili cokme raporu yok"
+          else
+            FAIL=1
+          fi
+
+          echo "$FAIL" > "$CM_BUILD_DIR/.smoke_fail"
+          exit 0
+
+      - name: Native gunlukte olumcul desen taramasi
+        script: |
+          set -e
+          SMOKE="$CM_BUILD_DIR/$SMOKE_DIR"
+          LOG="$SMOKE/native.log"
+          FAIL=$(cat "$CM_BUILD_DIR/.smoke_fail" 2>/dev/null || echo 0)
+          [ -f "$LOG" ] || { echo "UYARI: gunluk dosyasi yok"; echo "$FAIL" > "$CM_BUILD_DIR/.smoke_fail"; exit 0; }
+
+          # ── OLUMCUL: kosumu dusurur ──
+          # Her biri "uygulama sonlandi" anlamina gelen, yoruma acik
+          # olmayan imzalar. Ornegin cipla "GADApplicationIdentifier"
+          # BILEREK burada degil: SDK o anahtari normal calismada da
+          # anabiliyor, yani tek basina bir hata isareti degil. Eksikligin
+          # imzasi GADInvalidInitializationException ve "without an
+          # application ID" — olumcul olan bunlar.
+          FATAL='NSInternalInconsistencyException|GADInvalidInitializationException|without an application ID|NSUserTrackingUsageDescription.*(must|required|missing)|Fatal Exception|\*\*\* Terminating app|EXC_BAD_ACCESS|EXC_CRASH|Abort trap|WebContent.*(crash|terminated)|Uncaught .*Exception'
+
+          # ── DIKKAT: yalniz raporlanir ──
+          # Bunlarin varligi normal olabilir; okunmasi gereken satirlar.
+          WATCH='GADApplicationIdentifier|requestTrackingAuthorization|UMP|consent|ATTracking|Mobile Ads|SDKInitialization|JavaScript|WebContent'
+
+          echo "── OLUMCUL desen taramasi ──"
+          if grep -nEi "$FATAL" "$LOG" > "$SMOKE/fatal.txt" 2>/dev/null; then
+            echo "HATA  olumcul desen bulundu:"
+            head -30 "$SMOKE/fatal.txt"
+            FAIL=1
+          else
+            echo "OK    olumcul desen yok"
+            : > "$SMOKE/fatal.txt"
+          fi
+
+          echo
+          echo "── DIKKAT satirlari (yalniz bilgi) ──"
+          grep -nEi "$WATCH" "$LOG" 2>/dev/null | head -40 | tee "$SMOKE/watch.txt" || echo "  (eslesme yok)"
+
+          # AdMob SDK gercekten baslatildi mi? Bu satirin YOKLUGU kosumu
+          # DUSURMEZ (bkz. is akisi basligindaki not) ama testin ne kadar
+          # sey kanitladigini soyleyen tek isaret bu.
+          echo
+          if grep -qEi 'Mobile Ads|GADMobileAds|SDKInitialization' "$LOG" 2>/dev/null; then
+            echo "BILGI AdMob SDK baslatma izi GORULDU — GADApplicationIdentifier yolu yurudu."
+          else
+            echo "BILGI AdMob SDK baslatma izi YOK — muhtemelen UMP canRequestAds=false"
+            echo "      dondu. Bu bir hata degil, ama bu kosum reklam yolunu"
+            echo "      kanitlamamis oldu; ayakta kalma ve WebView sonuclari gecerli."
+          fi
+
+          echo "$FAIL" > "$CM_BUILD_DIR/.smoke_fail"
+          exit 0
+
+      - name: WebView gercekten cizdi mi (ekran goruntusu olcumu)
+        script: |
+          set -e
+          SMOKE="$CM_BUILD_DIR/$SMOKE_DIR"
+          FAIL=$(cat "$CM_BUILD_DIR/.smoke_fail" 2>/dev/null || echo 0)
+          SHOT="$SMOKE/home.png"
+
+          if [ ! -f "$SHOT" ]; then
+            echo "UYARI: ekran goruntusu alinamadi — WebView dogrulanamadi"
+            echo "$FAIL" > "$CM_BUILD_DIR/.smoke_fail"
+            exit 0
+          fi
+
+          # "Surec ayakta" ile "ekranda bir sey var" AYNI SEY DEGIL: bos
+          # bir WebView'la da uygulama saglikli gorunur. Duz renk bir kare
+          # tam olarak bu durumun imzasi, ve olculebilir: kanal basina
+          # standart sapma.
+          #
+          # sharp @capacitor/assets'in bagimliligi olarak npm ci ile
+          # geliyor (devDependency), yani yeni bir bagimlilik eklenmedi.
+          node -e '
+            const sharp = require("sharp");
+            const f = process.argv[1];
+            sharp(f).stats().then((s) => {
+              const dev = s.channels.slice(0, 3).map(c => c.stdev);
+              const mean = s.channels.slice(0, 3).map(c => Math.round(c.mean));
+              const maxDev = Math.max.apply(null, dev);
+              console.log("  ortalama renk : rgb(" + mean.join(",") + ")");
+              console.log("  std sapma     : " + dev.map(d => d.toFixed(1)).join(" / "));
+              if (maxDev < 3) {
+                console.log("HATA  ekran DUZ RENK — WebView hicbir sey cizmemis.");
+                process.exit(2);
+              }
+              console.log("OK    WebView icerik cizmis (sapma > 3)");
+            }).catch((e) => { console.log("UYARI olcum yapilamadi: " + e.message); process.exit(0); });
+          ' "$SHOT" || {
+            if [ $? -eq 2 ]; then FAIL=1; fi
+          }
+
+          echo "$FAIL" > "$CM_BUILD_DIR/.smoke_fail"
+          exit 0
+
+      - name: SONUC
+        script: |
+          SMOKE="$CM_BUILD_DIR/$SMOKE_DIR"
+          FAIL=$(cat "$CM_BUILD_DIR/.smoke_fail" 2>/dev/null || echo 0)
+          echo ""
+          echo "═══════════════════════════════════════════════════"
+          echo "  AdMob Simulator Smoke Test — OZET"
+          echo "═══════════════════════════════════════════════════"
+          echo "  simulator      : $(cat "$CM_BUILD_DIR/.smoke_name" 2>/dev/null)"
+          echo "  udid           : $(cat "$CM_BUILD_DIR/.smoke_udid" 2>/dev/null)"
+          echo "  bundle         : $BUNDLE_ID"
+          echo "  bekleme        : ${ALIVE_WAIT_SEC} sn"
+          echo "  gunluk satiri  : $(wc -l < "$SMOKE/native.log" 2>/dev/null | tr -d ' ')"
+          echo "  olumcul satir  : $(wc -l < "$SMOKE/fatal.txt" 2>/dev/null | tr -d ' ')"
+          echo "  cokme raporu   : $(ls "$SMOKE/crashes" 2>/dev/null | wc -l | tr -d ' ')"
+          echo "  ekran goruntusu: $([ -f "$SMOKE/home.png" ] && echo var || echo yok)"
+          echo "═══════════════════════════════════════════════════"
+          if [ "$FAIL" -ne 0 ]; then
+            echo "  SONUC: BASARISIZ — yukaridaki HATA satirlarina bak."
+            exit 1
+          fi
+          echo "  SONUC: GECTI — acilis yolu crash-free."
+          exit 0
+
+    artifacts:
+      - smoke/*.png
+      - smoke/*.log
+      - smoke/*.txt
+      - smoke/crashes/*
+
+    # publishing YOK — bu is akisi hicbir yere yukleme yapmaz.
