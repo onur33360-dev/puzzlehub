@@ -1631,10 +1631,76 @@ const AdBudget = {
 // kimlik kavramı burada yok. AdMob'da yerleşim bazlı raporlama istenirse
 // bu alan bir eşleme tablosuna dönüşür — göç gerektirmeyen bir değişiklik,
 // o yüzden sıfır kullanıcıyla şimdi yapmanın faydası yok.
+// ───── PLATFORMA GÖRE AYRIK (2026-09-05) ─────
+//
+// iOS kendi AdMob uygulamasına ve kendi birimlerine sahip, AYRI BİR
+// YAYINCI altında (pub-9211142655536364). Bu, "üçü de aynı yayıncıya ait
+// olmalı" kuralının kapsamını daraltıyor: kural artık PLATFORMUN KENDİ
+// İÇİNDE geçerli — Android uygulama kimliği Android birimleriyle, iOS
+// uygulama kimliği iOS birimleriyle. İki platformun yayıncısının farklı
+// olması normaldir ve tek başına bir hata değildir (ad-release-test §4).
+//
+// Bir Android birim kimliğini iOS'ta kullanmak sessizce başarısız olur:
+// uygulama açılır, hata vermez, reklam hiç dolmaz. Birim kimlikleri
+// platforma bağlıdır.
 const AD_IDS = {
-  rewardedAndroid: 'ca-app-pub-5960894143182893/1987429698',
-  interstitialAndroid: 'ca-app-pub-5960894143182893/7435197490',
+  android: {
+    rewarded:     'ca-app-pub-5960894143182893/1987429698',
+    interstitial: 'ca-app-pub-5960894143182893/7435197490',
+  },
+  ios: {
+    // GERÇEK birimler — girildi 2026-09-05, yayıncı pub-9211142655536364.
+    // Uygulama kimliği: ca-app-pub-9211142655536364~4012978726 (Info.plist).
+    // ŞU AN KULLANILMIYOR, bkz. IOS_ADS_TEST_MODE.
+    rewarded:     'ca-app-pub-9211142655536364/4038853281',
+    interstitial: 'ca-app-pub-9211142655536364/3631659175',
+    // Google'ın resmî iOS demo birimleri. Hiçbir hesaba bağlı değiller,
+    // yani bunlarla test etmek geçersiz trafik üretemez.
+    rewardedTest:     'ca-app-pub-3940256099942544/1712485313',
+    interstitialTest: 'ca-app-pub-3940256099942544/4411468910',
+  },
 };
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  YAYIN ENGELİ — App Store'a çıkmadan ÖNCE false yapılacak.       ║
+// ╚══════════════════════════════════════════════════════════════════╝
+//
+// true iken iOS, Google'ın DEMO birimlerini kullanır: gelir sıfırdır ve
+// hiçbir gösterim hesaba işlemez.
+//
+// Neden var: Android'i koruyan şey AD_TEST_DEVICES, ama o listedeki üç
+// hash Android'e özgü ve İMZA ANAHTARINA bağlı — iOS'ta hiçbiri geçerli
+// değil. Yani iOS'ta "kendi reklamına tıklama" koruması HENÜZ YOK. Demo
+// birim, o koruma kurulana kadar aynı işi yapısal olarak yapıyor: tıklama
+// zaten bir hesaba işlemiyor.
+//
+// TestFlight QA bu bayrakla yapılıyor. false yapmadan önce iOS için bir
+// test cihazı hash'i toplanmalı (`AD_TEST_DEVICES_IOS`), yoksa geliştirme
+// sırasında gerçek birime kendi gösterimlerimiz gider.
+const IOS_ADS_TEST_MODE = true;
+
+// Hangi platformun kimlikleri kullanılacak?
+//
+// getPlatform() YOKSA 'android' dönüyor ve bu bilinçli bir varsayılan:
+// o durum yalnızca web'de ve Node koşumlarında oluşur, web'de zaten hiç
+// birim kimliği istenmez (adMobPlugin() null döner, simülasyon çalışır).
+// null dönmek, çağıranların hepsine gereksiz bir boş kontrolü eklerdi.
+function adPlatform() {
+  const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;
+  const p = (C && C.getPlatform) ? C.getPlatform() : 'android';
+  return p === 'ios' ? 'ios' : 'android';
+}
+
+// TEK KAYNAK: her prepare/load çağrısı kimliği buradan alır. Üç çağrı
+// yeri var (ödüllü ön yükleme, ödüllü gösterim, geçiş reklamı) ve bir
+// tanesinin doğrudan AD_IDS'e uzanması, o yolun sessizce yanlış platformun
+// kimliğiyle istek yapması demek olurdu.
+function adUnitId(kind) {           // kind: 'rewarded' | 'interstitial'
+  if (adPlatform() === 'ios') {
+    return IOS_ADS_TEST_MODE ? AD_IDS.ios[kind + 'Test'] : AD_IDS.ios[kind];
+  }
+  return AD_IDS.android[kind];
+}
 
 // GERÇEK KİMLİKLE GELİŞTİRMENİN TEK GÜVENLİ YOLU.
 //
@@ -1698,6 +1764,22 @@ const AD_TEST_DEVICES = [
   '88D815B20F99227E224E91EB84233D54',
 ];
 
+// iOS'un test cihazı listesi AYRI ve şu an BOŞ — bu bir eksik değil, bir
+// sonuç. Yukarıdaki üç hash Android'e özgü ve imza anahtarına bağlı, yani
+// iOS'a taşınamazlar; iOS kendi hash'ini üretir ve o hash henüz toplanmadı.
+//
+// Boş kalabilmesinin tek sebebi IOS_ADS_TEST_MODE: demo birim kullanılırken
+// korunacak bir gerçek birim yok. IOS_ADS_TEST_MODE false yapılmadan ÖNCE
+// buraya bir hash girilmek zorunda — ad-release-test.js bunu denetliyor.
+const AD_TEST_DEVICES_IOS = [];
+
+// Liste initialize()'a platforma göre giriyor. Android'in listesini iOS'a
+// vermek zararsız görünür ve değildir: geçersiz bir hash'i SDK sessizce
+// yok sayar, yani "korunuyorum" sanılan bir cihaz gerçek reklam görür.
+function adTestDevices() {
+  return adPlatform() === 'ios' ? AD_TEST_DEVICES_IOS : AD_TEST_DEVICES;
+}
+
 // Olay adları HAM DİZGİ olarak yazılı. `RewardAdPluginEvents` enum'u
 // paketin ES modülünde yaşıyor ve bu projede paketleyici YOK (CLAUDE.md §1),
 // yani çalışma zamanında erişilemez. Dizgiler eklentinin
@@ -1740,23 +1822,27 @@ function adMobPlugin() {
 // platform bilgisini karıştırmak, iOS'ta oyuncuya "günlük hakkın bitti"
 // dedirtirdi — hiç var olmamış bir hakkın bittiğini söylemek.
 //
-// iOS'ta reklam KAPALI (2026-08-27, sahip kararı). Sebep gelir değil
-// GÜVENLİK: AD_TEST_DEVICES'taki üç hash Android'e özgü ve İMZA
-// ANAHTARINA bağlı — aynı telefon şimdiye kadar üç farklı değer üretti.
-// iOS'ta hiçbiri geçerli olmadığı için "kendi reklamına tıklama"
-// koruması orada YOK, ve o koruma kurulmadan gerçek bir birim kimliği
-// kullanmak AdMob hesabının askıya alınması riski demek.
+// iOS 2026-08-27'de KAPATILMIŞTI ve 2026-09-05'te AÇILDI: iOS artık kendi
+// AdMob uygulamasına ve kendi birimlerine sahip. Kapatma gerekçesi gelir
+// değil güvenlikti (iOS'ta test cihazı koruması yok) ve o gerekçe hâlâ
+// duruyor — sadece çözümü değişti: koruma artık IOS_ADS_TEST_MODE, yani
+// gerçek birim yerine Google'ın demo birimi kullanılıyor.
 //
-// ───── NEDEN adMobPlugin() null DÖNDÜRMÜYORUZ ─────
-// En kısa yol o gibi görünüyor ve TAM TERSİ sonucu veriyor: show() eklenti
-// yoksa _showSimulated'a düşüyor, yani oyuncu iOS'ta hiç reklam izlemeden
-// ödülü alırdı. Simülasyon web için var (CLAUDE.md §1: birincil geliştirme
-// yüzeyi) ve orada zararsız; native bir sürümde ise doğrudan bedava-ödül
-// kapısı. Bu yüzden kontrol AYRI bir soru olarak duruyor.
+// ───── NEDEN BU FONKSİYON DURUYOR (artık her platform "true" iken) ─────
+// Boolean'a indirgenip silinebilirdi ve silinmedi, çünkü koruduğu şey
+// platform listesi değil, ŞU AÇIK: show() eklenti yoksa _showSimulated'a
+// düşüyor — yani reklam SDK'sının bulunmadığı native bir platformda
+// oyuncu hiç reklam izlemeden ödülü alırdı. Simülasyon web için var
+// (CLAUDE.md §1: birincil geliştirme yüzeyi) ve orada zararsız; native bir
+// sürümde doğrudan bedava-ödül kapısı.
+//
+// Bu yüzden cevap sabit bir liste değil, TÜRETİLİYOR: native bir platform
+// ancak kendi birim kimlikleri tanımlıysa reklam destekliyor sayılıyor.
+// AD_IDS'e yeni bir platform eklenmeden o platform ads'e açılamaz.
 function adsSupported() {
   const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;
-  if (!C || !C.getPlatform) return true;            // web → simülasyon çalışsın
-  return C.getPlatform() !== 'ios';
+  if (!C || !C.isNativePlatform || !C.isNativePlatform()) return true;  // web → simülasyon
+  return !!adUnitId('rewarded') && !!adUnitId('interstitial');
 }
 
 // ==================== REKLAM RIZASI (UMP / GDPR) ====================
@@ -1905,9 +1991,9 @@ const RewardedAd = {
   // Hedefli çağrı bilinçli — her oturumda peşinen reklam istemek, hiç
   // reklam izlemeyen oyuncular için boşa istek demek (AdMob eşleşme oranı).
   preload() {
-    // Gösterilmeyecek bir reklamı önceden yüklemek boşuna ağ isteği —
-    // ve daha önemlisi, AdMob'a giden bir İSTEK. iOS'ta test cihaz
-    // koruması olmadığı için hiç istek yapılmaması gereken taraf burası.
+    // Gösterilmeyecek bir reklamı önceden yüklemek boşuna ağ isteği — ve
+    // daha önemlisi, AdMob'a giden bir İSTEK. Reklamın hiç sunulmadığı bir
+    // platformda istek yapmak, o platformun eşleşme oranını da bozar.
     if (!adsSupported()) return Promise.resolve(false);
     const ad = adMobPlugin();
     if (!ad) return Promise.resolve(false);          // web: simülasyon, yükleme yok
@@ -1939,7 +2025,7 @@ const RewardedAd = {
           ]).then((handles) => {
             subs = handles;
             return ad.prepareRewardVideoAd({
-              adId: AD_IDS.rewardedAndroid,
+              adId: adUnitId('rewarded'),
               isTesting: false,
             });
           }).catch(() => done(false));
@@ -1965,8 +2051,8 @@ const RewardedAd = {
   _ensureInit(ad) {
     if (!this._initPromise) {
       this._initPromise = ad.initialize({
-        initializeForTesting: AD_TEST_DEVICES.length > 0,
-        testingDevices: AD_TEST_DEVICES,
+        initializeForTesting: adTestDevices().length > 0,
+        testingDevices: adTestDevices(),
       })
         .catch((e) => { this._initPromise = null; throw e; });
     }
@@ -2058,7 +2144,7 @@ const RewardedAd = {
           // tamamı burada, ~4 saniye. Hazır reklamı göstermek ~125 ms.
           if (this._ready) return null;
           return ad.prepareRewardVideoAd({
-            adId: AD_IDS.rewardedAndroid,
+            adId: adUnitId('rewarded'),
             isTesting: false,
           });
         })
@@ -2391,7 +2477,7 @@ const InterstitialAds = {
           subs = handles;
           // isTesting kapalı — gerekçe ödüllü reklamdaki notta.
           return ad.prepareInterstitial({
-            adId: AD_IDS.interstitialAndroid,
+            adId: adUnitId('interstitial'),
             isTesting: false,
           });
         })

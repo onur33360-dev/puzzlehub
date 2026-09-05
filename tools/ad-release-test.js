@@ -28,6 +28,8 @@ const { ROOT, makeSandbox, readSrc } = require('./dom-sandbox');
 
 const APP_SRC = readSrc('core/app.js');
 const MANIFEST = readSrc('android/app/src/main/AndroidManifest.xml');
+// iOS'un manifest karşılığı: uygulama kimliği burada yaşıyor.
+const PLIST = readSrc('ios/App/App/Info.plist');
 
 // Google'ın resmî demo yayıncısı. Hiçbir hesaba bağlı değil, o yüzden
 // bu yayıncıya ait kimlikler "gerçek değil" demek.
@@ -81,14 +83,24 @@ function fakePlugin() {
   };
 }
 
-function boot() {
+// getPlatform ARTIK ZORUNLU (2026-09-05): kimlikler platforma göre
+// seçiliyor, yani platformu söylemeyen bir kum havuzu her zaman Android'i
+// ölçer ve iOS tarafı sınanmamış kalır — tam olarak bu aracın yakalaması
+// gereken şey.
+function boot(platform) {
+  platform = platform || 'android';
   const s = makeSandbox({});
   const plugin = fakePlugin();
-  s.sb.Capacitor = { isNativePlatform: () => true, Plugins: { AdMob: plugin } };
+  s.sb.Capacitor = {
+    isNativePlatform: () => true,
+    getPlatform: () => platform,
+    Plugins: { AdMob: plugin },
+  };
   const AC = s.get('AdConsent');
   AC._promise = null; AC._info = null;
-  s.get('RewardedAd')._initPromise = null;
-  return { s, plugin, get: s.get };
+  const RA = s.get('RewardedAd');
+  RA._initPromise = null; RA._ready = false; RA._loading = null; RA._pending = false;
+  return { s, plugin, get: s.get, platform };
 }
 
 const wait = () => new Promise(r => setImmediate(r));
@@ -97,21 +109,66 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
 (async function () {
   console.log('SlySwipe — Reklam Yayın Hazırlığı');
 
-  const b0 = boot();
+  const b0 = boot('android');
   const ids = b0.get('AD_IDS');
-  const devices = b0.get('AD_TEST_DEVICES');
+  const testMode = b0.get('IOS_ADS_TEST_MODE');
   const manifestId = (MANIFEST.match(/ca-app-pub-[\d~/]+/) || [''])[0];
+  const plistId = (/<key>GADApplicationIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(PLIST) || [])[1] || '';
 
-  const unitIds = [ids.rewardedAndroid, ids.interstitialAndroid];
-  const anyReal = unitIds.some(id => pubOf(id) !== DEMO_PUB) ||
-                  (manifestId && pubOf(manifestId) !== DEMO_PUB);
+  // ───── İKİ PLATFORM, İKİ AYRI HESAP ─────
+  //
+  // 2026-09-05'e kadar tek bir yayıncı vardı ve bu araç "manifest + iki
+  // birim aynı pub-'da" diye denetliyordu. iOS kendi AdMob uygulamasını
+  // alınca o iddia YANLIŞ hale geldi: iki platformun yayıncısı farklı
+  // olmak ZORUNDA değil ama olabilir, ve olması bir hata değil.
+  //
+  // Kural daraltıldı, gevşetilmedi: tutarlılık artık PLATFORMUN KENDİ
+  // İÇİNDE aranıyor. Android manifesti Android birimleriyle, iOS plist'i
+  // iOS birimleriyle. Platformlar arası karşılaştırma yapılmıyor, çünkü
+  // orada söylenecek doğru bir şey yok.
+  const P = {
+    android: {
+      ad: 'android',
+      appId: manifestId,
+      appIdSource: 'AndroidManifest.xml',
+      rewarded: ids.android.rewarded,
+      interstitial: ids.android.interstitial,
+      devicesVar: 'AD_TEST_DEVICES',
+      devices: b0.get('AD_TEST_DEVICES'),
+      // Android canlı: kimlikler gerçekse test cihazı listesi zorunlu.
+      liveRewarded: ids.android.rewarded,
+      liveInterstitial: ids.android.interstitial,
+    },
+    ios: {
+      ad: 'ios',
+      appId: plistId,
+      appIdSource: 'ios/App/App/Info.plist',
+      // ŞU AN kullanılan kimlikler (test kipine bağlı)…
+      rewarded: boot('ios').get("adUnitId('rewarded')"),
+      interstitial: boot('ios').get("adUnitId('interstitial')"),
+      devicesVar: 'AD_TEST_DEVICES_IOS',
+      devices: b0.get('AD_TEST_DEVICES_IOS'),
+      // …ve YAYINDA kullanılacak olanlar. Ayrım önemli: test kipi
+      // kapatıldığı anda devreye girecek kimlikler bunlar.
+      liveRewarded: ids.ios.rewarded,
+      liveInterstitial: ids.ios.interstitial,
+    },
+  };
+
+  const isDemo = (id) => pubOf(id) === DEMO_PUB;
+  const anyReal = !isDemo(P.android.rewarded) || !isDemo(P.android.interstitial) ||
+                  (manifestId && !isDemo(manifestId));
 
   console.log('\n0. DURUM');
-  console.log('   ödüllü      : ' + ids.rewardedAndroid);
-  console.log('   geçiş       : ' + ids.interstitialAndroid);
-  console.log('   manifest    : ' + manifestId);
-  console.log('   test cihazı : ' + (devices.length ? devices.length + ' adet' : 'yok'));
-  console.log('   kip         : ' + (anyReal ? 'GERÇEK KİMLİK' : 'demo kimlikler'));
+  for (const k of ['android', 'ios']) {
+    const p = P[k];
+    console.log('   ── ' + k);
+    console.log('      uygulama    : ' + (p.appId || '(yok)'));
+    console.log('      ödüllü      : ' + p.rewarded + (isDemo(p.rewarded) ? '   [DEMO]' : '   [GERÇEK]'));
+    console.log('      geçiş       : ' + p.interstitial + (isDemo(p.interstitial) ? '   [DEMO]' : '   [GERÇEK]'));
+    console.log('      test cihazı : ' + (p.devices.length ? p.devices.length + ' adet' : 'yok'));
+  }
+  console.log('   IOS_ADS_TEST_MODE : ' + testMode + (testMode ? '   (YAYIN ENGELİ)' : ''));
 
   // ═════════ 1. ASIL KURAL ═════════
   //
@@ -124,30 +181,52 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
   // liste, geliştiricinin bir sonraki açılışta kendi reklamını gerçek
   // olarak izlemesi demektir — sessiz, geri alınamaz ve pahalı.
   console.log('\n1. GERÇEK KİMLİK ⇒ TEST CİHAZI ZORUNLU');
-  if (anyReal) {
-    check('gerçek kimlik var, AD_TEST_DEVICES DOLU',
-          devices.length > 0,
-          'AD_TEST_DEVICES boş. Cihazda `adb logcat | grep TestDeviceHashedId` ' +
-          'çalıştırıp hash\'i core/app.js\'e ekle — yoksa kendi reklamını ' +
-          'gerçek izlersin ve AdMob hesabı askıya alınabilir.');
-    // `[].every` her zaman true döner — boş listede bu iddia hiçbir şey
-    // söylemez ve "geçti" yazması yanıltıcı olur. Liste doluysa denetlenir.
-    if (devices.length) {
-      check('test cihazı hash\'leri makul biçimde',
-            devices.every(d => typeof d === 'string' && /^[A-F0-9]{32}$/i.test(d)),
-            'hash 32 haneli onaltılık olmalı: ' + JSON.stringify(devices));
+  //
+  // Kural PLATFORM BAŞINA uygulanıyor: her platformun kendi birimleri ve
+  // kendi test cihazı listesi var, ve biri gerçek kimlik kullanırken
+  // diğerinin demo kullanması tamamen normal bir ara durum (şu anki durum
+  // tam olarak bu).
+  for (const k of ['android', 'ios']) {
+    const p = P[k];
+    const real = !isDemo(p.rewarded) || !isDemo(p.interstitial);
+    if (real) {
+      check(k + ': gerçek kimlik var, ' + p.devicesVar + ' DOLU',
+            p.devices.length > 0,
+            p.devicesVar + ' boş. Cihazda test cihazı hash\'ini okuyup ' +
+            'core/app.js\'e ekle — yoksa kendi reklamını gerçek izlersin ve ' +
+            'AdMob hesabı askıya alınabilir.');
+      // `[].every` her zaman true döner — boş listede bu iddia hiçbir şey
+      // söylemez ve "geçti" yazması yanıltıcı olur. Liste doluysa denetlenir.
+      if (p.devices.length) {
+        check(k + ': test cihazı hash\'leri makul biçimde',
+              p.devices.every(d => typeof d === 'string' && /^[A-F0-9]{32}$/i.test(d)),
+              'hash 32 haneli onaltılık olmalı: ' + JSON.stringify(p.devices));
+      }
+    } else {
+      ok(k + ': demo kimlikler kullanılıyor — test cihazı şart değil');
     }
-  } else {
-    ok('demo kimlikler kullanılıyor — test cihazı şart değil');
-    // Her demo birimin başında bir TODO durmalı: geçici olduklarını
-    // işaretleyen tek şey o. AD_TEST_DEVICES'ın TODO'su sayılmıyor —
-    // o liste demo kimliklerden BAĞIMSIZ olarak doldurulabilir ve
-    // doldurulduğunda TODO'sunun kalkması doğrudur.
-    const idBlock = (APP_SRC.match(/const AD_IDS = \{[\s\S]*?\n\};/) || [''])[0];
-    const demoCount = unitIds.filter(id => pubOf(id) === DEMO_PUB).length;
-    check('her demo birimin TODO işareti duruyor',
-          (idBlock.match(/TODO\(yayın\)/g) || []).length >= demoCount,
-          demoCount + ' demo birim var, o kadar TODO bekleniyordu:\n' + idBlock);
+  }
+  {
+    // ───── YAYIN ENGELİ ─────
+    // iOS şu an demo birim kullanıyor ve bunu sağlayan tek şey
+    // IOS_ADS_TEST_MODE. O bayrak false yapıldığı ANDA gerçek iOS
+    // birimleri devreye girer — ve o an test cihazı listesi hâlâ boşsa,
+    // geliştirme sırasındaki her gösterim gerçek birime işler.
+    //
+    // Bu, yukarıdaki döngünün göremediği bir durum: bayrak açıkken
+    // "demo kullanılıyor" doğru cevaptır ve kural uygulanmaz. Denetim
+    // bu yüzden GELECEK duruma bakıyor, şimdikine değil.
+    const iosLiveReal = !isDemo(P.ios.liveRewarded) || !isDemo(P.ios.liveInterstitial);
+    if (testMode) {
+      ok('IOS_ADS_TEST_MODE açık — iOS demo birimlerle çalışıyor (yayın engeli duruyor)');
+      check('gerçek iOS birimleri kodda hazır bekliyor', iosLiveReal,
+            'AD_IDS.ios gerçek birim taşımıyor; test kipi kapatılınca demo yayına çıkar');
+    } else {
+      check('IOS_ADS_TEST_MODE kapalı ⇒ AD_TEST_DEVICES_IOS DOLU olmalı',
+            !iosLiveReal || P.ios.devices.length > 0,
+            'iOS gerçek birime geçmiş ama test cihazı listesi BOŞ. Cihazda ' +
+            'UMP\'nin açılışta yazdığı hash\'i okuyup AD_TEST_DEVICES_IOS\'a ekle.');
+    }
   }
 
   // ═════════ 2. isTesting KAPALI ═════════
@@ -160,26 +239,32 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
   // Yani açık bırakmak "ekstra emniyet" değil; gerçek oyuncuya demo
   // reklam göstermek, yani sıfır gelir demek.
   console.log('\n2. isTesting KAPALI (yoksa gerçek oyuncu demo reklam görür)');
-  {
-    const b = boot();
-    b.get('RewardedAd').show(10, function () {});
-    await flush();
-    const rw = b.plugin.argOf('prepareRewardVideoAd');
-    check('ödüllü reklam istendi', !!rw, b.plugin.names().join(','));
-    eq('ödüllü isTesting=false', rw && rw.isTesting, false);
-    eq('ödüllü GERÇEK AD_IDS kimliğiyle istendi', rw && rw.adId, ids.rewardedAndroid);
-  }
-  {
-    // Sıklık kapısı (maybeShow) burada test edilmiyor — o interstitial-test'in
-    // işi. Buradaki soru sadece "istek hangi kimlikle ve hangi bayrakla
-    // gidiyor", o yüzden gösterim doğrudan _present ile tetikleniyor.
-    const b = boot();
-    b.get('InterstitialAds')._present(function () {}, function () {});
-    await flush();
-    const it = b.plugin.argOf('prepareInterstitial');
-    check('geçiş reklamı istendi', !!it, b.plugin.names().join(','));
-    eq('geçiş isTesting=false', it && it.isTesting, false);
-    eq('geçiş AD_IDS kimliğiyle istendi', it && it.adId, ids.interstitialAndroid);
+  for (const k of ['android', 'ios']) {
+    const p = P[k];
+    {
+      const b = boot(k);
+      b.get('RewardedAd').show(10, function () {});
+      await flush();
+      const rw = b.plugin.argOf('prepareRewardVideoAd');
+      check(k + ': ödüllü reklam istendi', !!rw, b.plugin.names().join(','));
+      eq(k + ': ödüllü isTesting=false', rw && rw.isTesting, false);
+      // Kimlik, o platformun KENDİ seçicisinden gelmeli. Bir platformun
+      // isteğinin diğerinin kimliğiyle gitmesi sessizce başarısız olur:
+      // uygulama açılır, hata vermez, reklam hiç dolmaz.
+      eq(k + ': ödüllü kendi platformunun kimliğiyle istendi', rw && rw.adId, p.rewarded);
+    }
+    {
+      // Sıklık kapısı (maybeShow) burada test edilmiyor — o interstitial-test'in
+      // işi. Buradaki soru sadece "istek hangi kimlikle ve hangi bayrakla
+      // gidiyor", o yüzden gösterim doğrudan _present ile tetikleniyor.
+      const b = boot(k);
+      b.get('InterstitialAds')._present(function () {}, function () {});
+      await flush();
+      const it = b.plugin.argOf('prepareInterstitial');
+      check(k + ': geçiş reklamı istendi', !!it, b.plugin.names().join(','));
+      eq(k + ': geçiş isTesting=false', it && it.isTesting, false);
+      eq(k + ': geçiş kendi platformunun kimliğiyle istendi', it && it.adId, p.interstitial);
+    }
   }
   check('kaynakta hiçbir yerde isTesting: true kalmadı',
         !/isTesting:\s*true/.test(APP_SRC),
@@ -193,15 +278,21 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
   // biçimlerini kapsıyor — yani bu bağlantı koparsa İKİ biçim birden
   // korumasız kalır, sadece biri değil.
   console.log('\n3. LİSTE SDK\'YA ULAŞIYOR');
-  {
-    const b = boot();
+  // Liste PLATFORMA GÖRE seçiliyor. Android'in hash'leri imza anahtarına
+  // bağlı ve iOS'ta geçersiz; geçersiz bir hash'i SDK sessizce yok sayar,
+  // yani yanlış listeyi vermek "korunuyorum" sanılan bir cihaza gerçek
+  // reklam gösterir. Sessiz olduğu için ancak burada yakalanabilir.
+  for (const k of ['android', 'ios']) {
+    const p = P[k];
+    const b = boot(k);
     b.get('RewardedAd').show(10, function () {});
     await flush();
     const init = b.plugin.argOf('initialize');
-    check('initialize çağrıldı', !!init, b.plugin.names().join(','));
-    eq('testingDevices AD_TEST_DEVICES ile aynı', init && init.testingDevices, devices);
-    eq('initializeForTesting listeye bağlı',
-       init && init.initializeForTesting, devices.length > 0);
+    check(k + ': initialize çağrıldı', !!init, b.plugin.names().join(','));
+    eq(k + ': testingDevices ' + p.devicesVar + ' ile aynı',
+       init && init.testingDevices, p.devices);
+    eq(k + ': initializeForTesting listeye bağlı',
+       init && init.initializeForTesting, p.devices.length > 0);
   }
   {
     // initialize BİR KEZ — ödüllü ve geçiş aynı promise'i paylaşıyor.
@@ -456,25 +547,53 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     check('skor 2x muaf', /go_double_done[\s\S]{0,200}skipDailyLimit: true/.test(APP_SRC));
   }
 
-  // ═════════ 4. MANİFEST İLE TUTARLILIK ═════════
+  // ═════════ 4. UYGULAMA KİMLİĞİ ↔ BİRİMLER (PLATFORM İÇİNDE) ═════════
   //
   // Uygulama kimliği (~ ile) ve birim kimlikleri (/ ile) aynı yayıncıya
   // ait olmak zorunda. Karıştırmak klasik hata ve belirtisi sinsi:
   // uygulama açılır, hata vermez, reklamlar hiç dolmaz.
-  console.log('\n4. MANİFEST ↔ AD_IDS');
-  {
-    check('manifestte AdMob uygulama kimliği var', !!manifestId, MANIFEST.slice(0, 200));
-    check('uygulama kimliği ~ ile ayrılmış (birim kimliği değil)',
-          manifestId.indexOf('~') > 0,
-          manifestId + ' — birim kimliği (/) yazılmış olabilir');
-    const pubs = unitIds.concat([manifestId]).map(pubOf);
-    const uniq = pubs.filter((p, i) => pubs.indexOf(p) === i);
-    check('manifest ve iki birim AYNI yayıncıda', uniq.length === 1,
+  //
+  // KAPSAM DARALDI (2026-09-05): kural artık platformun KENDİ İÇİNDE
+  // geçerli. Android'in yayıncısı pub-5960894143182893, iOS'unki
+  // pub-9211142655536364 — ikisi ayrı AdMob uygulaması, ve farklı
+  // olmaları tek başına bir hata DEĞİL. Eski hâliyle bu bölüm iOS
+  // eklendiği anda düşerdi ve düşmesi hiçbir gerçek soruna işaret
+  // etmezdi; platformlar arası karşılaştırma yapmıyoruz çünkü orada
+  // söylenecek doğru bir şey yok.
+  console.log('\n4. UYGULAMA KİMLİĞİ ↔ BİRİMLER (her platform kendi içinde)');
+  for (const k of ['android', 'ios']) {
+    const p = P[k];
+    check(k + ': ' + p.appIdSource + ' AdMob uygulama kimliği taşıyor', !!p.appId,
+          'uygulama kimliği bulunamadı');
+    check(k + ': uygulama kimliği ~ ile ayrılmış (birim kimliği değil)',
+          p.appId.indexOf('~') > 0,
+          p.appId + ' — birim kimliği (/) yazılmış olabilir');
+    // YAYINDA kullanılacak birimler denetleniyor, şu an kullanılanlar
+    // değil: iOS'ta demo birim kullanılıyorken demo yayıncısı zaten
+    // farklıdır ve bunu hata saymak, test kipinin kendisini hata
+    // saymak olurdu.
+    const pubs = [p.liveRewarded, p.liveInterstitial, p.appId].map(pubOf);
+    const uniq = pubs.filter((x, i) => pubs.indexOf(x) === i);
+    check(k + ': uygulama kimliği ve iki birim AYNI yayıncıda', uniq.length === 1,
           'birden çok yayıncı var: ' + uniq.join(' · ') +
-          ' — ödüllü/geçiş/manifest üçünün de aynı pub- kimliğine ait olması gerekir');
-    check('iki birim kimliği birbirinden farklı',
-          ids.rewardedAndroid !== ids.interstitialAndroid,
-          'ödüllü ve geçiş aynı kimliği kullanıyor');
+          ' — ' + p.appIdSource + ' ile AD_IDS.' + k + ' aynı pub- altında olmalı');
+    check(k + ': ödüllü ve geçiş birimleri birbirinden farklı',
+          p.liveRewarded !== p.liveInterstitial,
+          'iki biçim aynı birimi kullanıyor');
+  }
+  {
+    // Platformlar arası TEK denetim: kimlikler birbirine karışmamış mı.
+    // Yayıncıların farklı olması serbest, ama aynı birim kimliğinin iki
+    // platformda birden görünmesi kopyala-yapıştır hatasıdır.
+    const all = [P.android.rewarded, P.android.interstitial,
+                 P.ios.liveRewarded, P.ios.liveInterstitial];
+    const uniq = all.filter((x, i) => all.indexOf(x) === i);
+    check('hiçbir birim kimliği iki platformda birden kullanılmıyor',
+          uniq.length === all.length,
+          'çakışan kimlik var: ' + all.join(' · '));
+    check('Android ve iOS uygulama kimlikleri farklı',
+          manifestId !== plistId,
+          'iki platform aynı AdMob uygulamasını gösteriyor: ' + manifestId);
   }
 
   // ═════════ 5. YAYIN ÖNCESİ DİĞER KOŞULLAR ═════════

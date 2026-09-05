@@ -96,26 +96,37 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 
-	<!-- ================= REKLAM (SU AN PASIF) =================
-	     TODO(iOS-monetizasyon): asagidaki iki anahtar YER TUTUCU.
+	<!-- ================= REKLAM =================
+	     BIZIM iOS AdMob uygulama kimligimiz (2026-09-05). Onceki deger
+	     Google'in demo kimligiydi, cunku iOS'ta reklam kapaliydi.
 
-	     GADApplicationIdentifier bos birakilamaz: Google Mobile Ads iOS
-	     SDK'si baglandiginda bu anahtari acilista ariyor ve bulamazsa
-	     istisna firlatip uygulamayi DUSURUYOR. Pod, Android ile ortak
-	     package.json'dan geldigi icin iOS'ta da bagli — dolayisiyla
-	     reklam gostermesek bile deger gerekli.
+	     Bu anahtar bos birakilamaz: Google Mobile Ads iOS SDK'si acilista
+	     onu ariyor ve bulamazsa istisna firlatip uygulamayi DUSURUYOR.
 
-	     Buradaki deger GOOGLE'IN RESMI iOS TEST UYGULAMA KIMLIGI, bizim
-	     hesabimiz degil. Gercek kimlik, AdMob'da ayri bir iOS uygulamasi
-	     acildiginda gelecek. Android birimlerinden birini buraya yazmak
-	     yanlis olur: birim kimlikleri platforma bagli.
+	     Uygulama kimligi (~) ile birim kimlikleri (/) AYNI YAYINCIYA ait
+	     olmak zorunda — burada pub-9211142655536364, core/app.js'teki
+	     AD_IDS.ios ile ayni. Karistirmanin belirtisi sinsi: uygulama acilir,
+	     hata vermez, reklam hic dolmaz.
 
-	     AD_TEST_DEVICES'daki uc hash de Android'e ozgu ve IMZA
-	     ANAHTARINA bagli (ayni telefon uc farkli deger uretti). iOS'ta
-	     hicbiri gecerli degil — yani "kendi reklamina tiklama" korumasi
-	     iOS'ta HENUZ YOK. Gercek bir iOS birim kimligi, once o koruma
-	     kurulmadan kullanilmamali.                                     -->
+	     Android'in yayincisi (pub-5960894143182893) BASKA ve bu normal;
+	     iki platform ayri AdMob uygulamalaridir.                        -->
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-9211142655536364~4012978726</string>
+
+	<!-- ATT (App Tracking Transparency).
+	     Bu metin kullaniciya SISTEM diyalogunda gosteriliyor.
+
+	     Anahtar zorunlu, ama diyalogu UYGULAMA ACMIYOR: AdMob panelinde
+	     yayinlanan IDFA mesaji ATT akisini UMP uzerinden yonetiyor. Kodda
+	     requestTrackingAuthorization cagrisi YOK ve olmamali — iki ayri
+	     yerden ATT istemek kullaniciya iki diyalog gosterirdi.
+
+	     Yine de anahtarsiz birakilamaz: UMP izni istedigi anda, anahtar
+	     yoksa iOS uygulamayi ANINDA sonlandiriyor.
+
+	     TODO: InfoPlist.strings ile 15 dile cevrilmeli — uygulamanin kendi
+	     i18n calisma zamani bu sistem diyalogunu kapsamiyor.            -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>SlySwipe uses your device identifier to show more relevant ads and measure advertising performance.</string>
 </dict>
 </plist>

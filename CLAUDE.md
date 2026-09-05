@@ -164,27 +164,24 @@ Seven things are load-bearing:
    Store Connect.** The ASC-query approach needs the app record to already exist; the
    machine-side counter works from build #1 and App Store Connect refuses a repeated build
    number for the same version either way.
-3. **`GADApplicationIdentifier` in `Info.plist` cannot be left out, even with ads off.** The
-   Google Mobile Ads iOS SDK looks for it at launch and **crashes the app** when it is
-   missing, and the pod is linked on iOS because plugins come from the shared `package.json`.
-   The value currently there is **Google's official iOS test app id, not our account's** —
-   an Android unit id would be wrong, because unit ids are per-platform.
-4. **The iOS ad-fraud protection that Android has DOES NOT EXIST YET.** `AD_TEST_DEVICES`
-   holds three hashes that are Android-specific and bound to the *signing key*. None is valid
-   on iOS. A real iOS ad unit id must not be used before that protection is rebuilt — the
-   account-suspension risk §5 documents for Android applies identically.
-   **`NSUserTrackingUsageDescription` was REMOVED on 2026-08-28** (owner decision), because
-   ads are off on iOS and the app therefore never asks for tracking permission. Note the
-   asymmetry with `GADApplicationIdentifier` in point 3, which had to stay: that one crashes
-   the app by its *absence*, this one only matters when ATT is actually requested.
-   **Turning iOS ads back on means restoring the key and the ATT call TOGETHER, and the
-   order is not free:** `requestTrackingAuthorization` without the key in `Info.plist`
-   terminates the app immediately. Shipping the code half first is a crash on launch of the
-   ad path; shipping the key half first is merely an unused string. `tools/ios-gating-test.js`
-   §7 asserts both halves are absent, with `GADApplicationIdentifier` as the negative control
-   so the scan cannot pass by reporting every key as missing. The plugin exposes
+3. **`GADApplicationIdentifier` in `Info.plist` cannot be left out.** The Google Mobile Ads
+   iOS SDK looks for it at launch and **crashes the app** when it is missing. Since
+   2026-09-05 it holds **our own iOS app id**, `ca-app-pub-9211142655536364~4012978726` —
+   it was Google's demo id while iOS ads were off. An Android unit id would be wrong here,
+   because unit ids are per-platform and the mismatch fails *silently*: the app opens, no
+   error, ads simply never fill.
+4. **`NSUserTrackingUsageDescription` is REQUIRED, and the app must NOT request ATT itself
+   (2026-09-05).** The key was removed on 2026-08-28 while ads were off and is now back. The
+   ATT dialog is driven by the **IDFA message published in the AdMob console**, through UMP;
+   `requestTrackingAuthorization` has no call site in the app and must not gain one — iOS
+   asks the user once, so a second request from our side is a silent contradiction rather
+   than a second prompt. The key is still mandatory: the moment UMP asks, an app without it
+   is **terminated immediately**. `tools/ios-gating-test.js` §6-7 asserts the key is present,
+   that no ATT call exists in `core/app.js` or `index.html`, and that no ATT call is made
+   during a live rewarded flow — with `GADApplicationIdentifier` as the negative control so
+   the scan cannot pass by reporting every key as missing. The plugin exposes
    `requestTrackingAuthorization`, so the harness's fake AdMob deliberately does **not** stub
-   it — a call would throw rather than pass silently.
+   it: a call would throw rather than pass silently.
 5. **`CFBundleLocalizations` is what the App Store reads for "supported languages".** The
    `core/i18n.js` runtime is invisible to it. This list is the iOS twin of Android's
    `res/xml/locales_config.xml` and must be updated with it — `tools/i18n-test.js` derives
@@ -2207,56 +2204,80 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   noticeably *after* the ad UI closes. A CDP read taken right after tapping ✕ shows
   `_pending:true` and an unchanged budget, which looks exactly like a stuck guard. Read
   again before concluding anything — this cost a wrong diagnosis.
-- **MONETIZATION IS OFF ON iOS, and the gate is `adsSupported()` — NOT `adMobPlugin()`
-  returning null (2026-08-27, owner decision).** The shortest-looking implementation is the
-  one that opens a free-reward hole: `RewardedAd.show()` falls through to `_showSimulated`
-  when the plugin is absent, so making `adMobPlugin()` return null on iOS would hand every
-  player the reward **without ever showing an ad**. The simulation exists for the web
-  surface (§1) and is harmless there; inside a shipped native build it is a payout with no
-  ad behind it. So "is there an ad plugin?" and "does this platform have ads at all?" are
-  kept as two separate questions.
-  The reason ads are off is **safety, not revenue**: `AD_TEST_DEVICES` holds three hashes
-  that are Android-specific and bound to the *signing key*, so none is valid on iOS and the
-  "don't click your own ad" protection documented above simply does not exist there yet.
+- **ADS ARE LIVE ON iOS SINCE 2026-09-05, through Google's DEMO ad units — and
+  `IOS_ADS_TEST_MODE` is a RELEASE BLOCKER that must be flipped to `false` before the App
+  Store build.** iOS now has its own AdMob app (`pub-9211142655536364`) and its own real
+  rewarded/interstitial units, which sit in `AD_IDS.ios` unused. Ads were off from
+  2026-08-27 to 2026-09-05; the bullet that described that state is history, but two of its
+  conclusions survive unchanged and are the reason this one is long.
+  **Ad ids are per-platform and every request goes through ONE selector, `adUnitId(kind)`.**
+  Before this there were three `prepare` call sites reaching into `AD_IDS.*Android`
+  directly; a single one left behind would request the Android unit on iOS, which fails
+  *silently* — the app opens, no error, ads never fill. `tools/ios-gating-test.js` §11
+  asserts no `adId: AD_IDS.` remains and that exactly three call sites use the selector.
+  **The reason the demo units are still in place is safety, not caution**: `AD_TEST_DEVICES`
+  holds three hashes that are Android-specific and bound to the *signing key*, so none is
+  valid on iOS and the "don't click your own ad" protection does not exist there yet. A demo
+  unit does the same job structurally — a click on it cannot reach any account. So the two
+  halves are coupled: **`AD_TEST_DEVICES_IOS` must be filled before `IOS_ADS_TEST_MODE` goes
+  false**, and `tools/ad-release-test.js` §1 fails the run if the flag is off while that list
+  is empty. That assertion looks at the *future* state deliberately — while the flag is on,
+  "demo units are in use" is a correct answer and the ordinary real-id⇒test-device rule does
+  not fire, so nothing else would catch the combination.
   Six things are load-bearing:
-  1. **The gate sits BEFORE `this._pending = true`.** Returning after the shield is raised
+  1. **`adsSupported()` survived even though every platform now answers true**, and it is
+     DERIVED rather than a list: a native platform counts as ad-capable only if its own unit
+     ids resolve. What it protects is not a platform roster but this hole — `RewardedAd.show()`
+     falls through to `_showSimulated` when the plugin is absent, so a native build with no
+     ad SDK would hand every player the reward **without ever showing an ad**. The simulation
+     exists for the web surface (§1) and is harmless there; inside a shipped native build it
+     is a payout with no ad behind it. This is also why the 2026-08-27 gate was never
+     implemented as `adMobPlugin()` returning null: the shortest-looking route was the one
+     that opened the hole.
+  2. **The gate sits BEFORE `this._pending = true`.** Returning after the shield is raised
      leaves it raised forever — `release()` only runs at the end of the native and simulated
      paths — and the player could never open another rewarded ad, Plus or not. Verified by
      re-introducing exactly this bug; the harness catches it twice, at runtime and in the
      source scan.
-  2. **Ad surfaces are HIDDEN, not disabled.** Game-over continue, the 2× score button, the
-     shop's free-diamond row and `offerRewardChoice`'s ad button are not rendered at all.
-     This is the same rule already applied when the clickable "Yakında" settings rows were
-     removed: a greyed button promises something the build cannot deliver, and here it
-     cannot even say "come back tomorrow" — tomorrow is the same.
-  3. **The Plus path is untouched.** The gate sits *after* the Plus check in
-     `runRewardedAction`, because a Plus player's reward is not an ad path — it is the path
-     where the ad is skipped. Their game-over button is "instant continue" and stays visible.
-  4. **2× score disappears entirely on iOS**, unlike continue/hint/extra-moves which all have
-     a diamond price. That is the direct cost of the standing "score is earned, not bought"
-     decision, and it was accepted rather than quietly reversed: giving 2× a diamond path
-     would use iOS as an excuse to undo that rule.
-  5. **`InterstitialAds.canShow()` needs its own check.** Rewarded and interstitial are
-     deliberately separate axes with no shared gate, so one guard cannot cover both.
-  6. **`purchasesPlugin()` returns null on iOS, and here null is the RIGHT answer** — the
-     exact inverse of the ad case. "No store" is an already-designed state (it is how the web
-     surface always runs): prices render `—`, never a stale hardcoded number, and `purchase()`
-     refuses. The Profile rows are **not** hidden — they are the only door to the Plus page and
-     the diamond shop.
-  **`tools/ios-gating-test.js` is the validation tool, and it exists because the other seven
-  harnesses cannot see this.** They all run with no `Capacitor` in the sandbox, i.e. they
-  measure the *web* path, where `adsSupported()` is always true — all seven were green while
-  the iOS gate was completely unexercised. It injects a fake `Capacitor` **after** `app.js`
-  has been evaluated, which works because the gates read the platform at call time, and that
-  is the production path rather than a test back door. Its most important assertion is that
-  `onComplete` is never called on iOS. Every check has a negative control on android/web, so
-  a function that simply returned false everywhere could not pass.
-  **Two traps found while verifying the harness.** The first bug-reintroduction attempt
-  silently did nothing: the replacement string used `\n` and the working copy is **CRLF**, so
-  the test ran against unmodified code and reported green — the same CRLF class this file
-  already records for source scans, hit here in the *injection* rather than the scan. And
-  `makeSandbox` already loads `core/app.js` at the end of `LOAD_ORDER`, so evaluating it a
-  second time dies with `EconomyConfig has already been declared`.
+  3. **Test-device lists are per-platform too (`adTestDevices()`).** Handing Android's hashes
+     to iOS looks harmless and is not: the SDK **silently ignores** an invalid hash, so a
+     device you believe is protected sees real ads. Silence is exactly why this can only be
+     caught by a test, and `ios-gating-test.js` §3 asserts the leak in that one direction.
+  4. **Publisher consistency is now a PER-PLATFORM rule.** `ad-release-test.js` §4 used to
+     demand that the manifest and both units share one `pub-`; with a second AdMob account
+     that assertion becomes false for a reason that indicates no real problem. It now checks
+     Android's manifest against Android's units and iOS's `Info.plist` against iOS's units,
+     and the only cross-platform check left is that no unit id or app id appears on both
+     sides — differing publishers are normal, a shared unit id is copy-paste.
+  5. **UMP gates every request on both platforms, and ATT refusal is NOT the same as "no
+     ads".** If `canRequestAds` is true the app requests non-personalised ads without IDFA;
+     treating ATT refusal as an ad kill-switch would throw away revenue the SDK is willing to
+     serve. §8 of the harness pins both directions on ios *and* android.
+  6. **`purchasesPlugin()` still returns null on iOS, and here null is the RIGHT answer** —
+     the exact inverse of the ad case. "No store" is an already-designed state (it is how the
+     web surface always runs): prices render `—`, never a stale hardcoded number, and
+     `purchase()` refuses. RevenueCat on iOS is a separate, later piece of work; the Profile
+     rows are **not** hidden, they are the only door to the Plus page and the diamond shop.
+  **`tools/ios-gating-test.js` exists because the other harnesses cannot see any of this.**
+  They boot with no `Capacitor.getPlatform`, i.e. they measure the Android/web path — every
+  one of them was green while the iOS side was completely unexercised. It injects a fake
+  `Capacitor` **after** `app.js` has been evaluated, which works because the gates read the
+  platform at call time, and that is the production path rather than a test back door. The
+  Android ids and the three device hashes are pinned there as **literals**: an assertion that
+  reads the source and checks it against the source proves nothing, so "Android did not
+  change" has to be anchored outside the source.
+  **Three traps found while verifying these harnesses, all worth keeping.**
+  A bug-reintroduction attempt silently did nothing because the replacement string used `\n`
+  against a **CRLF** working copy — the test then measured unmodified code and reported green
+  (the same CRLF class this file already records for source scans, hit in the *injection*
+  rather than the scan). `makeSandbox` already loads `core/app.js` at the end of
+  `LOAD_ORDER`, so evaluating it a second time dies with `EconomyConfig has already been
+  declared`. And **a consent-gate check that `await`ed `preload()` did not fail when the gate
+  was removed — it HUNG**, because `preload()`'s inner promise only settles on a
+  `loaded`/`failedToLoad` event that the fake never fires; the empty output read like a pass.
+  The question there is "did a request go out", not "did loading finish", so the call is no
+  longer awaited. A check that can hang is worse than one that answers wrongly: it burns the
+  whole CI timeout and names nothing.
 - **Ad consent (UMP/GDPR) runs at boot and gates every ad — `AdConsent` in `core/app.js`
   (2026-08-02).** Serving ads to an EEA/UK user without a consent flow is a legal risk that
   is entirely separate from AdMob account suspension, which is why this landed immediately

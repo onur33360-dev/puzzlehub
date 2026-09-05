@@ -187,9 +187,9 @@ async function flush(n) { for (let i = 0; i < (n || 6); i++) await wait(); }
     // sabit bir dizge testi her kimlik değişiminde kırardı. Buradaki soru
     // zaten "hangi kimlik" değil, "geçiş reklamı KENDİ alanını mı
     // kullanıyor" — ödüllününkiyle karışması klasik kopyala-yapıştır hatası.
-    eq('geçiş, AD_IDS.interstitialAndroid ile istendi',
+    eq('geçiş, platformun KENDİ geçiş kimliğiyle istendi',
        b.plugin.calls.find(c => c[0] === 'prepareInterstitial')[1],
-       b.get('AD_IDS').interstitialAndroid);
+       b.get("adUnitId('interstitial')"));
 
     b.plugin.fire('interstitialAdShowed');
     b.plugin.fire('interstitialAdDismissed');
@@ -336,14 +336,18 @@ async function flush(n) { for (let i = 0; i < (n || 6); i++) await wait(); }
     // karışmış mı. Kopyala-yapıştır hatası bu dosyanın klasik hedefi.
     const ids = (APP_SRC.match(/const AD_IDS = \{[\s\S]*?\n\};/) || [''])[0];
     check('AD_IDS bloğu bulundu', ids.length > 0);
-    check('interstitial için ayrı bir kimlik alanı var',
-          /interstitialAndroid:\s*'ca-app-pub-[\d~/]+'/.test(ids), ids);
+    // AD_IDS 2026-09-05'te platforma göre ayrıldı (AD_IDS.android /
+    // AD_IDS.ios). Bu araç yalnız "geçişin kendi alanı var mı" sorusuyla
+    // ilgileniyor, o yüzden alan her iki platformda da aranıyor.
+    check('interstitial için ayrı bir kimlik alanı var (iki platformda da)',
+          (ids.match(/interstitial:\s*'ca-app-pub-[\d~/]+'/g) || []).length >= 2, ids);
     {
       const b = boot({});
       const a = b.get('AD_IDS');
-      check('ödüllü ve geçiş kimlikleri FARKLI',
-            a.rewardedAndroid !== a.interstitialAndroid,
-            'iki biçim aynı birimi kullanıyor: ' + a.interstitialAndroid);
+      for (const p of ['android', 'ios'])
+        check(p + ': ödüllü ve geçiş kimlikleri FARKLI',
+              a[p].rewarded !== a[p].interstitial,
+              'iki biçim aynı birimi kullanıyor: ' + a[p].interstitial);
     }
   }
   {
