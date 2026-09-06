@@ -14,12 +14,15 @@
 // taşıdık: kimlikler gerçekse başka koşullar devreye giriyor.
 //
 // Denetlenen üç kural:
-//   1. Gerçek birim kimliği varsa AD_TEST_DEVICES boş OLAMAZ.
-//      (kendi reklamına tıklamak = geçersiz trafik = hesap askıya alınır)
+//   1. Gerçek birim kimliği + ELİMİZDE FİZİKSEL CİHAZ varsa, o platformun
+//      test cihazı listesi boş OLAMAZ. (kendi reklamına tıklamak =
+//      geçersiz trafik = hesap askıya alınır)
+//      Kural 2026-09-06'da şarta bağlandı: iOS'ta cihaz yok, dolayısıyla
+//      korunacak bir gösterim de yok — gerekçe §1'de, uzun uzun.
 //   2. isTesting her iki reklam biçiminde de KAPALI olmalı.
 //      (açıkken eklenti bizim kimliğimizi atıp demo birimi kullanıyor)
-//   3. AndroidManifest'teki uygulama kimliği ile birim kimlikleri AYNI
-//      yayıncıya (pub-...) ait olmalı.
+//   3. Uygulama kimliği ile birim kimlikleri AYNI yayıncıya (pub-...) ait
+//      olmalı — PLATFORMUN KENDİ İÇİNDE (2026-09-05).
 
 'use strict';
 const fs = require('fs');
@@ -135,6 +138,9 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
       interstitial: ids.android.interstitial,
       devicesVar: 'AD_TEST_DEVICES',
       devices: b0.get('AD_TEST_DEVICES'),
+      // Galaxy A51 elimizde: gercek birimle gelistiriliyor, yani
+      // kendi gosterimimizi uretebilecek bir cihaz VAR.
+      requiresTestDevices: true,
       // Android canlı: kimlikler gerçekse test cihazı listesi zorunlu.
       liveRewarded: ids.android.rewarded,
       liveInterstitial: ids.android.interstitial,
@@ -148,6 +154,10 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
       interstitial: boot('ios').get("adUnitId('interstitial')"),
       devicesVar: 'AD_TEST_DEVICES_IOS',
       devices: b0.get('AD_TEST_DEVICES_IOS'),
+      // Fiziksel iPhone YOK (2026-09-06). Bir iPhone edinilip uzerinde
+      // canli reklam denenecekse BU BAYRAK true yapilmali — o an liste
+      // zorunlu hale gelir.
+      requiresTestDevices: false,
       // …ve YAYINDA kullanılacak olanlar. Ayrım önemli: test kipi
       // kapatıldığı anda devreye girecek kimlikler bunlar.
       liveRewarded: ids.ios.rewarded,
@@ -180,52 +190,71 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
   // Bu yüzden iki durum tutarlı olmak zorunda. Gerçek kimlik VE boş
   // liste, geliştiricinin bir sonraki açılışta kendi reklamını gerçek
   // olarak izlemesi demektir — sessiz, geri alınamaz ve pahalı.
-  console.log('\n1. GERÇEK KİMLİK ⇒ TEST CİHAZI ZORUNLU');
+  console.log('\n1. GERÇEK KİMLİK ⇒ TEST CİHAZI');
   //
-  // Kural PLATFORM BAŞINA uygulanıyor: her platformun kendi birimleri ve
-  // kendi test cihazı listesi var, ve biri gerçek kimlik kullanırken
-  // diğerinin demo kullanması tamamen normal bir ara durum (şu anki durum
-  // tam olarak bu).
+  // ───── KURAL 2026-09-06'DA ŞARTA BAĞLANDI ─────
+  //
+  // Eskiden mutlaktı: "gerçek kimlik varsa test cihazı listesi DOLU
+  // olmalı". O hâliyle iOS canlıya geçtiği anda düşerdi ve düşmesi
+  // hiçbir gerçek tehlikeye işaret etmezdi.
+  //
+  // Listenin KORUDUĞU TEHLİKE dar ve somut: GELİŞTİRİCİNİN KENDİ
+  // CİHAZINDA kendi gerçek reklamını izlemesi/tıklaması — Google bunu
+  // geçersiz trafik sayıyor ve hesabı askıya alabiliyor. O tehlike bir
+  // fiziksel cihaz varsayıyor. iOS'ta öyle bir cihaz YOK (2026-09-06),
+  // dolayısıyla korunacak bir gösterim de yok.
+  //
+  // Bu yüzden kural artık "kimlik gerçek mi" değil, "bu platformda bizim
+  // elimizde bir cihaz var mı" sorusuna bağlı. Yanlış tarafa düşmenin
+  // ucuz olduğu yön korunuyor: bayrak platform tanımında AÇIKÇA yazılı,
+  // yani bir iPhone edinildiğinde `requiresTestDevices` true yapılmadan
+  // kural kendiliğinden gevşek kalmaz — değişiklik göze görünür.
   for (const k of ['android', 'ios']) {
     const p = P[k];
     const real = !isDemo(p.rewarded) || !isDemo(p.interstitial);
-    if (real) {
-      check(k + ': gerçek kimlik var, ' + p.devicesVar + ' DOLU',
+    if (real && p.requiresTestDevices) {
+      check(k + ': gerçek kimlik + fiziksel cihaz ⇒ ' + p.devicesVar + ' DOLU',
             p.devices.length > 0,
             p.devicesVar + ' boş. Cihazda test cihazı hash\'ini okuyup ' +
             'core/app.js\'e ekle — yoksa kendi reklamını gerçek izlersin ve ' +
             'AdMob hesabı askıya alınabilir.');
-      // `[].every` her zaman true döner — boş listede bu iddia hiçbir şey
-      // söylemez ve "geçti" yazması yanıltıcı olur. Liste doluysa denetlenir.
-      if (p.devices.length) {
-        check(k + ': test cihazı hash\'leri makul biçimde',
-              p.devices.every(d => typeof d === 'string' && /^[A-F0-9]{32}$/i.test(d)),
-              'hash 32 haneli onaltılık olmalı: ' + JSON.stringify(p.devices));
-      }
+    } else if (real) {
+      ok(k + ': gerçek kimlik, fiziksel cihaz yok — boş liste engel değil');
     } else {
       ok(k + ': demo kimlikler kullanılıyor — test cihazı şart değil');
     }
+    // `[].every` her zaman true döner — boş listede bu iddia hiçbir şey
+    // söylemez ve "geçti" yazması yanıltıcı olur. Liste doluysa denetlenir.
+    if (p.devices.length) {
+      check(k + ': test cihazı hash\'leri makul biçimde',
+            p.devices.every(d => typeof d === 'string' && /^[A-F0-9]{32}$/i.test(d)),
+            'hash 32 haneli onaltılık olmalı: ' + JSON.stringify(p.devices));
+    }
   }
   {
-    // ───── YAYIN ENGELİ ─────
-    // iOS şu an demo birim kullanıyor ve bunu sağlayan tek şey
-    // IOS_ADS_TEST_MODE. O bayrak false yapıldığı ANDA gerçek iOS
-    // birimleri devreye girer — ve o an test cihazı listesi hâlâ boşsa,
-    // geliştirme sırasındaki her gösterim gerçek birime işler.
+    // ───── TAAHHÜT KAYITLI MI ─────
     //
-    // Bu, yukarıdaki döngünün göremediği bir durum: bayrak açıkken
-    // "demo kullanılıyor" doğru cevaptır ve kural uygulanmaz. Denetim
-    // bu yüzden GELECEK duruma bakıyor, şimdikine değil.
+    // Yukarıdaki gevşetme bir SÖZE dayanıyor: fiziksel bir iPhone'da canlı
+    // reklama dokunulmayacak. Söz yalnızca hatırlanan bir şey olarak
+    // kalırsa, kural sessizce dayanaksız hâle gelir — bir iPhone alınır,
+    // uygulama açılır, kimse listenin varlığını hatırlamaz.
+    //
+    // Bu yüzden taahhüdün CLAUDE.md'de YAZILI olması denetleniyor. Aynı
+    // desen gizlilik politikası için zaten kullanılıyor (§5): bir kararın
+    // dayanağı belgede duruyorsa, belgeyi silmek testi düşürür.
     const iosLiveReal = !isDemo(P.ios.liveRewarded) || !isDemo(P.ios.liveInterstitial);
-    if (testMode) {
-      ok('IOS_ADS_TEST_MODE açık — iOS demo birimlerle çalışıyor (yayın engeli duruyor)');
-      check('gerçek iOS birimleri kodda hazır bekliyor', iosLiveReal,
-            'AD_IDS.ios gerçek birim taşımıyor; test kipi kapatılınca demo yayına çıkar');
+    if (!testMode && iosLiveReal && P.ios.devices.length === 0) {
+      const doc = readSrc('CLAUDE.md');
+      check('boş iOS listesinin gerekçesi CLAUDE.md\'de yazılı',
+            /AD_TEST_DEVICES_IOS/.test(doc) &&
+            /fiziksel (bir )?iPhone|physical iPhone/i.test(doc),
+            'AD_TEST_DEVICES_IOS boş bırakıldı ama gerekçesi belgelenmemiş — ' +
+            'kural dayanaksız kalıyor.');
+      check('canlı reklama kendi cihazında dokunulmayacağı taahhüdü yazılı',
+            /live iOS ad|canlı iOS reklam/i.test(doc),
+            'taahhüt CLAUDE.md\'de bulunamadı');
     } else {
-      check('IOS_ADS_TEST_MODE kapalı ⇒ AD_TEST_DEVICES_IOS DOLU olmalı',
-            !iosLiveReal || P.ios.devices.length > 0,
-            'iOS gerçek birime geçmiş ama test cihazı listesi BOŞ. Cihazda ' +
-            'UMP\'nin açılışta yazdığı hash\'i okuyup AD_TEST_DEVICES_IOS\'a ekle.');
+      ok('iOS: boş-liste gevşetmesi devrede değil, taahhüt denetimi gereksiz');
     }
   }
 

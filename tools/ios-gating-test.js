@@ -17,11 +17,14 @@
 // arka kapı değil.
 //
 // ───── BU ARACIN GEÇMİŞİ (okumadan değiştirme) ─────
-// 2026-08-27'de iOS'ta reklam KAPALIYDI ve bu araç kapalılığı
-// doğruluyordu: NSUserTrackingUsageDescription'ın YOKLUĞUNU, ödülün hiç
-// verilmediğini. 2026-09-05'te iOS kendi AdMob uygulamasını aldı ve
-// karar tersine döndü. Eski iddialar silinmedi, KARŞITLARINA çevrildi —
-// aynı yüzeyler hâlâ denetleniyor, beklenen sonuç değişti.
+// Bu araç ÜÇ KEZ tersine döndü ve her seferinde iddialar silinmedi,
+// KARŞITLARINA çevrildi — aynı yüzeyler hâlâ denetleniyor, yalnız
+// beklenen sonuç değişti:
+//   2026-08-27  reklam KAPALI    → NSUserTracking'in YOKLUĞU, ödül hiç yok
+//   2026-09-05  demo birimlerle  → anahtar VAR, aktif kimlik DEMO
+//   2026-09-06  CANLI            → aktif kimlik GERÇEK, demo yalnız yedek
+// Bir kararı doğrulayan testi silmek yerine çevirmek, eski kararın hangi
+// yüzeyde yaşadığını da kayıt altında tutuyor.
 //
 // ───── ASIL SORU ─────
 // En pahalı iki hata: (1) BEDAVA ÖDÜL — ödül gerçek `Rewarded` olayı
@@ -143,8 +146,8 @@ async function flush(n) { for (let i = 0; i < (n || 10); i++) await wait(); }
 
     eq('android ödüllü kimliği',  a.get("adUnitId('rewarded')"),     EXPECT.androidRewarded);
     eq('android geçiş kimliği',   a.get("adUnitId('interstitial')"), EXPECT.androidInterstitial);
-    eq('ios ödüllü kimliği (TEST kipi)',  i.get("adUnitId('rewarded')"),     EXPECT.iosRewardedTest);
-    eq('ios geçiş kimliği (TEST kipi)',   i.get("adUnitId('interstitial')"), EXPECT.iosInterstitialTest);
+    eq('ios ödüllü kimliği (CANLI)',  i.get("adUnitId('rewarded')"),     EXPECT.iosRewardedLive);
+    eq('ios geçiş kimliği (CANLI)',   i.get("adUnitId('interstitial')"), EXPECT.iosInterstitialLive);
 
     check('iOS ile Android kimlikleri ÇAKIŞMIYOR',
           i.get("adUnitId('rewarded')") !== a.get("adUnitId('rewarded')") &&
@@ -152,28 +155,35 @@ async function flush(n) { for (let i = 0; i < (n || 10); i++) await wait(); }
           'iOS Android kimliğini kullanıyor — sessizce hiç reklam dolmaz');
   }
 
-  console.log('\n2. iOS TEST KİPİ (YAYIN ENGELİ)');
+  console.log('\n2. iOS REKLAM KİPİ — CANLI');
   {
+    // 2026-09-06: IOS_ADS_TEST_MODE false, iOS gerçek birimlerde.
+    // Bu bölüm 2026-09-05'te bunun TERSİNİ doğruluyordu (bayrak açık,
+    // demo birim kullanılıyor). İddialar silinmedi, karşıtlarına çevrildi.
     const i = boot('ios');
     const ids = i.get('AD_IDS');
-    eq('IOS_ADS_TEST_MODE şu an açık', i.get('IOS_ADS_TEST_MODE'), true);
-    // Gerçek birimler kodda DURMALI: test kipi kapatıldığında elle
-    // yeniden yazılacak bir değer, kaybolmuş bir değerdir.
-    eq('iOS GERÇEK ödüllü birim kodda duruyor', ids.ios.rewarded, EXPECT.iosRewardedLive);
-    eq('iOS GERÇEK geçiş birimi kodda duruyor', ids.ios.interstitial, EXPECT.iosInterstitialLive);
-    eq('iOS demo ödüllü birim doğru', ids.ios.rewardedTest, EXPECT.iosRewardedTest);
-    eq('iOS demo geçiş birimi doğru', ids.ios.interstitialTest, EXPECT.iosInterstitialTest);
-    check('test kipinde GERÇEK birim KULLANILMIYOR',
-          i.get("adUnitId('rewarded')") !== ids.ios.rewarded &&
-          i.get("adUnitId('interstitial')") !== ids.ios.interstitial,
-          'test kipi açıkken gerçek birime istek gidiyor');
+    eq('IOS_ADS_TEST_MODE kapalı (canlı)', i.get('IOS_ADS_TEST_MODE'), false);
+
+    // Demo birimler kodda DURMALI: bir QA turu için bayrak yeniden
+    // açılabilir ve o an elle yeniden yazılacak bir değer, kaybolmuş
+    // bir değerdir. Aynı gerekçe daha önce gerçek birimler için geçerliydi.
+    eq('iOS GERÇEK ödüllü birim', ids.ios.rewarded, EXPECT.iosRewardedLive);
+    eq('iOS GERÇEK geçiş birimi', ids.ios.interstitial, EXPECT.iosInterstitialLive);
+    eq('iOS demo ödüllü birim kodda duruyor', ids.ios.rewardedTest, EXPECT.iosRewardedTest);
+    eq('iOS demo geçiş birimi kodda duruyor', ids.ios.interstitialTest, EXPECT.iosInterstitialTest);
+
+    // ASIL İDDİA: çalışma zamanında seçilen kimlik GERÇEK olan.
+    eq('AKTİF ödüllü = GERÇEK birim', i.get("adUnitId('rewarded')"), EXPECT.iosRewardedLive);
+    eq('AKTİF geçiş = GERÇEK birim', i.get("adUnitId('interstitial')"), EXPECT.iosInterstitialLive);
+    check('AKTİF kimliklerin hiçbiri demo DEĞİL',
+          i.get("adUnitId('rewarded')") !== ids.ios.rewardedTest &&
+          i.get("adUnitId('interstitial')") !== ids.ios.interstitialTest,
+          'canlıya geçildi ama runtime hâlâ demo birim seçiyor — gelir sıfır kalır');
+
     check('gerçek iOS birimleri kendi yayıncısıyla tutarlı',
           pubOf(ids.ios.rewarded) === pubOf(EXPECT.iosAppId) &&
           pubOf(ids.ios.interstitial) === pubOf(EXPECT.iosAppId),
           'iOS uygulama kimliği ile birimleri farklı yayıncıda — reklam hiç dolmaz');
-    check('yayın engeli kaynakta işaretli',
-          /YAYIN ENGEL/i.test(APP_SRC) && /IOS_ADS_TEST_MODE/.test(APP_SRC),
-          'IOS_ADS_TEST_MODE yayın engeli olarak işaretlenmemiş');
   }
 
   console.log('\n3. TEST CİHAZI AYRIMI');
@@ -233,10 +243,11 @@ async function flush(n) { for (let i = 0; i < (n || 10); i++) await wait(); }
     await flush();
     const rw = i.plugin.argOf('prepareRewardVideoAd');
     check('ios ödüllü istek yapıldı', !!rw, i.plugin.names().join(','));
-    eq('ios ödüllü DEMO kimlikle', rw && rw.adId, EXPECT.iosRewardedTest);
-    // isTesting yine false: eklenti true iken BİZİM adId'mizi atıp kendi
-    // demo birimini koyuyor. Demo birimi zaten biz veriyoruz, yani açmak
-    // hiçbir şey kazandırmaz ve gerçek birime geçince tehlikeli olur.
+    eq('ios ödüllü CANLI kimlikle', rw && rw.adId, EXPECT.iosRewardedLive);
+    // isTesting false ZORUNLU: eklenti true iken BİZİM adId'mizi atıp
+    // kendi demo birimini koyuyor. Demo kullanılırken bu zararsızdı;
+    // canlıya geçildiği andan itibaren "gerçek oyuncuya demo reklam"
+    // yani sıfır gelir demek — ve hiçbir yerde uyarı çıkmaz.
     eq('ios ödüllü isTesting=false', rw && rw.isTesting, false);
   }
   {
@@ -245,7 +256,7 @@ async function flush(n) { for (let i = 0; i < (n || 10); i++) await wait(); }
     await flush();
     const it = i.plugin.argOf('prepareInterstitial');
     check('ios geçiş isteği yapıldı', !!it, i.plugin.names().join(','));
-    eq('ios geçiş DEMO kimlikle', it && it.adId, EXPECT.iosInterstitialTest);
+    eq('ios geçiş CANLI kimlikle', it && it.adId, EXPECT.iosInterstitialLive);
     eq('ios geçiş isTesting=false', it && it.isTesting, false);
   }
 

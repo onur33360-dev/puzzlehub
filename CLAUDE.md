@@ -143,13 +143,25 @@ machine — `npx cap add ios` and `npm run assets:ios` work on Windows, but `pod
 | Workflow | Does | Signing |
 |---|---|---|
 | `ios-ipa` | signed `.ipa`, no upload | yes |
-| `ios-testflight` | same build + TestFlight | yes |
+| `ios-testflight` | same build, uploaded to App Store Connect | yes |
 | `ios-screenshots` | simulator + VNC, App Store screenshots | no |
 | `ios-admob-smoke` | simulator launch, crash-free check for AdMob/UMP | no |
 
 **Run `ios-ipa` before `ios-testflight`.** It separates "is signing and compilation
 correct?" from "does an App Store Connect app record exist?" — combined in one step, a red
 run does not say which of the two failed.
+
+**`ios-testflight` UPLOADS but no longer SUBMITS (2026-09-06), and the distinction is what
+the first red run cost.** `submit_to_testflight: true` made the pipeline go red *after a
+completely successful upload*: Codemagic tried to send the build to external beta review and
+App Store Connect demanded **Beta App Review contact details**, which do not exist because
+this project uses no external TestFlight and has no testers. The failure looked like a build
+failure and is not one — the `.ipa` was signed, uploaded and sitting in App Store Connect
+the whole time. The flag and `beta_groups` are now **absent rather than `false`**: naming a
+beta group is the same act as re-enabling external testing. `submit_to_app_store` is also
+absent and must stay that way — store review is a one-way step, done by hand in the App
+Store Connect UI. Signing, the ASC integration, the scripts and the artifacts are byte-identical
+to before.
 
 **The two simulator workflows share no anchor with the two signed ones**, and that is the
 point: `env_ios` carries `ios_signing`, so reusing it would make an App Store Connect
@@ -2235,26 +2247,40 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   noticeably *after* the ad UI closes. A CDP read taken right after tapping ✕ shows
   `_pending:true` and an unchanged budget, which looks exactly like a stuck guard. Read
   again before concluding anything — this cost a wrong diagnosis.
-- **ADS ARE LIVE ON iOS SINCE 2026-09-05, through Google's DEMO ad units — and
-  `IOS_ADS_TEST_MODE` is a RELEASE BLOCKER that must be flipped to `false` before the App
-  Store build.** iOS now has its own AdMob app (`pub-9211142655536364`) and its own real
-  rewarded/interstitial units, which sit in `AD_IDS.ios` unused. Ads were off from
-  2026-08-27 to 2026-09-05; the bullet that described that state is history, but two of its
-  conclusions survive unchanged and are the reason this one is long.
+- **iOS ADS ARE LIVE ON REAL UNITS SINCE 2026-09-06 (`IOS_ADS_TEST_MODE = false`).** iOS has
+  its own AdMob app (`pub-9211142655536364`), its own rewarded/interstitial units, its own
+  published UMP consent message and its own published IDFA message. The flag went through
+  three states in ten days — **off (2026-08-27) → demo units (09-05) → live (09-06)** — and
+  each state's reasoning is preserved below rather than overwritten, because the *reasons*
+  outlived the values.
+  **Nothing about this was verified on a physical iPhone; there isn't one.** What was
+  verified is in the residual-risk paragraph at the end of this bullet — read it before
+  treating the App Store submission as fully de-risked.
   **Ad ids are per-platform and every request goes through ONE selector, `adUnitId(kind)`.**
   Before this there were three `prepare` call sites reaching into `AD_IDS.*Android`
   directly; a single one left behind would request the Android unit on iOS, which fails
   *silently* — the app opens, no error, ads never fill. `tools/ios-gating-test.js` §11
   asserts no `adId: AD_IDS.` remains and that exactly three call sites use the selector.
-  **The reason the demo units are still in place is safety, not caution**: `AD_TEST_DEVICES`
-  holds three hashes that are Android-specific and bound to the *signing key*, so none is
-  valid on iOS and the "don't click your own ad" protection does not exist there yet. A demo
-  unit does the same job structurally — a click on it cannot reach any account. So the two
-  halves are coupled: **`AD_TEST_DEVICES_IOS` must be filled before `IOS_ADS_TEST_MODE` goes
-  false**, and `tools/ad-release-test.js` §1 fails the run if the flag is off while that list
-  is empty. That assertion looks at the *future* state deliberately — while the flag is on,
-  "demo units are in use" is a correct answer and the ordinary real-id⇒test-device rule does
-  not fire, so nothing else would catch the combination.
+  **`AD_TEST_DEVICES_IOS` IS EMPTY AND THAT IS NOT A RELEASE BLOCKER — the rule was made
+  conditional on 2026-09-06 (owner decision).** It read "real ad ids ⇒ the test-device list
+  must be non-empty", which would have failed iOS the moment it went live, for a reason that
+  points at nothing real.
+  **Ask what the list actually protects.** `AD_TEST_DEVICES` makes the SDK serve *test* ads
+  to a listed device even against a real unit id. The danger it removes is narrow and
+  concrete: **the developer, on their own handset, watching or tapping their own live ad** —
+  which Google counts as invalid traffic and can suspend an account for. That danger
+  presupposes a handset. **There is no physical iPhone here**, so there is no impression to
+  protect, and an empty list states that rather than hiding a gap.
+  So the test now asks *"do we hold a device on this platform?"* instead of *"are the ids
+  real?"* — `requiresTestDevices` in `tools/ad-release-test.js`, `true` for Android (the
+  Galaxy A51 is right here) and `false` for iOS. **If an iPhone is ever acquired, that flag
+  flips to `true` and the list becomes mandatory again before any live ad is opened on it.**
+  **The owner has committed not to touch live iOS ads on their own device**, and that
+  commitment is what the relaxation rests on. A promise that lives only in someone's memory
+  is not a control, so `ad-release-test.js` §1 **asserts this paragraph exists** — the same
+  "enforced instead of remembered" pattern already used for the privacy policy. Delete the
+  commitment and the run goes red; that is deliberate, not a nuisance.
+  Android is untouched by all of this: three hashes, hard requirement, unchanged.
   Six things are load-bearing:
   1. **`adsSupported()` survived even though every platform now answers true**, and it is
      DERIVED rather than a list: a native platform counts as ad-capable only if its own unit
@@ -2309,6 +2335,27 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
   The question there is "did a request go out", not "did loading finish", so the call is no
   longer awaited. A check that can hang is worse than one that answers wrongly: it burns the
   whole CI timeout and names nothing.
+  **RESIDUAL RISK BEFORE APP STORE REVIEW — read this before calling iOS ads "done"
+  (2026-09-06).** Two AdMob console messages are published (**EU consent** and **IDFA**), the
+  ATT prompt is driven by the IDFA message through UMP, and the app makes no ATT call of its
+  own. All of that is verified *structurally* — by harnesses and by a source scan — and none
+  of it is verified *visually*.
+  What IS verified: `ios-admob-smoke` passed on a real simulator — build, install, launch,
+  process alive after 20 s, no `.ips` crash report, no fatal native signature, WebView
+  rendered. That proves the native launch path with the Mobile Ads SDK and UMP linked does
+  not crash.
+  **What is NOT verified, and cannot be from here:** nobody has watched the ATT dialog appear
+  on a real iPhone, nobody has seen a live ad fill and render, and nobody has confirmed the
+  consent form's appearance in an EEA region. A simulator does not serve real ads, so the
+  first genuine impression will happen on a reviewer's or a player's device.
+  Concretely, three things could still be wrong without any harness noticing: the IDFA
+  message could be misconfigured in the console (the app would run, ATT would never appear);
+  the live unit ids could be inactive or unapproved on AdMob's side (ads simply never fill —
+  the documented *silent* failure); or the consent form could fail to present in a region we
+  cannot simulate. **None of these crash anything**, which is exactly why a green pipeline is
+  not evidence about them — the same lesson §5 already records as "a green measurement is not
+  a rendered screen; look at one." Here the screen cannot be looked at yet, so the risk is
+  accepted knowingly rather than closed.
 - **Ad consent (UMP/GDPR) runs at boot and gates every ad — `AdConsent` in `core/app.js`
   (2026-08-02).** Serving ads to an EEA/UK user without a consent flow is a legal risk that
   is entirely separate from AdMob account suspension, which is why this landed immediately

@@ -1651,33 +1651,43 @@ const AD_IDS = {
   ios: {
     // GERÇEK birimler — girildi 2026-09-05, yayıncı pub-9211142655536364.
     // Uygulama kimliği: ca-app-pub-9211142655536364~4012978726 (Info.plist).
-    // ŞU AN KULLANILMIYOR, bkz. IOS_ADS_TEST_MODE.
+    // 2026-09-06'dan beri AKTİF — bkz. IOS_ADS_TEST_MODE.
     rewarded:     'ca-app-pub-9211142655536364/4038853281',
     interstitial: 'ca-app-pub-9211142655536364/3631659175',
     // Google'ın resmî iOS demo birimleri. Hiçbir hesaba bağlı değiller,
-    // yani bunlarla test etmek geçersiz trafik üretemez.
+    // yani bunlarla test etmek geçersiz trafik üretemez. Bayrak yeniden
+    // açılırsa (bir simulator/QA turu için) kullanılacak olanlar bunlar;
+    // silinmiyorlar, çünkü yeniden yazılacak bir değer kaybolmuş değerdir.
     rewardedTest:     'ca-app-pub-3940256099942544/1712485313',
     interstitialTest: 'ca-app-pub-3940256099942544/4411468910',
   },
 };
 
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  YAYIN ENGELİ — App Store'a çıkmadan ÖNCE false yapılacak.       ║
-// ╚══════════════════════════════════════════════════════════════════╝
+// ───── iOS REKLAM KİPİ ─────
 //
-// true iken iOS, Google'ın DEMO birimlerini kullanır: gelir sıfırdır ve
-// hiçbir gösterim hesaba işlemez.
+// false = GERÇEK birimler (2026-09-06'dan beri, sahip kararı).
+// true  = Google'ın demo birimleri: gelir sıfır, hiçbir gösterim hesaba
+//         işlemez. Bir QA turu için geçici olarak açılabilir.
 //
-// Neden var: Android'i koruyan şey AD_TEST_DEVICES, ama o listedeki üç
-// hash Android'e özgü ve İMZA ANAHTARINA bağlı — iOS'ta hiçbiri geçerli
-// değil. Yani iOS'ta "kendi reklamına tıklama" koruması HENÜZ YOK. Demo
-// birim, o koruma kurulana kadar aynı işi yapısal olarak yapıyor: tıklama
-// zaten bir hesaba işlemiyor.
+// ───── NEDEN AD_TEST_DEVICES_IOS BOŞ VE BU BİR ENGEL DEĞİL ─────
+// Android'i koruyan şey AD_TEST_DEVICES: o listedeki cihaza SDK, kimlik
+// gerçek olsa bile TEST reklamı sunuyor. Koruduğu tehlike ise dar ve
+// somut — GELİŞTİRİCİNİN KENDİ CİHAZINDA kendi gerçek reklamını izlemesi
+// ya da tıklaması, ki Google bunu geçersiz trafik sayıyor.
 //
-// TestFlight QA bu bayrakla yapılıyor. false yapmadan önce iOS için bir
-// test cihazı hash'i toplanmalı (`AD_TEST_DEVICES_IOS`), yoksa geliştirme
-// sırasında gerçek birime kendi gösterimlerimiz gider.
-const IOS_ADS_TEST_MODE = true;
+// iOS'ta FİZİKSEL BİR CİHAZ YOK (2026-09-06). Dolayısıyla korunacak bir
+// gösterim de yok: kimse bu uygulamayı bir iPhone'da açıp kendi reklamını
+// izleyemiyor. Boş liste burada bir eksik değil, o tehlikenin var
+// olmadığının ifadesi.
+//
+// KURAL BU YÜZDEN ŞARTA BAĞLI, mutlak değil: bir iPhone edinilip ÜZERİNDE
+// canlı reklam denenecekse, o cihazın hash'i DENEMEDEN ÖNCE buraya
+// girilmek zorunda. Sahip, o güne kadar kendi cihazında canlı iOS
+// reklamına dokunmayacağını taahhüt etti (CLAUDE.md).
+//
+// Simulator bu tehlikeyi doğurmaz — orada reklam dolmaz ve dolsa bile
+// gösterim/tıklama üretilmez; ios-admob-smoke yalnızca çökme arıyor.
+const IOS_ADS_TEST_MODE = false;
 
 // Hangi platformun kimlikleri kullanılacak?
 //
@@ -1764,13 +1774,15 @@ const AD_TEST_DEVICES = [
   '88D815B20F99227E224E91EB84233D54',
 ];
 
-// iOS'un test cihazı listesi AYRI ve şu an BOŞ — bu bir eksik değil, bir
-// sonuç. Yukarıdaki üç hash Android'e özgü ve imza anahtarına bağlı, yani
-// iOS'a taşınamazlar; iOS kendi hash'ini üretir ve o hash henüz toplanmadı.
+// iOS'un test cihazı listesi AYRI ve BOŞ — bu bir eksik değil, bir sonuç.
+// Yukarıdaki üç hash Android'e özgü ve imza anahtarına bağlı, yani iOS'a
+// taşınamazlar; iOS kendi hash'ini üretir ve üretecek bir cihaz yok.
 //
-// Boş kalabilmesinin tek sebebi IOS_ADS_TEST_MODE: demo birim kullanılırken
-// korunacak bir gerçek birim yok. IOS_ADS_TEST_MODE false yapılmadan ÖNCE
-// buraya bir hash girilmek zorunda — ad-release-test.js bunu denetliyor.
+// BOŞ OLMASI RELEASE ENGELİ DEĞİL (2026-09-06, sahip kararı). Tam gerekçe
+// IOS_ADS_TEST_MODE'un başında; özeti: bu liste geliştiricinin KENDİ
+// CİHAZINDA kendi reklamını izlemesini engellemek için var ve öyle bir
+// cihaz yok. Bir iPhone edinilirse, ÜZERİNDE canlı reklam denenmeden önce
+// hash'i buraya girilmeli.
 const AD_TEST_DEVICES_IOS = [];
 
 // Liste initialize()'a platforma göre giriyor. Android'in listesini iOS'a
@@ -1822,11 +1834,11 @@ function adMobPlugin() {
 // platform bilgisini karıştırmak, iOS'ta oyuncuya "günlük hakkın bitti"
 // dedirtirdi — hiç var olmamış bir hakkın bittiğini söylemek.
 //
-// iOS 2026-08-27'de KAPATILMIŞTI ve 2026-09-05'te AÇILDI: iOS artık kendi
-// AdMob uygulamasına ve kendi birimlerine sahip. Kapatma gerekçesi gelir
-// değil güvenlikti (iOS'ta test cihazı koruması yok) ve o gerekçe hâlâ
-// duruyor — sadece çözümü değişti: koruma artık IOS_ADS_TEST_MODE, yani
-// gerçek birim yerine Google'ın demo birimi kullanılıyor.
+// iOS 2026-08-27'de KAPATILMIŞTI, 2026-09-05'te demo birimlerle AÇILDI ve
+// 2026-09-06'da GERÇEK birimlere geçti. Kapatma gerekçesi gelir değil
+// güvenlikti — geliştiricinin kendi cihazında kendi reklamını izlemesi —
+// ve o gerekçe iOS'ta bir cihaz olmadığı için karşılıksız kaldı
+// (bkz. IOS_ADS_TEST_MODE ve AD_TEST_DEVICES_IOS).
 //
 // ───── NEDEN BU FONKSİYON DURUYOR (artık her platform "true" iken) ─────
 // Boolean'a indirgenip silinebilirdi ve silinmedi, çünkü koruduğu şey

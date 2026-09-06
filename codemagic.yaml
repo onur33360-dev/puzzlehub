@@ -5,16 +5,21 @@
 # NEDEN VAR: iOS derlemesi macOS + Xcode gerektiriyor, bu makinede ikisi
 # de yok. Codemagic buluttaki bir Mac'te derleyip İMZALI .ipa üretiyor.
 #
-# İKİ İŞ AKIŞI, ve ayrımın sebebi var:
-#   ios-ipa         — yalnız imzalı .ipa üretir, hiçbir yere yüklemez.
-#                     İLK KOŞUM BUNUNLA YAPILMALI: "imzalama ve derleme
-#                     doğru mu" sorusunu, "App Store Connect'te uygulama
-#                     kaydı var mı" sorusundan AYIRIYOR. İkisi tek adımda
-#                     denenirse başarısız bir koşumun hangisinden
-#                     kaynaklandığı belirsiz kalır.
-#   ios-testflight  — aynı derleme + TestFlight'a yükleme. App Store
-#                     Connect'te aynı bundle id ile uygulama kaydı
-#                     OLUŞTURULDUKTAN SONRA kullanılmalı.
+# DÖRT İŞ AKIŞI, ve her ayrımın sebebi var:
+#   ios-ipa           — yalnız imzalı .ipa üretir, hiçbir yere yüklemez.
+#                       İLK KOŞUM BUNUNLA YAPILMALI: "imzalama ve derleme
+#                       doğru mu" sorusunu, "App Store Connect'te uygulama
+#                       kaydı var mı" sorusundan AYIRIYOR. İkisi tek adımda
+#                       denenirse başarısız bir koşumun hangisinden
+#                       kaynaklandığı belirsiz kalır.
+#   ios-testflight    — aynı derleme + App Store Connect'e YÜKLEME.
+#                       2026-09-06'dan beri otomatik beta review
+#                       GÖNDERİMİ YOK (gerekçe publishing bloğunda);
+#                       build ASC'ye çıkıyor, iç testte görünüyor, harici
+#                       teste gönderilmiyor.
+#   ios-screenshots   — simulator + VNC, App Store ekran görüntüleri.
+#   ios-admob-smoke   — simulator açılışı, AdMob/UMP çökme testi.
+# Son ikisi İMZASIZ ve hiçbir yere yükleme yapmıyor.
 #
 # ── ÖNCE CODEMAGIC ARAYÜZÜNDE YAPILMASI GEREKENLER ────────────────────
 # 1. Teams > Integrations > App Store Connect: .p8 anahtarı yüklenir.
@@ -159,12 +164,29 @@ workflows:
     artifacts: *artifacts_ios
     publishing:
       app_store_connect:
+        # YÜKLEME AYNEN DEVAM EDİYOR — değişen tek şey yüklemeden SONRAsı.
         auth: integration
-        submit_to_testflight: true
-        # App Store'a (incelemeye) gönderme BİLEREK kapalı. TestFlight iç
-        # test App Review'dan geçmiyor; mağaza yayını ayrı ve geri
-        # alınması zor bir adım, otomatik hattın sonunda olmamalı.
-        submit_to_app_store: false
+
+        # ── submit_to_testflight KALDIRILDI (2026-09-06) ──
+        #
+        # Yükleme başarılıydı; kırmızıya düşen şey TestFlight'ın beta
+        # review adımıydı: Codemagic build'i harici teste göndermeye
+        # çalışıyor ve App Store Connect "Beta App Review contact"
+        # bilgilerini istiyor. O bilgiler yok, çünkü HARİCİ TESTFLIGHT
+        # KULLANMIYORUZ ve hiç tester yok.
+        #
+        # Bu, imzalama ya da IPA hatası DEĞİLDİ — bunu bilmek önemli,
+        # çünkü kırmızı bir derleme insanı önce derleme hattına baktırır.
+        # Yükleme tamamlandıktan sonraki bir adım başarısız oluyordu.
+        #
+        # Bayrağı false yazmak yerine SATIRIN KENDİSİ kaldırıldı: burada
+        # "yapma" ile "istemiyoruz" farklı şeyler ve ikincisi doğru olan.
+        # Beta grubu (`beta_groups`) da hiç tanımlanmadı ve tanımlanmamalı
+        # — bir grup adı yazmak, harici testi geri açmakla aynı şey.
+        #
+        # submit_to_app_store da yok ve OTOMATİK AÇILMAMALI. Mağaza
+        # incelemesine gönderme geri alınması zor, tek yönlü bir adım;
+        # App Store Connect arayüzünden ELLE yapılacak.
       email:
         recipients:
           - onur33360@gmail.com
