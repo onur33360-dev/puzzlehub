@@ -2653,12 +2653,7 @@ const IAP = {
 // hiç çözülmez ve bütün fiyatlar '—' kalır — yani sessiz bir hata.
 const RC_API_KEYS = {
   android: 'goog_OTMeoEeifXmuMWwbdKXhVYqawEb',   // gerçek, girildi 2026-08-03
-  // TODO(iOS): App Store RevenueCat public SDK anahtarı ('appl_…').
-  // BOŞ OLMASI GÜVENLİ BİR DURUM, yarım bir kurulum değil: Billing.init()
-  // anahtarsız sessizce atlanıyor, available() false dönüyor, fiyatlar
-  // PRICE_PLACEHOLDER ('—') kalıyor ve purchase() reddediyor. Bu, web
-  // yüzeyinin her zamanki hâli — uydurma bir fiyat gösterilmiyor.
-  ios: '',
+  ios:     'appl_USfZadBaHfBMwwpgmbedXHcOojB',   // gerçek, girildi 2026-09-09
 };
 
 // Anahtar seçimi TEK YERDE. adPlatform() yeniden kullanılıyor: adı
