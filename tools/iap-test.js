@@ -143,7 +143,16 @@ function boot(cfg) {
   let plugin = null;
   if (cfg.native) {
     plugin = fakePlugin(cfg);
-    s.sb.Capacitor = { isNativePlatform: () => true, Plugins: { Purchases: plugin } };
+    // getPlatform ARTIK VERİLİYOR (2026-09-08). Önceden yoktu ve sonucu
+    // şuydu: anahtar seçimi platforma bağlandığı anda bu koşum her zaman
+    // Android'i ölçerdi, iOS dalı hiç yürümezdi. Reklam tarafında tam
+    // olarak aynı kör nokta yaşandı — orada `ios-gating-test.js` bu yüzden
+    // ayrı bir araç olarak var.
+    s.sb.Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => cfg.platform || 'android',
+      Plugins: { Purchases: plugin },
+    };
   }
   // Anahtar HER İKİ yönde de enjekte ediliyor — Billing._apiKey() tam
   // olarak bunun için var.
@@ -156,7 +165,11 @@ function boot(cfg) {
   // kodun davranışı — bu yüzden iki yön de enjekte ediliyor.
   const B = s.get('Billing');
   B._ready = null; B._offerings = null;
-  if (cfg.native) B._apiKey = (cfg.apiKey === false) ? () => '' : () => 'goog_TEST';
+  // cfg.realKey: override'i ATLA. Platform seçimini ölçen bölüm gerçek
+  // rcApiKey()'i görmek zorunda; sahte anahtar orada testin kendi kurgusunu
+  // ölçmek olurdu. (delete B._apiKey ile geri alınamıyor — Billing düz bir
+  // nesne, metot prototipte değil kendi özelliği, silince gerçeği de gider.)
+  if (cfg.native && !cfg.realKey) B._apiKey = (cfg.apiKey === false) ? () => '' : () => 'goog_TEST';
   return { s, B, plugin, store, get: s.get,
            plus: () => JSON.parse(store.ph_plus || '{}') };
 }
@@ -431,6 +444,77 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
           'anahtar yokken SDK yapılandırıldı: ' + JSON.stringify(cfgCall));
   }
 
+  // ═════════ 6.5. PLATFORMA GÖRE ANAHTAR ═════════
+  //
+  // Bu bölüm `_apiKey`'i ÖZELLİKLE override ETMİYOR — boot()'un sahte
+  // 'goog_TEST' anahtarı diğer senaryolar için var ve burada kullanılsa
+  // ölçülen şey testin kendi kurgusu olurdu. Sorulan soru gerçek seçicinin
+  // ne döndürdüğü.
+  console.log('\n6.5. PLATFORMA GÖRE ANAHTAR');
+  {
+    const keys = boot({}).get('RC_API_KEYS');
+
+    const a = boot({ native: true, platform: 'android', realKey: true });
+    eq('android gerçek Play anahtarını seçiyor', a.B._apiKey(), keys.android);
+    eq('android: Billing kullanılabilir', a.B.available(), true);
+
+    const i = boot({ native: true, platform: 'ios', realKey: true });
+    eq('ios App Store anahtarını seçiyor', i.B._apiKey(), keys.ios);
+    check('ios ANDROID anahtarını SEÇMİYOR', i.B._apiKey() !== keys.android,
+          'iOS Play anahtarıyla configure edilecekti — o mağazanın hiçbir ' +
+          'ürünü çözülmez ve bütün fiyatlar sessizce "—" kalır');
+
+    // iOS eklentisi artık ERİŞİLEBİLİR olmalı: 2026-08-27'deki
+    // `getPlatform() === 'ios' → null` kapısı kaldırıldı. Kapı dururken
+    // anahtarı doldurmak hiçbir şeyi çalıştırmazdı.
+    eq('ios: eklenti erişilebilir (kapı kalktı)',
+       i.get('purchasesPlugin() !== null'), true);
+    check('kaynakta iOS satın alma kapısı kalmadı',
+          !/getPlatform\(\)\s*===\s*'ios'\)\s*return null/.test(APP_SRC),
+          'purchasesPlugin() hâlâ iOS\'ta null dönüyor');
+  }
+  {
+    // Anahtar boş bir platformda: güvenli durum, yarım kurulum değil.
+    // (iOS anahtarı girildiğinde bu senaryo Android'e döner ve iddia
+    // aynı kalır — ölçtüğü şey "anahtarsız platform ne yapar".)
+    const empty = boot({}).get('RC_API_KEYS');
+    const noKey = Object.keys(empty).find(k => !empty[k]);
+    if (noKey) {
+      const b = boot({ native: true, platform: noKey, realKey: true });
+      eq(noKey + ': available() false', b.B.available(), false);
+      eq(noKey + ': init sessizce false', await b.B.init(), false);
+      await flush();
+      check(noKey + ': configure ÇAĞRILMADI',
+            !b.plugin.calls.find(c => c[0] === 'configure'),
+            'anahtarsız platformda SDK yapılandırıldı');
+      eq(noKey + ': fiyat uydurulmuyor', b.B.priceFor('plus_yearly'), null);
+
+      // İDDİA BİÇİME DEĞİL SONUCA BAKIYOR, ve bu bilinçli. İlk yazımı
+      // `r.unavailable === true` idi ve düştü: `unavailable` yalnızca
+      // EKLENTİ yokken dönüyor (web). Anahtarsız bir native platformda
+      // eklenti erişilebilir, `loadOfferings()` null döner ve sonuç
+      // `notFound` olur.
+      //
+      // Kod BİLEREK değiştirilmedi: `unavailable` dalının mesajı
+      // `purchase_app_only` ("yalnızca uygulamada") ve bunu uygulamanın
+      // İÇİNDEKİ bir oyuncuya göstermek düpedüz yanlış olurdu. İkisinden
+      // az yanlış olanı `notFound`, üstelik bu durum iOS anahtarı
+      // girildiği anda tamamen ortadan kalkıyor.
+      //
+      // Önemli olan değişmez: satın alma TAMAMLANMIYOR ve Plus verilmiyor.
+      const r = await b.B.purchase('plus_yearly');
+      eq(noKey + ': satın alma başarılı OLMADI', r.ok, false);
+      check(noKey + ': reddin sebebi işaretli', !!(r.unavailable || r.notFound),
+            'satın alma sessizce belirsiz bir sonuçla döndü: ' + JSON.stringify(r));
+      eq(noKey + ': Plus verilmedi', b.get('PlusSystem.isActive()'), false);
+      check(noKey + ': purchasePackage ÇAĞRILMADI',
+            !b.plugin.calls.find(c => c[0] === 'purchasePackage'),
+            'anahtarsız platformda mağazaya satın alma isteği gitti');
+    } else {
+      ok('her platformun anahtarı dolu — boş-anahtar senaryosu geçersiz');
+    }
+  }
+
   // ═════════ 7. KAYNAK ═════════
   console.log('\n7. KAYNAK');
   {
@@ -468,9 +552,91 @@ async function flush(n) { for (let i = 0; i < (n || 8); i++) await wait(); }
     // girerse APK herkesçe açılabildiği için sızmış sayılır ve döndürmek
     // gerekir. Kopyala-yapıştır hatasıyla karışmaları mümkün, o yüzden
     // burada yakalanıyor.
-    const rcKey = (APP_SRC.match(/const RC_API_KEY_ANDROID = '([^']*)';/) || [])[1];
-    check('RC anahtarı public Android anahtarı (goog_)',
-          !!rcKey && /^goog_[A-Za-z0-9]+$/.test(rcKey));
+    // 2026-09-08: tek sabit yerine PLATFORM BAŞINA anahtar (RC_API_KEYS).
+    // Android'in değeri değişmedi; iddia genişledi.
+    const keys = boot({}).get('RC_API_KEYS');
+    check('android anahtarı public Play anahtarı (goog_)',
+          !!keys.android && /^goog_[A-Za-z0-9]+$/.test(keys.android),
+          'android anahtarı goog_ biçiminde değil: ' + JSON.stringify(keys.android));
+
+    // iOS anahtarı BOŞ OLABİLİR — henüz girilmediyse bu güvenli bir durum
+    // (available() false, fiyatlar '—', purchase reddediyor), yarım bir
+    // kurulum değil. Ama DOLUYSA doğru türde olmak zorunda.
+    check('ios anahtarı boş ya da appl_ biçiminde',
+          keys.ios === '' || /^appl_[A-Za-z0-9]+$/.test(keys.ios),
+          'ios anahtarı beklenen biçimde değil: ' + JSON.stringify(keys.ios));
+
+    // ASIL TEHLİKE BU: anahtarları birbirinin yerine yapıştırmak. Yanlış
+    // anahtar configure()'u düşürmeyebilir — düşmezse o mağazanın hiçbir
+    // ürünü çözülmez ve BÜTÜN fiyatlar '—' kalır, hiçbir hata görünmeden.
+    check('anahtarlar birbirine karışmamış',
+          !/^appl_/.test(keys.android) && !/^goog_/.test(keys.ios),
+          'bir platformun anahtarı diğerine yazılmış');
+    check('iki anahtar birbirinin aynısı değil',
+          !keys.ios || keys.ios !== keys.android);
+
+    // ───── YER TUTUCU AVI (2026-09-08) ─────
+    //
+    // NEDEN VAR: iki kez üst üste yer tutucu bir anahtar geldi
+    // (`appl_........` ve `appl_GERCEKANAHTAR`). Birincisini biçim denetimi
+    // yakaladı; İKİNCİSİ HEPSİNİ GEÇTİ — önek doğru, gövde alfanümerik,
+    // Android'inkinden farklı. Yani koşum yeşil olurdu ve sahte anahtar
+    // yayına giderdi.
+    //
+    // Bunun sonucu SESSİZ: configure() geçersiz anahtarla çalışır,
+    // RevenueCat o mağazanın hiçbir ürününü çözemez ve bütün fiyatlar '—'
+    // kalır — hiçbir hata görünmeden. Yeşil bir koşum o konuda kanıt değil.
+    //
+    // SINIRINI BİLEREK: bu denetim BİÇİMİ değil GÖRÜNÜŞÜ sorguluyor.
+    // Bir kimlik bilgisinin GERÇEKTEN geçerli olduğunu hiçbir yerel test
+    // söyleyemez — o ancak cihazda getOfferings() yedi ürünü döndürdüğünde
+    // anlaşılır. Buradaki iş, apaçık sahteleri elemek.
+    //
+    // "Büyük harf var, rakam yok → şüpheli" gibi bir entropi sezgisi
+    // DENENDİ VE ELENDİ: Android'in gerçek anahtarının gövdesi
+    // ('OTMeoEeifXmuMWwbdKXhVYqawEb') hiç rakam içermiyor. Gerçek bir
+    // anahtarı reddeden bir denetim, insanı sahte anahtardan daha çok
+    // engeller.
+    const PLACEHOLDER_WORDS = [
+      'TODO', 'XXX', 'FIXME', 'PLACEHOLDER', 'CHANGEME', 'EXAMPLE', 'SAMPLE',
+      'REALKEY', 'YOURKEY', 'MYKEY', 'GERCEK', 'GERÇEK', 'ANAHTAR', 'BURAYA',
+    ];
+    function placeholderReason(key) {
+      if (!key) return null;                        // boş = güvenli durum, ayrı iddia
+      const body = key.replace(/^(goog_|appl_)/, '');
+      if (/^(.)\1*$/.test(body)) return 'gövde tek bir karakterin tekrarı';
+      const upper = body.toUpperCase();
+      const hit = PLACEHOLDER_WORDS.find(w => upper.indexOf(w) >= 0);
+      if (hit) return 'gövde yer tutucu sözcük içeriyor: ' + hit;
+      // Gerçek RC public anahtarlarının gövdesi ~27-30 karakter
+      // (Android'inki 27). Eşik bilerek AŞAĞIDA: amaç kısa yer tutucuları
+      // elemek, gerçek bir anahtarı kıl payı reddetmek değil.
+      if (body.length < 20) return 'gövde çok kısa (' + body.length + ' karakter, beklenen ~27+)';
+      return null;
+    }
+
+    for (const plat of ['android', 'ios']) {
+      const why = placeholderReason(keys[plat]);
+      check(plat + ': anahtar yer tutucu DEĞİL', !why,
+            'yer tutucu anahtar deponun içinde — ' + why + '\n      ' +
+            'Değer: ' + JSON.stringify(keys[plat]) + '\n      ' +
+            'Bu anahtarla configure() sessizce başarısız olur: hiçbir ürün ' +
+            'çözülmez, bütün fiyatlar "—" kalır ve hiçbir hata görünmez.');
+    }
+
+    // NEGATİF KONTROL: sezgi gerçek bir anahtarı reddetmemeli. Android'in
+    // anahtarı gerçek ve yayında, yani bu iddia denetimin kendisini
+    // denetliyor — "her şeye yer tutucu diyen" bir sürüm buradan düşer.
+    check('yer tutucu avı GERÇEK anahtarı reddetmiyor',
+          placeholderReason('goog_OTMeoEeifXmuMWwbdKXhVYqawEb') === null,
+          'denetim gerçek Android anahtarını yer tutucu sandı — yanlış pozitif');
+    // Ve gerçekten yakaladığını da göster: iki turda gelen iki değer.
+    check('yer tutucu avı bilinen sahteleri yakalıyor',
+          !!placeholderReason('appl_........') &&
+          !!placeholderReason('appl_GERCEKANAHTAR') &&
+          !!placeholderReason('appl_TODO'),
+          'denetim bilinen yer tutucuları kaçırıyor');
+
     check('RC SECRET anahtarı (sk_) depoda YOK',
           !/\bsk_[A-Za-z0-9]{10,}/.test(APP_SRC) && !/\bsk_[A-Za-z0-9]{10,}/.test(HTML_SRC));
     // Plan süreleri KODDA kalmalı (mağaza fiyatı verir, dönemi biz biliriz).

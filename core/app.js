@@ -2639,38 +2639,49 @@ const IAP = {
   },
 };
 
-// RevenueCat'in ANDROID PUBLIC SDK anahtarı ('goog_...').
+// RevenueCat PUBLIC SDK anahtarları — PLATFORM BAŞINA (2026-09-08).
 //
-// Reklam birimi kimliklerinden farklı olarak bu anahtar TASARIM GEREĞİ
-// geneldir: istemciye gömülmek üzere üretiliyor, tek başına hiçbir yetki
-// vermiyor (satın alma doğrulaması Google'ın sunucusunda yapılıyor). Yani
-// AD_IDS'teki "gerçek kimlik depoda durmaz" kuralı buraya UYGULANMAZ —
-// burada gerçek anahtarın durması doğru olan.
+// Reklam birimi kimliklerinden farklı olarak bu anahtarlar TASARIM GEREĞİ
+// geneldir: istemciye gömülmek üzere üretiliyorlar, tek başlarına hiçbir
+// yetki vermiyorlar (satın alma doğrulaması mağazanın sunucusunda
+// yapılıyor). Yani AD_IDS'teki "gerçek kimlik depoda durmaz" kuralı buraya
+// UYGULANMAZ — burada gerçek anahtarın durması doğru olan.
 //
-// Gerçek anahtar girildi (2026-08-03). Boş kalsaydı Billing.init() sessizce
-// atlanır ve uygulama normal çalışırdı — o davranış duruyor, artık sadece
-// tetiklenmiyor.
-const RC_API_KEY_ANDROID = 'goog_OTMeoEeifXmuMWwbdKXhVYqawEb';
+// İKİ ANAHTAR AYRI PROJELERE AİT ve önekleri bunu söylüyor: Play tarafı
+// 'goog_', App Store tarafı 'appl_'. Birini diğerinin yerine vermek
+// configure()'u düşürür; daha kötüsü, düşmese bile o mağazanın ürünleri
+// hiç çözülmez ve bütün fiyatlar '—' kalır — yani sessiz bir hata.
+const RC_API_KEYS = {
+  android: 'goog_OTMeoEeifXmuMWwbdKXhVYqawEb',   // gerçek, girildi 2026-08-03
+  // TODO(iOS): App Store RevenueCat public SDK anahtarı ('appl_…').
+  // BOŞ OLMASI GÜVENLİ BİR DURUM, yarım bir kurulum değil: Billing.init()
+  // anahtarsız sessizce atlanıyor, available() false dönüyor, fiyatlar
+  // PRICE_PLACEHOLDER ('—') kalıyor ve purchase() reddediyor. Bu, web
+  // yüzeyinin her zamanki hâli — uydurma bir fiyat gösterilmiyor.
+  ios: '',
+};
+
+// Anahtar seçimi TEK YERDE. adPlatform() yeniden kullanılıyor: adı
+// reklamdan geliyor ama sorduğu şey genel ("hangi native platform").
+// İkinci bir platform çözücü yazmak, bu dosyanın defalarca kaydettiği
+// "iki kopya zamanla ayrışır" sınıfına girerdi.
+function rcApiKey() { return RC_API_KEYS[adPlatform()] || ''; }
 
 function purchasesPlugin() {
   const C = (typeof Capacitor !== 'undefined') ? Capacitor : null;
   if (!C || !C.isNativePlatform || !C.isNativePlatform()) return null;
-  // iOS'ta satın alma KAPALI (2026-08-27, sahip kararı). Burada null
-  // döndürmek reklam tarafındaki tuzağın TERSİ: orada null "simülasyona
-  // düş" demekti, burada "mağaza yok" demek — ve mağaza yokluğu zaten
-  // tasarlanmış bir durum, çünkü web yüzeyi hep öyle çalışıyor. Fiyatlar
-  // '—' gösteriyor (asla eski bir sabit sayıya düşmüyor: yanlış fiyat
-  // göstermek hiç göstermemekten kötü, oyuncu gördüğünü ödeyeceğini
-  // varsayar) ve purchase() sessizce reddediyor.
+  // 2026-08-27'de buraya bir iOS kapısı konmuştu (`getPlatform() === 'ios'`
+  // → null) ve 2026-09-08'de KALDIRILDI: iOS artık kendi RevenueCat
+  // projesine sahip. Kapı, iki gerçek eksiği temsil ediyordu — tek bir
+  // goog_ anahtarı ve App Store Connect'te tanımlanmamış ürünler — ikisi
+  // de kapandı, dolayısıyla kapının temsil ettiği şey kalmadı.
   //
-  // Neden kapalı: RC_API_KEY_ANDROID bir goog_ anahtarı, iOS appl_ ister;
-  // ve 7 ürünün (3 abonelik + 4 elmas paketi) App Store Connect tarafında
-  // sıfırdan tanımlanması gerekiyor — Play Console'daki tanımlar taşınmaz.
+  // Kapıyı burada bırakıp anahtarı doldurmak EN KÖTÜ birleşim olurdu:
+  // anahtar doğru görünür, ürünler tanımlıdır ve hiçbir şey çalışmaz.
   //
-  // Mağaza satırları GİZLENMİYOR: CLAUDE.md'ye göre Profil'deki o iki
-  // satır Plus sayfasının ve elmas mağazasının TEK kapısı; gizlemek iki
-  // ekranı erişilmez yapardı.
-  if (C.getPlatform && C.getPlatform() === 'ios') return null;
+  // Platforma göre AYRIM ARTIK ANAHTARDA (rcApiKey): anahtarı olmayan bir
+  // platform zaten `available()` false döndürüyor ve o yol — fiyatlar '—',
+  // purchase() reddediyor — web yüzeyinin her zamanki hâli.
   return (C.Plugins && C.Plugins.Purchases) || null;
 }
 
@@ -2684,7 +2695,7 @@ const Billing = {
   // sabite bağlanmak onu test edilemez yapıyor (Node harness'ı sahte bir
   // anahtar enjekte edebilmeli, yoksa satın alma yolunun tamamı
   // ölçülemez kalır).
-  _apiKey() { return RC_API_KEY_ANDROID; },
+  _apiKey() { return rcApiKey(); },
 
   available() { return !!purchasesPlugin() && !!this._apiKey(); },
 

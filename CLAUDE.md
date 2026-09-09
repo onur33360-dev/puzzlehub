@@ -2310,11 +2310,13 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      ads".** If `canRequestAds` is true the app requests non-personalised ads without IDFA;
      treating ATT refusal as an ad kill-switch would throw away revenue the SDK is willing to
      serve. §8 of the harness pins both directions on ios *and* android.
-  6. **`purchasesPlugin()` still returns null on iOS, and here null is the RIGHT answer** —
-     the exact inverse of the ad case. "No store" is an already-designed state (it is how the
-     web surface always runs): prices render `—`, never a stale hardcoded number, and
-     `purchase()` refuses. RevenueCat on iOS is a separate, later piece of work; the Profile
-     rows are **not** hidden, they are the only door to the Plus page and the diamond shop.
+  6. **`purchasesPlugin()`'s iOS gate was REMOVED on 2026-09-08** — see the RevenueCat
+     per-platform-key bullet below. It returned `null` on iOS from 2026-08-27, and "no store"
+     is a legitimately designed state (it is how the web surface always runs: prices render
+     `—`, never a stale hardcoded number, and `purchase()` refuses). What made the gate
+     right was that it stood for two real gaps — one `goog_` key and no App Store Connect
+     products — and both are closed. The Profile rows were **never** hidden, because they are
+     the only door to the Plus page and the diamond shop.
   **`tools/ios-gating-test.js` exists because the other harnesses cannot see any of this.**
   They boot with no `Capacitor.getPlatform`, i.e. they measure the Android/web path — every
   one of them was green while the iOS side was completely unexercised. It injects a fake
@@ -2600,19 +2602,62 @@ Full detail belongs in `ARCHITECTURE.md` — this is the 30-second refresh, not 
      must not move the game's diamond balance. `buyPackage()` grants with **`add()`, not
      `addReward()`**: Plus's +50% multiplier applies to *earned* rewards, never to purchased
      ones, or the same money would buy different amounts and the store's number would lie.
-  6. **`RC_API_KEY_ANDROID` is public by design — the `AD_IDS` rule is INVERTED here.** A
+  6. **The RevenueCat keys are public by design — the `AD_IDS` rule is INVERTED here.** A
      RevenueCat public SDK key is meant to ship inside the client and grants nothing on its
-     own (validation happens on Google's servers), so the real key belongs in the repo. It is
-     read through `Billing._apiKey()` rather than the constant directly, for the same reason
+     own (validation happens on the store's servers), so the real key belongs in the repo. It
+     is read through `Billing._apiKey()` rather than a constant directly, for the same reason
      `econ()` exists: a top-level constant cannot be substituted, and the whole purchase path
      would be untestable in the Node sandbox.
-     **The real key landed 2026-08-03** (`goog_OTM…`). RevenueCat has a *second* key that is
-     also called "the key" — `sk_…`, the REST **secret**, which grants full account control
-     (grant entitlements, refund, delete customers). That one must never reach the client:
-     an APK is publicly unpackable, so shipping it counts as a leak and forces a rotation.
-     The two are confusable by copy-paste, so `iap-test.js` now asserts both directions —
-     the constant matches `^goog_[A-Za-z0-9]+$`, and no `sk_…` appears in `core/app.js` or
-     `index.html`.
+     **`RC_API_KEY_ANDROID` became `RC_API_KEYS` — one key PER PLATFORM (2026-09-08).**
+     Play and App Store are separate RevenueCat projects and the prefixes say so: `goog_`
+     and `appl_`. Selection goes through `rcApiKey()`, which reuses `adPlatform()` — the name
+     comes from ads but the question is general, and a second platform resolver is exactly
+     the "two copies drift" class this file keeps recording.
+     **Handing one store the other's key is a SILENT failure**, which is why the harness
+     checks it in both directions: `configure()` may not even throw, and if it does not, that
+     store resolves *no* products and every price stays `—` with nothing in the UI to say
+     why. `iap-test.js` asserts the android key matches `^goog_`, the iOS key is empty or
+     `^appl_`, neither carries the other's prefix, and the two are not identical.
+     **A PLACEHOLDER HUNTER sits under those shape checks, and it exists because a shape
+     check was not enough.** Two placeholder keys arrived in consecutive attempts:
+     `appl_........` (caught by the shape check) and **`appl_GERCEKANAHTAR`, which passed
+     every guard** — right prefix, alphanumeric body, different from Android's. A green run
+     would have committed and shipped it. So the hunter rejects a body that is one repeated
+     character, contains a placeholder word (`TODO`, `XXX`, `REALKEY`, `GERCEK`, `ANAHTAR`,
+     …), or is shorter than 20 characters (real bodies are ~27).
+     **Its limit is documented rather than papered over: this checks how a key LOOKS, not
+     whether it WORKS.** A plausible-looking fake still passes, and no local test can do
+     better — authenticity is only provable on a device, when `getOfferings()` returns the
+     seven products. An entropy heuristic ("uppercase, no digits → suspicious") was tried and
+     **rejected**: Android's real body `OTMeoEeifXmuMWwbdKXhVYqawEb` contains no digit at
+     all, and a guard that blocks a real key costs more than one that misses a fake. The
+     harness pins both directions — the real Android key must pass, the known fakes must
+     fail — so a future version that simply calls everything a placeholder fails too.
+     **An empty key is a SAFE state, not a half-configured one:** `Billing.init()` skips
+     `configure()`, `available()` is false, prices stay at `PRICE_PLACEHOLDER`, and
+     `purchase()` refuses without reaching the store. That is the web surface's normal
+     behaviour, and it is what iOS does until the `appl_` key is pasted into the one slot.
+     **A keyless native platform returns `notFound`, not `unavailable`, and the code was
+     deliberately left that way.** `unavailable` is only produced when the *plugin* is
+     missing, and its message is `purchase_app_only` ("only in the app") — showing that to a
+     player who is *inside* the app would be a plain lie. `notFound` is the less wrong of the
+     two for a temporary state. The harness therefore asserts the **outcome** (purchase does
+     not succeed, no Plus granted, `purchasePackage` never called) rather than the flag —
+     the first version asserted `unavailable` and failed, which is what surfaced this.
+     RevenueCat has a *second* key that is also called "the key" — `sk_…`, the REST
+     **secret**, which grants full account control (grant entitlements, refund, delete
+     customers). That one must never reach the client: an APK is publicly unpackable, so
+     shipping it counts as a leak and forces a rotation. `iap-test.js` asserts no `sk_…`
+     appears in `core/app.js` or `index.html`.
+     **Product ids, the `plus` entitlement and the `default` offering are PLATFORM-AGNOSTIC
+     and unchanged** — `plus_weekly/monthly/yearly` and `diamonds_100/550/1800/6500` are the
+     same seven strings on both stores. The `subId:basePlanId` alias in `loadOfferings()` is
+     Play-specific and simply never fires on iOS (App Store ids carry no base-plan suffix),
+     so it needs no platform branch — do not "clean it up" as iOS-dead code.
+     **`iap-test.js` booted its sandbox with no `getPlatform` until 2026-09-08**, so the
+     moment key selection became platform-dependent the whole suite would have measured
+     Android twice and never exercised iOS — the identical blind spot that made
+     `ios-gating-test.js` necessary on the ads side.
   7. **The web path does NOT simulate purchases**, and this is the deliberate difference from
      ads. A fake rewarded ad costs nothing; a fake purchase is a free-Plus door. Web says
      "only in the app" and stops.
